@@ -1,0 +1,103 @@
+[tool.poetry]
+name = "gp-libs"
+version = "0.0.1a1"
+description = "Internal utilities for projects following git-pull python package spec"
+license = "MIT"
+authors = ["Tony Narlock <tony@git-pull.com>"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "License :: OSI Approved :: MIT License",
+  "Environment :: Web Environment",
+  "Intended Audience :: Developers",
+  "Operating System :: POSIX",
+  "Operating System :: MacOS :: MacOS X",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Topic :: Utilities",
+  "Topic :: System :: Shells",
+]
+packages = [
+  { include = "gp_libs" },
+]
+include = [
+  { path = "tests", format = "sdist" },
+]
+readme = 'README.md'
+keywords = []
+
+homepage = "https://gp-libs.git-pull.com"
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/git-pull/gp-libs/issues"
+Documentation = "https://gp-libs.git-pull.com"
+Repository = "https://github.com/git-pull/gp-libs"
+Changes = "https://github.com/git-pull/gp-libs/blob/master/CHANGES"
+
+[tool.poetry.dependencies]
+python = "^3.7"
+
+[tool.poetry.dev-dependencies]
+### Docs ###
+sphinx = "*"
+furo = "*"
+sphinx-autodoc-typehints = "*"
+sphinx-autobuild = "*"
+sphinx-inline-tabs = { version = "*", python = "^3.7" }
+sphinxext-opengraph = "*"
+sphinx-copybutton = "*"
+sphinxext-rediraffe = "*"
+myst_parser = "*"
+docutils = "~0.18.0"
+
+### Testing ###
+pytest = "*"
+pytest-rerunfailures = "*"
+pytest-watcher = "^0.2.3"
+
+### Coverage ###
+codecov = "*"
+coverage = "*"
+pytest-cov = "*"
+
+### Format ###
+black = "*"
+isort = "*"
+
+### Lint ###
+flake8 = "*"
+flake8-bugbear = "^22.8.23"
+mypy = "*"
+typing-extensions = { version = "*", python = "^3.7" }
+types-docutils = "^0.19.0"
+
+[tool.poetry.extras]
+docs = [
+  "docutils",
+  "sphinx",
+  "sphinx-autodoc-typehints",
+  "sphinx-autobuild",
+  "sphinx-copybutton",
+  "sphinxext-opengraph",
+  "sphinx-inline-tabs",
+  "sphinxext-rediraffe",
+  "myst_parser",
+  "furo",
+]
+test = ["pytest", "pytest-rerunfailures", "pytest-watcher"]
+coverage = ["codecov", "coverage", "pytest-cov"]
+format = ["black", "isort"]
+lint = ["flake8", "flake8-bugbear", "mypy", "types-docutils", "typing-extensions"]
+
+[tool.poetry.plugins.pytest11]
+sphinx = "pytest_sphinx"
+
+[tool.mypy]
+strict = true
+
+[build-system]
+requires = ["poetry_core>=1.0.0", "setuptools>60"]
+build-backend = "poetry.core.masonry.api"
