@@ -1,0 +1,21 @@
+# Changelog
+
+To install the unreleased gp-libs version, see [developmental releases](https://gp-libs.git-pull.com/quickstart.html#developmental-releases).
+
+[pip](https://pip.pypa.io/en/stable/):
+
+```console
+$ pip install --user --upgrade --pre gp-libs
+```
+
+## g 0.0.1 (unreleased)
+
+- _Add your latest changes from PRs here_
+
+### Documentation
+
+- Initial docs, packaging, etc.
+
+<!---
+.. vim: set filetype=markdown:
+-->
