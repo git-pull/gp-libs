@@ -30,7 +30,7 @@ jobs:
               - '**/*.py'
 
       - name: Should publish
-        if: steps.changes.outputs.docs == 'true' || steps.changes.outputs.root_docs == 'true' || steps.changes.outputs.python_files == 'true'
+        # if: steps.changes.outputs.docs == 'true' || steps.changes.outputs.root_docs == 'true' || steps.changes.outputs.python_files == 'true'
         run: echo "PUBLISH=$(echo true)" >> $GITHUB_ENV
 
       - name: Install poetry
