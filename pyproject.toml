@@ -21,6 +21,7 @@ classifiers = [
   "Topic :: System :: Shells",
 ]
 packages = [
+  { include = "*", from = "src" },
   { include = "gp_libs" },
 ]
 include = [
@@ -39,6 +40,8 @@ Changes = "https://github.com/git-pull/gp-libs/blob/master/CHANGES"
 
 [tool.poetry.dependencies]
 python = "^3.7"
+myst_parser = "*"
+docutils = "~0.18.0"
 
 [tool.poetry.dev-dependencies]
 ### Docs ###
@@ -50,8 +53,6 @@ sphinx-inline-tabs = { version = "*", python = "^3.7" }
 sphinxext-opengraph = "*"
 sphinx-copybutton = "*"
 sphinxext-rediraffe = "*"
-myst_parser = "*"
-docutils = "~0.18.0"
 
 ### Testing ###
 pytest = "*"
@@ -76,7 +77,6 @@ types-docutils = "^0.19.0"
 
 [tool.poetry.extras]
 docs = [
-  "docutils",
   "sphinx",
   "sphinx-autodoc-typehints",
   "sphinx-autobuild",
@@ -84,7 +84,6 @@ docs = [
   "sphinxext-opengraph",
   "sphinx-inline-tabs",
   "sphinxext-rediraffe",
-  "myst_parser",
   "furo",
 ]
 test = ["pytest", "pytest-rerunfailures", "pytest-watcher"]
@@ -99,5 +98,5 @@ sphinx = "pytest_sphinx"
 strict = true
 
 [build-system]
-requires = ["poetry_core>=1.0.0", "setuptools>60"]
+requires = ["poetry_core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

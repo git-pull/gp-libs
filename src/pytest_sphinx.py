@@ -1,9 +1,14 @@
-"""
-http://www.sphinx-doc.org/en/stable/ext/doctest.html
-https://github.com/sphinx-doc/sphinx/blob/master/sphinx/ext/doctest.py
+"""pytest_sphinx
 
-This is a derivitive of my PR https://github.com/thisch/pytest-sphinx/pull/38 to
-pytest-sphinx (BSD 3-clause), 2022-09-03.
+pytest plugin for doctest w/ reStructuredText and markdown
+
+.. seealso::
+
+   - http://www.sphinx-doc.org/en/stable/ext/doctest.html
+   - https://github.com/sphinx-doc/sphinx/blob/master/sphinx/ext/doctest.py
+
+   This is a derivative of my PR https://github.com/thisch/pytest-sphinx/pull/38 to
+   pytest-sphinx (BSD 3-clause), 2022-09-03.
 """
 import bdb
 import doctest

@@ -14,6 +14,10 @@ else:
         TypedDict = dict
 
 
+DEFAULT_ISSUE_RE = r"#(?P<issue_id>\d+)"
+"""Default pattern to search plain nodes for issues."""
+
+
 class LinkifyIssues(SphinxTransform):
     default_priority = 999
 
@@ -46,9 +50,7 @@ class LinkifyIssues(SphinxTransform):
                     retnodes.append(nodes.Text(txt))
 
                 refnode = nodes.reference(
-                    refuri=f"{config.issue_url_tpl}".format(
-                        issue_id=match.groupdict()["issue_id"]
-                    ),
+                    refuri=f"{config.issue_url_tpl}".format(**match.groupdict()),
                     internal=False,
                     classes=["issue"],
                 )
@@ -70,7 +72,7 @@ class SetupDict(TypedDict):
 
 def setup(app: Sphinx) -> SetupDict:
     app.add_transform(LinkifyIssues)
-    app.add_config_value("issue_re", re.compile(r"""#(?P<issue_id>\d+)"""), "env")
+    app.add_config_value("issue_re", re.compile(DEFAULT_ISSUE_RE), "env")
     app.add_config_value(
         "issue_url_tpl", r"https://github.com/git-pull/gp-libs/issues/{issue_id}", "env"
     )

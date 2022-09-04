@@ -3,7 +3,7 @@
 Incubating / [dogfooding] some sphinx extensions and pytest plugins on
 git-pull projects, e.g. [cihai], [vcs-python], or [tmux-python].
 
-[dogfooded]: https://en.wikipedia.org/wiki/Eating_your_own_dog_food
+[dogfooding]: https://en.wikipedia.org/wiki/Eating_your_own_dog_food
 [cihai]: https://github.com/cihai
 [vcs-python]: https://github.com/vcs-python
 [tmux-python]: https://github.com/tmux-python

@@ -8,6 +8,9 @@
 :hidden:
 
 quickstart
+doctest/index
+sphinx_toctree_signature/index
+linkify_issues/index
 ```
 
 ```{toctree}
