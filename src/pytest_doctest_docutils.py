@@ -24,7 +24,6 @@ import pytest
 import _pytest
 from _pytest import outcomes
 from _pytest.outcomes import OutcomeException
-from _pytest.warning_types import PytestConfigWarning
 
 from doctest_docutils import DocutilsDocTestFinder, setup
 
@@ -45,14 +44,7 @@ def pytest_configure(config: pytest.Config) -> None:
     Todo: Find a way to make these plugins cooperate without collecting twice.
     """
     if config.pluginmanager.has_plugin("doctest"):
-        message = (
-            "`pytest-doctest-docutils` is incompatible with `doctest`. "
-            "Please disable `doctest` via `-p no:doctest` in order to use "
-            "`pytest-doctest-docutils`."
-        )
-
         config.pluginmanager.set_blocked("doctest")
-        config.issue_config_time_warning(PytestConfigWarning(message), stacklevel=3)
 
 
 def pytest_unconfigure() -> None:
