@@ -76,6 +76,8 @@ $ python -m doctest_docutils README.md -v
 
 ### pytest plugin
 
+_This plugin disables pytest's standard `doctest` plugin._
+
 This plugin integrates with the above module.
 
 ```console
