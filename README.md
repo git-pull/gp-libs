@@ -76,7 +76,7 @@ $ python -m doctest_docutils README.md -v
 
 ### pytest plugin
 
-_This plugin disables pytest's standard `doctest` plugin._
+_This plugin disables [pytest's standard `doctest` plugin]._
 
 This plugin integrates with the above module.
 
@@ -88,6 +88,8 @@ Like the above module, it supports docutils' own `doctest_block` and a basic
 `.. doctest::` directive.
 
 See more: <https://gp-libs.git-pull.com/doctest/pytest.html>
+
+[pytest's standard `doctest` plugin]: https://docs.pytest.org/en/stable/how-to/doctest.html#doctest
 
 ## sphinx plugins
 

@@ -5,7 +5,7 @@
 
 :::{note}
 
-This plugin disables pytest's standard `doctest` plugin.
+This plugin disables {ref}`pytest's standard doctest plugin <pytest:doctest>`.
 
 :::
 
