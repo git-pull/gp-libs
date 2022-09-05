@@ -884,7 +884,7 @@ test = []
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "a1c6377961af4052edac4d085036d82ce0b18da1f457c003b587b731617c41d4"
+content-hash = "a36d2c22c550dc7bfa7e14d486e66e0c46ab1aeb5ad197c4785739d785d7e6f0"
 
 [metadata.files]
 alabaster = [

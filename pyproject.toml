@@ -70,8 +70,8 @@ isort = "*"
 
 ### Lint ###
 flake8 = "*"
-flake8-bugbear = "^22.8.23"
-flake8-comprehensions = "^3.10.0"
+flake8-bugbear = "*"
+flake8-comprehensions = "*"
 mypy = "*"
 typing-extensions = { version = "*", python = "^3.7" }
 types-docutils = "^0.19.0"
