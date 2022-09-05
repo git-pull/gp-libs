@@ -25,7 +25,7 @@ doctestopt_re = re.compile(r"#\s*doctest:.+$", re.MULTILINE)
 OptionSpec = t.Dict[str, t.Callable[[str], t.Any]]
 
 
-def is_allowed_version(spec: str, version: str) -> bool:
+def is_allowed_version(version: str, spec: str) -> bool:
     """Check `spec` satisfies `version` or not.
     This obeys PEP-440 specifiers:
     https://peps.python.org/pep-0440/#version-specifiers
