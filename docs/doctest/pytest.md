@@ -9,7 +9,7 @@ This plugin disables pytest's standard `doctest` plugin.
 
 :::
 
-The pytest plugin is built on top of the `doctest_docutils` module, which is in
+The pytest plugin is built on top of the {ref}`doctest_docutils` module, which is in
 turn compatible with {mod}`doctest`.
 
 ## Markdown
