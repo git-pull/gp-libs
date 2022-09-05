@@ -125,16 +125,16 @@ See more: <https://gp-libs.git-pull.com/linkify_issues/>
 `sphinx.ext.autodoc` doesn't link objects in the table of contents. So we need a
 plugin to help.
 
-See more: <https://gp-libs.git-pull.com/sphinx_toctree_signature/>
+See more: <https://gp-libs.git-pull.com/sphinx_toctree_autodoc_fix/>
 
 #### Configuration
 
-1. Add `'sphinx_toctree_signature'` to `extensions`
+1. Add `'sphinx_toctree_autodoc_fix'` to `extensions`
 
    ```python
    extensions = [
        # ...
-       "sphinx_toctree_signature",
+       "sphinx_toctree_autodoc_fix",
    ]
    ```
 

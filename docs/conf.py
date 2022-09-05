@@ -6,9 +6,10 @@ import typing as t
 from os.path import dirname, relpath
 from pathlib import Path
 
+import sphinx_toctree_autodoc_fix
+
 import gp_libs
 import linkify_issues
-import sphinx_toctree_signature
 
 # Get the project root dir, which is the parent dir of this
 cwd = Path(__file__).parent
@@ -35,7 +36,7 @@ extensions = [
     "sphinxext.rediraffe",
     "myst_parser",
     "linkify_issues",
-    "sphinx_toctree_signature",
+    "sphinx_toctree_autodoc_fix",
 ]
 myst_enable_extensions = ["colon_fence", "substitution", "replacements"]
 

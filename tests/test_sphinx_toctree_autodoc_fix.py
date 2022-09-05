@@ -51,14 +51,14 @@ def test_toc_shows_api_docs(
     test_id: str,
     text: str,
 ) -> None:
-    """Assert sphinx_toctree_signature collects entries from autodoc.
+    """Assert sphinx_toctree_autodoc_fix collects entries from autodoc.
 
     Normal sphinx ToC does not collect them< see sphinx-doc#6316
     """
     args, kwargs = make_app_params(
         index=text,
         confoverrides={
-            "extensions": ["sphinx_toctree_signature", "sphinx.ext.autodoc"],
+            "extensions": ["sphinx_toctree_autodoc_fix", "sphinx.ext.autodoc"],
             "html_theme": "basic",
         },
     )

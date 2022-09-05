@@ -9,7 +9,7 @@
 
 quickstart
 doctest/index
-sphinx_toctree_signature/index
+sphinx_toctree_autodoc_fix/index
 linkify_issues/index
 ```
 
