@@ -100,7 +100,7 @@ lint = [
 ]
 
 [tool.poetry.plugins.pytest11]
-sphinx = "pytest_sphinx"
+sphinx = "pytest_doctest_docutils"
 
 [tool.mypy]
 strict = true

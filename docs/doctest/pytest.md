@@ -16,7 +16,7 @@ $ pytest README.md
 ## API
 
 ```{eval-rst}
-.. automodule:: pytest_sphinx
+.. automodule:: pytest_doctest_docutils
    :members:
    :show-inheritance:
    :undoc-members:

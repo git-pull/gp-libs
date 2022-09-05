@@ -1,4 +1,4 @@
-"""pytest_sphinx
+"""pytest_doctest_docutils
 
 pytest plugin for doctest w/ reStructuredText and markdown
 
@@ -45,10 +45,10 @@ def pytest_unconfigure() -> None:
 
 def pytest_collect_file(
     file_path: Path, parent: pytest.Collector
-) -> Optional["SphinxDoctestFile"]:
+) -> Optional["DocTestDocutilsFile"]:
     config = parent.config
     if _is_doctest(config, file_path, parent):
-        return SphinxDoctestFile.from_parent(parent, path=file_path)  # type: ignore
+        return DocTestDocutilsFile.from_parent(parent, path=file_path)  # type: ignore
     return None
 
 
@@ -137,7 +137,7 @@ def _get_runner(
     )
 
 
-class SphinxDocTestRunner(doctest.DocTestRunner):
+class DocutilsDocTestRunner(doctest.DocTestRunner):
     def summarize(  # type: ignore
         self, out: "_Out", verbose: Optional[bool] = None
     ) -> Tuple[int, int]:
@@ -169,7 +169,7 @@ class SphinxDocTestRunner(doctest.DocTestRunner):
         return self.save_linecache_getlines(filename, module_globals)  # type: ignore
 
 
-class SphinxDoctestFile(pytest.Module):
+class DocTestDocutilsFile(pytest.Module):
     def collect(self) -> Iterable[DoctestItem]:
         setup()
 
