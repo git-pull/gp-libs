@@ -6,10 +6,9 @@ import typing as t
 from os.path import dirname, relpath
 from pathlib import Path
 
-import sphinx_toctree_autodoc_fix
-
 import gp_libs
 import linkify_issues
+import sphinx_toctree_autodoc_fix
 
 # Get the project root dir, which is the parent dir of this
 cwd = Path(__file__).parent
@@ -146,6 +145,8 @@ texinfo_documents = [
 
 intersphinx_mapping = {
     "py": ("https://docs.python.org/", None),
+    "pytest": ("https://docs.pytest.org/en/stable/", None),
+    "sphinx": ("https://www.sphinx-doc.org/en/master/", None),
 }
 
 
