@@ -40,7 +40,7 @@ class LinkifyIssues(SphinxTransform):
             )
             return cond
 
-        for node in self.document.traverse(condition):
+        for node in self.document.findall(condition):
             text = node.astext()
             retnodes = []
             pos = 0
