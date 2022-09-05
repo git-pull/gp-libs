@@ -1,3 +1,6 @@
+(doctest_docutils)=
+(doctest_docutils_module)=
+
 # Doctest w/ docutils
 
 Built on {mod}`doctest`.
