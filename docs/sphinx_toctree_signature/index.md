@@ -8,6 +8,19 @@ Table of Contents won't generate for `sphinx.ext.autodoc`, see
 
 [sphinx#6316]: https://github.com/sphinx-doc/sphinx/issues/6316
 
+## Configuration
+
+In your _conf.py_:
+
+1. Add `'sphinx_toctree_signature'` to `extensions`
+
+   ```python
+   extensions = [
+       # ...
+       "sphinx_toctree_signature",
+   ]
+   ```
+
 ## API
 
 ```{eval-rst}
