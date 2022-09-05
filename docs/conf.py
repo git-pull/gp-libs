@@ -19,7 +19,7 @@ sys.path.insert(0, str(cwd / "_ext"))
 
 # package data
 about: t.Dict[str, str] = {}
-with open(project_root / "gp_libs" / "__about__.py") as fp:
+with open(project_root / "src" / "gp_libs.py") as fp:
     exec(fp.read(), about)
 
 extensions = [
