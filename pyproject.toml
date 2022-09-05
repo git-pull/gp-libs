@@ -71,6 +71,7 @@ isort = "*"
 ### Lint ###
 flake8 = "*"
 flake8-bugbear = "^22.8.23"
+flake8-comprehensions = "^3.10.0"
 mypy = "*"
 typing-extensions = { version = "*", python = "^3.7" }
 types-docutils = "^0.19.0"
@@ -89,7 +90,14 @@ docs = [
 test = ["pytest", "pytest-rerunfailures", "pytest-watcher"]
 coverage = ["codecov", "coverage", "pytest-cov"]
 format = ["black", "isort"]
-lint = ["flake8", "flake8-bugbear", "mypy", "types-docutils", "typing-extensions"]
+lint = [
+  "flake8",
+  "flake8-bugbear",
+  "flake8-comprehensions",
+  "mypy",
+  "types-docutils",
+  "typing-extensions",
+]
 
 [tool.poetry.plugins.pytest11]
 sphinx = "pytest_sphinx"
