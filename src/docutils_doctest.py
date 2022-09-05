@@ -268,14 +268,14 @@ class DocutilsDocTestFinder:
         logger.debug(
             "_find(%s)"
             % pprint.pformat(
-                dict(
-                    tests=tests,
-                    string=string,
-                    name=name,
-                    source_lines=source_lines,
-                    globs=globs,
-                    seen=seen,
-                )
+                {
+                    "tests": tests,
+                    "string": string,
+                    "name": name,
+                    "source_lines": source_lines,
+                    "globs": globs,
+                    "seen": seen,
+                }
             )
         )
         ext = pathlib.Path(name).suffix
