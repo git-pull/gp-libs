@@ -22,7 +22,6 @@ classifiers = [
 ]
 packages = [
   { include = "*", from = "src" },
-  { include = "gp_libs" },
 ]
 include = [
   { path = "tests", format = "sdist" },
