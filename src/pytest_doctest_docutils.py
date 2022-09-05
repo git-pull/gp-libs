@@ -23,7 +23,6 @@ import pytest
 
 import _pytest
 from _pytest import outcomes
-from _pytest.doctest import DoctestItem
 from _pytest.outcomes import OutcomeException
 
 from doctest_docutils import DocutilsDocTestFinder, setup
@@ -31,10 +30,21 @@ from doctest_docutils import DocutilsDocTestFinder, setup
 if TYPE_CHECKING:
     from doctest import _Out
 
+    from _pytest.doctest import DoctestItem
+
 logger = logging.getLogger(__name__)
 
 # Lazy definition of runner class
 RUNNER_CLASS = None
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Disable pytest.doctest to prevent running tests twice.
+
+    Todo: Find a way to make these plugins cooperate without collecting twice.
+    """
+    if config.pluginmanager.has_plugin("doctest"):
+        config.pluginmanager.set_blocked("doctest")
 
 
 def pytest_unconfigure() -> None:
@@ -170,7 +180,7 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
 
 
 class DocTestDocutilsFile(pytest.Module):
-    def collect(self) -> Iterable[DoctestItem]:
+    def collect(self) -> Iterable["DoctestItem"]:
         setup()
 
         encoding = self.config.getini("doctest_encoding")
@@ -189,6 +199,7 @@ class DocTestDocutilsFile(pytest.Module):
                 self.config
             ),
         )
+        from _pytest.doctest import DoctestItem
 
         for test in finder.find(
             text,
