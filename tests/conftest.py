@@ -6,7 +6,7 @@ import pytest
 
 from sphinx.testing.path import path as sphinx_path
 
-pytest_plugins = "sphinx.testing.fixtures"
+pytest_plugins = ["sphinx.testing.fixtures", "pytester"]
 
 AppParams = t.Tuple[t.Any, t.Dict[str, t.Any]]
 
