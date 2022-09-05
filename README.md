@@ -61,7 +61,7 @@ It supports two barebones directives:
 ##### reStructuredText
 
 ```console
-$ python -m docutils_doctest README.rst -v
+$ python -m doctest_docutils README.rst -v
 ```
 
 That's what `doctest` does by design.
@@ -71,7 +71,7 @@ That's what `doctest` does by design.
 If you install [myst-parser], doctest will run on .md files.
 
 ```console
-$ python -m docutils_doctest README.md -v
+$ python -m doctest_docutils README.md -v
 ```
 
 ### pytest plugin

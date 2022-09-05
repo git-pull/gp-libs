@@ -22,7 +22,7 @@ FIXTURES = [
         test_id="basic",
         text=textwrap.dedent(
             """
-.. autoclass:: docutils_doctest.DocutilsDocTestFinder
+.. autoclass:: doctest_docutils.DocutilsDocTestFinder
    :members:
    :show-inheritance:
    :undoc-members:
@@ -69,7 +69,7 @@ def test_toc_shows_api_docs(
 
     assert "DocutilsDocTestFinder" in content
     assert "Table of Contents" in content
-    assert 'href="#docutils_doctest.DocutilsDocTestFinder' in content
+    assert 'href="#doctest_docutils.DocutilsDocTestFinder' in content
 
     toctree = app.env.tocs["index"]
     assert "DocutilsDocTestFinder" == toctree[0][0].astext()

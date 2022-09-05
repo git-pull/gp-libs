@@ -26,7 +26,7 @@ from _pytest import outcomes
 from _pytest.doctest import DoctestItem
 from _pytest.outcomes import OutcomeException
 
-from docutils_doctest import DocutilsDocTestFinder, setup
+from doctest_docutils import DocutilsDocTestFinder, setup
 
 if TYPE_CHECKING:
     from doctest import _Out

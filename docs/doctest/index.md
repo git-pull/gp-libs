@@ -21,7 +21,7 @@ Before you begin, acquaint yourself with:
 ## reStructuredText
 
 ```console
-$ python -m docutils_doctest README.rst
+$ python -m doctest_docutils README.rst
 ```
 
 That's what `doctest` does by design. Pass `-v` for verbose output.
@@ -31,7 +31,7 @@ That's what `doctest` does by design. Pass `-v` for verbose output.
 If you install [myst-parser], doctest will run on .md files.
 
 ```console
-$ python -m docutils_doctest README.md
+$ python -m doctest_docutils README.md
 ```
 
 As with the reST example above, no output.
@@ -73,7 +73,7 @@ To get a deeper understanding, dig into:
 ## API
 
 ```{eval-rst}
-.. automodule:: docutils_doctest
+.. automodule:: doctest_docutils
    :members:
    :show-inheritance:
    :undoc-members:
