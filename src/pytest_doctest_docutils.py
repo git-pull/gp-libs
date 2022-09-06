@@ -17,11 +17,10 @@ import sys
 import types
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Optional, Tuple, Type
 
 import pytest
 
-import _pytest
 from _pytest import outcomes
 from _pytest.outcomes import OutcomeException
 
@@ -62,6 +61,8 @@ def pytest_configure(config: pytest.Config) -> None:
 
     Todo: Find a way to make these plugins cooperate without collecting twice.
     """
+    setup()
+
     if config.pluginmanager.has_plugin("doctest"):
         config.pluginmanager.set_blocked("doctest")
 
@@ -96,7 +97,11 @@ def pytest_collect_file(
 def _is_doctest(config: pytest.Config, path: Path, parent: pytest.Collector) -> bool:
     if path.suffix in (".rst", ".md") and parent.session.isinitpath(path):
         return True
-    globs = config.getoption("doctestglob") or ["*.rst", "*.md"]
+    globs = config.getoption(
+        "doctestglob",
+        default=["*.rst", "*.md"],
+        skip=True,
+    )
     for glob in globs:
         if path.match(path_pattern=glob):
             return True
@@ -212,26 +217,38 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
 
 class DocTestDocutilsFile(pytest.Module):
     def collect(self) -> Iterable["DoctestItem"]:
-        setup()
+        import _pytest.doctest
+        from _pytest.doctest import DoctestItem
 
-        encoding = self.config.getini("doctest_encoding")
+        try:
+            encoding = self.config.getini("doctest_encoding")
+        except (KeyError, ValueError):
+            encoding = "utf-8"
         text = self.fspath.read_text(encoding)
 
         # Uses internal doctest module parsing mechanism.
         finder = DocutilsDocTestFinder()
 
-        optionflags = _pytest.doctest.get_optionflags(self)  # type: ignore
+        try:
+            optionflags = _pytest.doctest.get_optionflags(self)  # type: ignore
+        except ValueError:
+            optionflags = 0
+
+        try:
+            continue_on_failure = (
+                _pytest.doctest._get_continue_on_failure(  # type:ignore
+                    self.config
+                )
+            )
+        except ValueError:
+            continue_on_failure = True
 
         runner = _get_runner(
             verbose=False,
             optionflags=optionflags,
             checker=_pytest.doctest._get_checker(),
-            continue_on_failure=_pytest.doctest._get_continue_on_failure(  # type:ignore
-                self.config
-            ),
+            continue_on_failure=continue_on_failure,
         )
-        from _pytest.doctest import DoctestItem
-
         for test in finder.find(
             text,
             str(self.fspath),
@@ -240,3 +257,21 @@ class DocTestDocutilsFile(pytest.Module):
                 yield DoctestItem.from_parent(
                     self, name=test.name, runner=runner, dtest=test  # type: ignore
                 )
+
+
+@pytest.fixture(scope="session")
+def doctest_namespace() -> Dict[str, Any]:
+    """Fixture that returns a :py:class:`dict` that will be injected into the
+    namespace of doctests.
+
+    Usually this fixture is used in conjunction with another ``autouse`` fixture:
+
+    .. code-block:: python
+
+        @pytest.fixture(autouse=True)
+        def add_np(doctest_namespace):
+            doctest_namespace["np"] = numpy
+
+    For more details: :ref:`doctest_namespace`.
+    """
+    return {}
