@@ -210,7 +210,7 @@ def linkcode_resolve(
     if "dev" in about["__version__"]:
         return "{}/blob/master/{}/{}{}".format(
             about["__github__"],
-            about["__package_name__"],
+            "src",
             fn,
             linespec,
         )
@@ -218,7 +218,7 @@ def linkcode_resolve(
         return "{}/blob/v{}/{}/{}{}".format(
             about["__github__"],
             about["__version__"],
-            about["__package_name__"],
+            "src",
             fn,
             linespec,
         )
