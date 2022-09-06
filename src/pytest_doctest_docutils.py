@@ -30,12 +30,31 @@ from doctest_docutils import DocutilsDocTestFinder, setup
 if TYPE_CHECKING:
     from doctest import _Out
 
+    from _pytest.config.argparsing import Parser
     from _pytest.doctest import DoctestItem
+
 
 logger = logging.getLogger(__name__)
 
 # Lazy definition of runner class
 RUNNER_CLASS = None
+
+
+def pytest_addoption(parser: "Parser") -> None:
+    group = parser.getgroup("collect")
+    group.addoption(
+        "--doctest-docutils-modules",
+        action="store_true",
+        default=False,
+        help="run doctest-doctests in .py modules (pass-through to pytest-doctest)",
+        dest="doctestmodules",
+    )
+    group.addoption(
+        "--no-doctest-docutils-modules",
+        action="store_false",
+        help="disable doctest-doctests in .py modules (pass-through to pytest-doctest)",
+        dest="doctestmodules",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -55,9 +74,21 @@ def pytest_unconfigure() -> None:
 
 def pytest_collect_file(
     file_path: Path, parent: pytest.Collector
-) -> Optional["DocTestDocutilsFile"]:
+) -> Optional[Tuple["DocTestDocutilsFile", "_pytest.doctest.DoctestModule"]]:
     config = parent.config
-    if _is_doctest(config, file_path, parent):
+    if file_path.suffix == ".py":
+        if config.option.doctestmodules and not any(
+            # if not any(
+            (
+                _pytest.doctest._is_setup_py(file_path),
+                _pytest.doctest._is_main_py(file_path),
+            )
+        ):
+            mod: Tuple[
+                "DocTestDocutilsFile", "_pytest.doctest.DoctestModule"
+            ] = _pytest.doctest.DoctestModule.from_parent(parent, path=file_path)
+            return mod
+    elif _is_doctest(config, file_path, parent):
         return DocTestDocutilsFile.from_parent(parent, path=file_path)  # type: ignore
     return None
 
