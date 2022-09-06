@@ -143,6 +143,27 @@ Here's a test:
         },
         tests_found=1,
     ),
+    #
+    # .py should still work
+    #
+    PytestDocTestFinderFixture(
+        test_id="python-reST-doctest_block",
+        files={
+            "example.py": textwrap.dedent(
+                """
+def hello(statement: str) -> None:
+    '''Say hello.
+
+    >>> hello(f'hello world {2 * 3}')
+    hello world 6
+    '''
+    print(statement)
+
+        """
+            )
+        },
+        tests_found=1,
+    ),
 ]
 
 
@@ -159,7 +180,16 @@ def test_pluginDocutilsDocTestFinder(
 ) -> None:
     # Initialize variables
     pytester.plugins = ["pytest_doctest_docutils"]
-    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest -vv\n")
+    pytester.makefile(
+        ".ini",
+        pytest=textwrap.dedent(
+            """
+[pytest]
+addopts=-p no:doctest -vv
+
+        """.strip()
+        ),
+    )
     tests_path = tmp_path / "tests"
     first_test_key = list(files.keys())[0]
     first_test_filename = str(tests_path / first_test_key)
@@ -174,5 +204,5 @@ def test_pluginDocutilsDocTestFinder(
         )
 
     # Test
-    result = pytester.runpytest(str(first_test_filename))
+    result = pytester.runpytest(str(first_test_filename), "--doctest-docutils-modules")
     result.assert_outcomes(passed=tests_found)
