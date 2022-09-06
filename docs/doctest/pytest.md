@@ -22,6 +22,21 @@ $ pytest README.md
 
 [myst-parser]: https://myst-parser.readthedocs.io/en/latest/
 
+## Scanning python files
+
+You can retain {ref}`pytest's standard doctest plugin <pytest:doctest>` of
+running doctests in `.py` by passing `--doctest-docutils-modules`:
+
+```console
+$ py.test src/ --doctest-docutils-modules
+```
+
+You can disable it via `--no-doctest-docutils-modules`:
+
+```console
+$ py.test src/ --no-doctest-docutils-modules
+```
+
 ## API
 
 ```{eval-rst}
