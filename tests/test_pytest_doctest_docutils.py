@@ -172,7 +172,6 @@ def hello(statement: str) -> None:
 )
 def test_pluginDocutilsDocTestFinder(
     pytester: _pytest.pytester.Pytester,
-    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     test_id: str,
     files: FixtureFileDict,
@@ -190,7 +189,7 @@ addopts=-p no:doctest -vv
         """.strip()
         ),
     )
-    tests_path = tmp_path / "tests"
+    tests_path = pytester.path / "tests"
     first_test_key = list(files.keys())[0]
     first_test_filename = str(tests_path / first_test_key)
 
