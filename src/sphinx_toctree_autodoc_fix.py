@@ -101,7 +101,9 @@ class BetterTocTreeCollector(toctree_collector.TocTreeCollector):
                         elif isinstance(node, addnodes.desc):
                             title = node.children[0]
 
-                            fullname = title.attributes["fullname"]
+                            fullname = title.attributes.get("fullname")
+                            if fullname is None:
+                                continue
                             classname = title.attributes["class"]
                             nodetype = node.attributes["objtype"]
 
