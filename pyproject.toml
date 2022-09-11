@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gp-libs"
-version = "0.0.1a9"
+version = "0.0.1a10"
 description = "Internal utilities for projects following git-pull python package spec"
 license = "MIT"
 authors = ["Tony Narlock <tony@git-pull.com>"]
