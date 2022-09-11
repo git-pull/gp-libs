@@ -1,7 +1,7 @@
 # Makefile for Sphinx documentation
 #
 SHELL := /bin/bash
-HTTP_PORT     = 8034
+HTTP_PORT     = 3123
 WATCH_FILES= find .. -type f -not -path '*/\.*' | grep -i '.*[.]\(rst\|md\)\$\|.*[.]py\$\|CHANGES\|TODO\|.*conf\.py' 2> /dev/null
 
 # You can set these variables from the command line.
