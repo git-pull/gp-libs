@@ -8,13 +8,19 @@ git-pull projects, e.g. [cihai], [vcs-python], or [tmux-python].
 [vcs-python]: https://github.com/vcs-python
 [tmux-python]: https://github.com/tmux-python
 
-## doctest helpers (for docutils)
+## `doctest` for reStructured and markdown
 
-Two parts:
+Two components:
 
-1. doctest module: Same specification as doctest, but can parse reStructuredText
+1. `doctest_docutils` module: Same specification as `doctest`, but can parse reStructuredText
    and markdown
-2. pytest plugin: Collects pytest for reStructuredText and markdown files
+2. `pytest_doctest_docutils`: Pytest plugin, collects test items for pytest for reStructuredText and markdown files
+
+   This means you can do:
+
+   ```console
+   $ pytest docs
+   ```
 
 ### doctest module
 
@@ -23,7 +29,7 @@ It can parse reStructuredText (.rst) and markdown (.md).
 
 See more: <https://gp-libs.git-pull.com/doctest/>
 
-#### Writing doctests
+#### Supported styles
 
 It supports two barebones directives:
 
@@ -56,7 +62,9 @@ It supports two barebones directives:
 
 [myst-parser]: https://myst-parser.readthedocs.io/en/latest/
 
-#### Test your docs
+#### Usage
+
+The `doctest_docutils` module preserves standard library's usage conventions:
 
 ##### reStructuredText
 
@@ -78,7 +86,7 @@ $ python -m doctest_docutils README.md -v
 
 _This plugin disables [pytest's standard `doctest` plugin]._
 
-This plugin integrates with the above module.
+This plugin integrates with the `doctest_docutils` module with pytest to enable seamless testing of docs, `conftest.py` fixtures and all.
 
 ```console
 $ pytest docs/
