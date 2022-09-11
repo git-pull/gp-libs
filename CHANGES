@@ -28,6 +28,12 @@ $ pip install --user --upgrade --pre gp-libs
 
 - Initial docs, packaging, etc.
 
+### Tests
+
+pytest-doctest-docutils:
+
+- Add tests for pytest conftest.py files (#9)
+
 <!---
 .. vim: set filetype=markdown:
 -->

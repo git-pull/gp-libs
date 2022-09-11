@@ -1,4 +1,3 @@
-import pathlib
 import textwrap
 import typing as t
 
@@ -172,7 +171,6 @@ def hello(statement: str) -> None:
 )
 def test_pluginDocutilsDocTestFinder(
     pytester: _pytest.pytester.Pytester,
-    tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     test_id: str,
     files: FixtureFileDict,
@@ -190,7 +188,7 @@ addopts=-p no:doctest -vv
         """.strip()
         ),
     )
-    tests_path = tmp_path / "tests"
+    tests_path = pytester.path / "tests"
     first_test_key = list(files.keys())[0]
     first_test_filename = str(tests_path / first_test_key)
 
@@ -206,3 +204,166 @@ addopts=-p no:doctest -vv
     # Test
     result = pytester.runpytest(str(first_test_filename), "--doctest-docutils-modules")
     result.assert_outcomes(passed=tests_found)
+
+
+def test_conftest_py(
+    pytester: _pytest.pytester.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Initialize variables
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(
+        ".ini",
+        pytest=textwrap.dedent(
+            """
+[pytest]
+addopts=-p no:doctest -vv
+
+        """.strip()
+        ),
+    )
+    pytester.makeconftest(
+        textwrap.dedent(
+            r"""
+from typing import Any, Dict
+import pathlib
+import pytest
+from _pytest.fixtures import SubRequest
+
+@pytest.fixture(autouse=True)
+def add_doctest_fixtures(
+    request: SubRequest,
+    doctest_namespace: Dict[str, Any],
+    tmp_path: pathlib.Path,
+):
+    def add(a: int, b: int) -> int:
+        return a + b
+    doctest_namespace["add"] = add
+    """
+        )
+    )
+    tests_path = pytester.path / "tests"
+    files = {
+        "example.py": textwrap.dedent(
+            """
+def hello(statement: str) -> None:
+    '''Say hello.
+
+    >>> hello(add(1, 2))
+    3
+    '''
+    print(statement)
+
+        """
+        )
+    }
+    first_test_key = list(files.keys())[0]
+    first_test_filename = str(tests_path / first_test_key)
+
+    # Setup: Files
+    tests_path.mkdir()
+    for file_name, text in files.items():
+        rst_file = tests_path / file_name
+        rst_file.write_text(
+            text,
+            encoding="utf-8",
+        )
+
+    result = pytester.runpytest(str(first_test_filename), "--doctest-modules")
+    result.assert_outcomes(passed=1)
+
+    # Test
+    result = pytester.runpytest(str(first_test_filename), "--doctest-docutils-modules")
+    result.assert_outcomes(passed=1)
+
+
+def test_conftest_md(
+    pytester: _pytest.pytester.Pytester,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Initialize variables
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(
+        ".ini",
+        pytest=textwrap.dedent(
+            """
+[pytest]
+addopts=-p no:doctest -vv
+
+        """.strip()
+        ),
+    )
+    pytester.makeconftest(
+        textwrap.dedent(
+            r"""
+from typing import Any, Dict
+import pathlib
+import pytest
+from _pytest.fixtures import SubRequest
+
+@pytest.fixture(autouse=True)
+def add_doctest_fixtures(
+    request: SubRequest,
+    doctest_namespace: Dict[str, Any],
+    tmp_path: pathlib.Path,
+):
+    def add(a: int, b: int) -> int:
+        return a + b
+    doctest_namespace["add"] = add
+    """
+        )
+    )
+    tests_path = pytester.path / "tests"
+    files = {
+        "example.md": textwrap.dedent(
+            """
+```python
+>>> def hello(statement: str) -> None:
+...     '''Say hello.'''
+...     print(statement)
+>>> hello(add(1, 2))
+3
+```
+
+Anything else to say?
+
+```python
+>>> new_var = 3 + 3
+>>> add(new_var, 0)
+6
+```
+
+The latest:
+```python
+>>> add = lambda a, b: a + b
+>>> add(5, 1)
+6
+```
+
+The rest:
+```python
+>>> add = lambda a, b: a + b
+>>> add(5, 1)
+6
+```
+        """
+        )
+    }
+    first_test_key = list(files.keys())[0]
+    first_test_filename = str(tests_path / first_test_key)
+
+    # Setup: Files
+    tests_path.mkdir()
+    for file_name, text in files.items():
+        rst_file = tests_path / file_name
+        rst_file.write_text(
+            text,
+            encoding="utf-8",
+        )
+
+    result = pytester.runpytest(str(first_test_filename), "--doctest-modules")
+    result.assert_outcomes(passed=4)
+
+    # Test
+    result = pytester.runpytest(str(first_test_filename), "--doctest-docutils-modules")
+    result.assert_outcomes(passed=4)
