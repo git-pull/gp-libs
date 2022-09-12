@@ -355,8 +355,8 @@ The rest:
     # Setup: Files
     tests_path.mkdir()
     for file_name, text in files.items():
-        rst_file = tests_path / file_name
-        rst_file.write_text(
+        md_file = tests_path / file_name
+        md_file.write_text(
             text,
             encoding="utf-8",
         )
