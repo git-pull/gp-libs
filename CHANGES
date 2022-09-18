@@ -34,6 +34,13 @@ pytest-doctest-docutils:
 
 - Add tests for pytest conftest.py files (#9)
 
+### Infrastructure
+
+- CI speedups (#13)
+
+  - Split out release to separate job so the PyPI Upload docker image isn't pulled on normal runs
+  - Clean up CodeQL
+
 <!---
 .. vim: set filetype=markdown:
 -->
