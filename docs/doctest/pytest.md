@@ -133,7 +133,7 @@ $ py.test src/ --no-doctest-docutils-modules
 
   - Configuration:
 
-    - Doctests support pytset fixtures through [`doctest_namespace`](https://docs.pytest.org/en/7.1.x/how-to/doctest.html#doctest-namespace-fixture)
+    - Doctests support pytest fixtures through [`doctest_namespace`](https://docs.pytest.org/en/7.1.x/how-to/doctest.html#doctest-namespace-fixture)
 
       See [`add_doctest_fixtures()`](https://github.com/tmux-python/libtmux/blob/v0.15.0post0/src/libtmux/conftest.py#L15-L26) in [`src/libtmux/conftest.py`](https://github.com/tmux-python/libtmux/blob/v0.15.0post0/src/libtmux/conftest.py)
 
