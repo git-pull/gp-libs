@@ -24,6 +24,26 @@ $ pip install --user --upgrade --pre gp-libs
 
 - doctest_docutils: :mod:`doctest` w/ docutils support (and markdown)
 
+### Removed features
+
+- `sphinx_toctree_autodoc_fix` was removed in v0.0.1a12
+
+  Overcome by [Sphinx 5.2](https://pypi.org/project/Sphinx/5.2.0) bakes this in by default:
+
+  Settings options:
+
+  - `add_function_parentheses = False` (default: `True`)
+  - `toc_object_entries_show_parents` can be (default: `'domain'`):
+    - `toc_object_entries_show_parents = 'domain'`
+    - `toc_object_entries_show_parents = 'hide'`
+    - `toc_object_entries_show_parents = 'all'`
+
+  See also:
+
+  - https://github.com/sphinx-doc/sphinx/issues/6316
+  - https://github.com/sphinx-doc/sphinx/pull/10807
+  - https://gist.github.com/agoose77/e8f0f8f7d7133e73483ca5c2dd7b907f
+
 ### Documentation
 
 - Initial docs, packaging, etc.

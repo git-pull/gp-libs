@@ -132,24 +132,6 @@ In your _conf.py_:
 
 See more: <https://gp-libs.git-pull.com/linkify_issues/>
 
-### Table of contents for autodoc
-
-`sphinx.ext.autodoc` doesn't link objects in the table of contents. So we need a
-plugin to help.
-
-See more: <https://gp-libs.git-pull.com/sphinx_toctree_autodoc_fix/>
-
-#### Configuration
-
-1. Add `'sphinx_toctree_autodoc_fix'` to `extensions`
-
-   ```python
-   extensions = [
-       # ...
-       "sphinx_toctree_autodoc_fix",
-   ]
-   ```
-
 ## Install
 
 ```console
