@@ -35,7 +35,6 @@ extensions = [
     "sphinxext.rediraffe",
     "myst_parser",
     "linkify_issues",
-    "sphinx_toctree_autodoc_fix",
 ]
 myst_enable_extensions = [
     "colon_fence",
@@ -93,6 +92,9 @@ html_sidebars = {
         "sidebar/scroll-end.html",
     ]
 }
+
+# sphinx.ext.autodoc
+toc_object_entries_show_parents = "hide"
 
 # linkify_issues
 issue_url_tpl = f'{about["__github__"]}/issues/{{issue_id}}'
