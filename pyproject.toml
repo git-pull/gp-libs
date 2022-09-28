@@ -41,7 +41,7 @@ Changes = "https://github.com/git-pull/gp-libs/blob/master/CHANGES"
 [tool.poetry.dependencies]
 python = "^3.7"
 myst_parser = "*"
-docutils = "~0.18.0"
+docutils = "*"
 
 [tool.poetry.dev-dependencies]
 ### Docs ###
@@ -57,7 +57,7 @@ sphinxext-rediraffe = "*"
 ### Testing ###
 pytest = "*"
 pytest-rerunfailures = "*"
-pytest-watcher = "^0.2.3"
+pytest-watcher = "*"
 
 ### Coverage ###
 codecov = "*"
@@ -74,7 +74,7 @@ flake8-bugbear = "*"
 flake8-comprehensions = "*"
 mypy = "*"
 typing-extensions = { version = "*", python = "^3.7" }
-types-docutils = "^0.19.0"
+types-docutils = "*"
 
 [tool.poetry.extras]
 docs = [
