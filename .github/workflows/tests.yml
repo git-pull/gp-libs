@@ -10,6 +10,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.7", "3.10"]
+        docutils-version: [ '0.18', '0.19' ]
     steps:
       - uses: actions/checkout@v3
 
@@ -23,7 +24,9 @@ jobs:
           cache: 'poetry'
 
       - name: Install dependencies
-        run: poetry install -E "docs test coverage lint format"
+        run: |
+          poetry install -E "docs test coverage lint format"
+          poetry run pip install docutils~=${{ matrix.docutils-version }}
 
       - name: Print python versions
         run: |

@@ -16,6 +16,8 @@ from docutils.parsers.rst import Directive, directives
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
 
+from docutils_compat import findall
+
 logger = logging.getLogger(__name__)
 
 
@@ -325,7 +327,7 @@ class DocutilsDocTestFinder:
                 or isinstance(node, nodes.doctest_block)
             )
 
-        for idx, node in enumerate(doc.traverse(condition)):
+        for idx, node in enumerate(findall(doc)(condition)):  # type:ignore
             logger.debug(f"() node: {node.astext()}")
             assert isinstance(node, nodes.Element)
             test_name = node.get("groups")
