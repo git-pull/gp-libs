@@ -5,6 +5,8 @@ from docutils import nodes
 from sphinx.application import Sphinx
 from sphinx.transforms import SphinxTransform
 
+from docutils_compat import findall
+
 if sys.version_info >= (3, 8):
     from typing import TypedDict
 else:
@@ -40,7 +42,7 @@ class LinkifyIssues(SphinxTransform):
             )
             return cond
 
-        for node in self.document.traverse(condition):
+        for node in findall(self.document)(condition):
             text = node.astext()
             retnodes = []
             pos = 0
