@@ -8,7 +8,6 @@ from pathlib import Path
 
 import gp_libs
 import linkify_issues
-import sphinx_toctree_autodoc_fix
 
 # Get the project root dir, which is the parent dir of this
 cwd = Path(__file__).parent
