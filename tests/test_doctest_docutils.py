@@ -67,6 +67,20 @@ FIXTURES = [
         tests_found=1,
     ),
     DocTestFinderFixture(
+        test_id="MyST-doctest_block-python",
+        files={
+            "example.md": textwrap.dedent(
+                """
+```python
+>>> 4 + 4
+8
+```
+        """
+            )
+        },
+        tests_found=1,
+    ),
+    DocTestFinderFixture(
         test_id="MyST-doctest_block-indented",
         files={
             "example.md": textwrap.dedent(
