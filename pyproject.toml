@@ -43,41 +43,49 @@ python = "^3.7"
 myst_parser = "*"
 docutils = "*"
 
-[tool.poetry.dev-dependencies]
+[tool.optional-dependencies]
 ### Docs ###
-sphinx = "*"
-furo = "*"
-sphinx-autodoc-typehints = "*"
-sphinx-autobuild = "*"
-sphinx-inline-tabs = { version = "*", python = "^3.7" }
-sphinxext-opengraph = "*"
-sphinx-copybutton = "*"
-sphinxext-rediraffe = "*"
+docs = [
+  "sphinx",
+  "furo",
+  "sphinx-autodoc-typehints",
+  "sphinx-autobuild",
+  "sphinx-inline-tabs;python_version ^=3.7",
+  "sphinxext-opengraph",
+  "sphinx-copybutton",
+  "sphinxext-rediraffe"
+]
 
 ### Testing ###
-pytest = "*"
-pytest-rerunfailures = "*"
-pytest-watcher = "*"
+tests = [
+  "pytest",
+  "pytest-rerunfailures",
+  "pytest-watcher",
+]
 
 ### Coverage ###
-codecov = "*"
-coverage = "*"
-pytest-cov = "*"
+coverage = [
+  "codecov",
+  "coverage",
+  "pytest-cov"
+]
 
 ### Format ###
-black = "*"
-isort = "*"
+format = [
+  "black",
+  "isort"
+]
 
 ### Lint ###
-flake8 = [
-  { version = "*", python = "^3.7" },
-  { version = ">=5", python = "^3.8" },
+lint = [
+  "flake8; python_version ^3.7",
+  "flake8 >=5; python_version ^3.8",
+  "flake8-bugbear",
+  "flake8-comprehensions",
+  "mypy",
+  "typing-extensions; python_version ^3.7",
+  "types-docutils"
 ]
-flake8-bugbear = "*"
-flake8-comprehensions = "*"
-mypy = "*"
-typing-extensions = { version = "*", python = "^3.7" }
-types-docutils = "*"
 
 [tool.poetry.extras]
 docs = [
