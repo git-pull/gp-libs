@@ -23,6 +23,27 @@ $ pip install --user --upgrade --pre gp-libs
   ```
 
 - doctest_docutils: :mod:`doctest` w/ docutils support (and markdown)
+- doctest_docutils: Support for sphinx-inline-tab's `tab` directive was added in v0.0.1a17 (#18)
+
+  `````markdown
+  ````{tab} example tab
+
+  ```python
+  >>> 4 + 4
+  8
+  ```
+
+  ````
+
+  ````{tab} example second
+
+  ```python
+  >>> 4 + 2
+  6
+  ```
+
+  ````
+  `````
 
 ### Removed features
 

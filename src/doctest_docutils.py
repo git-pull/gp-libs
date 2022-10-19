@@ -152,10 +152,23 @@ class DoctestDirective(TestDirective):
     }
 
 
+class MockTabDirective(TestDirective):
+    def run(self) -> t.List[Node]:
+        """Parse a mock-tabs directive."""
+        self.assert_has_content()
+
+        content = nodes.container("", is_div=True, classes=["tab-content"])
+        self.state.nested_parse(self.content, self.content_offset, content)
+        return [content]
+
+
 def setup() -> t.Dict[str, t.Any]:
     directives.register_directive("testsetup", TestsetupDirective)
     directives.register_directive("testcleanup", TestcleanupDirective)
     directives.register_directive("doctest", DoctestDirective)
+
+    # Third party mock directive: sphinx-inline-tabs @ 2022.01.02.beta11
+    directives.register_directive("tab", MockTabDirective)
     return {"version": docutils.__version__, "parallel_read_safe": True}
 
 
