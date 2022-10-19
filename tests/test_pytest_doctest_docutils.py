@@ -163,6 +163,30 @@ def hello(statement: str) -> None:
         },
         tests_found=1,
     ),
+    # sphinx-inline-tabs
+    PytestDocTestFinderFixture(
+        test_id="MyST-doctest_block-python--sphinx-inline-tabs",
+        files={
+            "example.md": textwrap.dedent(
+                """
+````{tab} example tab
+```python
+>>> 4 + 4
+8
+```
+````
+
+````{tab} example second
+```python
+>>> 4 + 2
+6
+```
+````
+        """
+            )
+        },
+        tests_found=2,
+    ),
 ]
 
 
