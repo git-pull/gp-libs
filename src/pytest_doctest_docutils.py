@@ -215,7 +215,7 @@ class DocTestDocutilsFile(pytest.Module):
         setup()
 
         encoding = self.config.getini("doctest_encoding")
-        text = self.fspath.read_text(encoding)
+        text = self.path.read_text(encoding)
 
         # Uses internal doctest module parsing mechanism.
         finder = DocutilsDocTestFinder()
@@ -234,7 +234,7 @@ class DocTestDocutilsFile(pytest.Module):
 
         for test in finder.find(
             text,
-            str(self.fspath),
+            str(self.path),
         ):
             if test.examples:  # skip empty doctests
                 yield DoctestItem.from_parent(
