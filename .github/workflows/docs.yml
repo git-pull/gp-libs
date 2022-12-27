@@ -26,8 +26,8 @@ jobs:
               - 'docs/**'
               - 'examples/**'
             python_files:
-              - '*.py'
-              - '**/*.py'
+              - 'src/*.py'
+              - 'src/**/*.py'
 
       - name: Should publish
         # if: steps.changes.outputs.docs == 'true' || steps.changes.outputs.root_docs == 'true' || steps.changes.outputs.python_files == 'true'
