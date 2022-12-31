@@ -41,7 +41,7 @@ Changes = "https://github.com/git-pull/gp-libs/blob/master/CHANGES"
 
 [tool.poetry.dependencies]
 python = "^3.7"
-myst_parser = ">0.18.0"
+myst_parser = ">=0.18.1"
 docutils = "*"
 
 [tool.poetry.dev-dependencies]
