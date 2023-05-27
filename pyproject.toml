@@ -96,6 +96,10 @@ sphinx = "pytest_doctest_docutils"
 
 [tool.mypy]
 strict = true
+files = [
+  "src/",
+  "tests/",
+]
 
 [build-system]
 requires = ["poetry_core>=1.0.0"]
