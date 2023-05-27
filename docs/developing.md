@@ -6,7 +6,7 @@
 
 `cd gp-libs`
 
-`poetry install -E "docs test coverage lint format"`
+`poetry install -E "docs test coverage lint"`
 
 Makefile commands prefixed with `watch_` will watch files and rerun.
 
@@ -48,11 +48,96 @@ Rebuild docs and run server via one terminal: `make dev_docs` (requires above, a
 
 ## Formatting / Linting
 
-The project uses [black] and [isort] (one after the other) and runs [flake8] via
-CI. See the configuration in `pyproject.toml` and `setup.cfg`:
+### ruff
 
-`make black isort`: Run `black` first, then `isort` to handle import nuances
-`make flake8`, to watch (requires `entr(1)`): `make watch_flake8`
+The project uses [ruff] to handles formatting, sorting imports and linting.
+
+````{tab} Command
+
+poetry:
+
+```console
+$ poetry run ruff
+```
+
+If you setup manually:
+
+```console
+$ ruff .
+```
+
+````
+
+````{tab} make
+
+```console
+$ make ruff
+```
+
+````
+
+````{tab} Watch
+
+```console
+$ make watch_ruff
+```
+
+requires [`entr(1)`].
+
+````
+
+````{tab} Fix files
+
+poetry:
+
+```console
+$ poetry run ruff . --fix
+```
+
+If you setup manually:
+
+```console
+$ ruff . --fix
+```
+
+````
+
+### mypy
+
+[mypy] is used for static type checking.
+
+````{tab} Command
+
+poetry:
+
+```console
+$ poetry run mypy .
+```
+
+If you setup manually:
+
+```console
+$ mypy .
+```
+
+````
+
+````{tab} make
+
+```console
+$ make mypy
+```
+
+````
+
+````{tab} Watch
+
+```console
+$ make watch_mypy
+```
+
+requires [`entr(1)`].
+````
 
 ## Releasing
 
@@ -70,6 +155,6 @@ Update `__version__` in `src/gp_libs.py` and `pyproject.toml`::
 
 [poetry]: https://python-poetry.org/
 [entr(1)]: http://eradman.com/entrproject/
-[black]: https://github.com/psf/black
-[isort]: https://pypi.org/project/isort/
-[flake8]: https://flake8.pycqa.org/
+[`entr(1)`]: http://eradman.com/entrproject/
+[ruff]: https://ruff.rs
+[mypy]: https://mypy-lang.org/
