@@ -66,6 +66,7 @@ coverage = "*"
 pytest-cov = "*"
 
 ### Lint ###
+black = "*"
 ruff = "*"
 mypy = "*"
 typing-extensions = { version = "*", python = "^3.7" }
@@ -85,6 +86,7 @@ docs = [
 test = ["pytest", "pytest-rerunfailures", "pytest-watcher"]
 coverage = ["codecov", "coverage", "pytest-cov"]
 lint = [
+  "black",
   "ruff",
   "mypy",
   "types-docutils",
