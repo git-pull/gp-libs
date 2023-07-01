@@ -1,9 +1,8 @@
 import textwrap
 import typing as t
 
-import pytest
-
 import _pytest.pytester
+import pytest
 
 FixtureFileDict = t.Dict[str, str]
 

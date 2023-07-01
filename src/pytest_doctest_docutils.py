@@ -19,12 +19,10 @@ from io import StringIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Optional, Tuple, Type
 
-import pytest
-
 import _pytest
+import pytest
 from _pytest import outcomes
 from _pytest.outcomes import OutcomeException
-
 from doctest_docutils import DocutilsDocTestFinder, setup
 
 if TYPE_CHECKING:
@@ -97,10 +95,7 @@ def _is_doctest(config: pytest.Config, path: Path, parent: pytest.Collector) -> 
     if path.suffix in (".rst", ".md") and parent.session.isinitpath(path):
         return True
     globs = config.getoption("doctestglob") or ["*.rst", "*.md"]
-    for glob in globs:
-        if path.match(path_pattern=glob):
-            return True
-    return False
+    return any(path.match(path_pattern=glob) for glob in globs)
 
 
 def _init_runner_class() -> Type["doctest.DocTestRunner"]:

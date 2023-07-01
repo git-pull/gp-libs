@@ -2,7 +2,6 @@ import pathlib
 import typing as t
 
 import pytest
-
 from sphinx.testing.util import SphinxTestApp
 
 if t.TYPE_CHECKING:

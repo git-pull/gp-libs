@@ -230,7 +230,7 @@ class DocutilsDocTestFinder:
             if name is None:
                 raise ValueError(
                     "DocTestFinder.find: name must be given "
-                    "when string.__name__ doesn't exist: %r" % (type(string),)
+                    "when string.__name__ doesn't exist: {!r}".format(type(string))
                 )
 
         # No access to a loader, so assume it's a normal
@@ -240,10 +240,7 @@ class DocutilsDocTestFinder:
             source_lines = None
 
         # Initialize globals, and merge in extraglobs.
-        if globs is None:
-            globs = {}
-        else:
-            globs = globs.copy()
+        globs = {} if globs is None else globs.copy()
         if extraglobs is not None:
             globs.update(extraglobs)
         if "__name__" not in globs:
@@ -346,7 +343,7 @@ class DocutilsDocTestFinder:
             test_name = node.get("groups")
             if isinstance(test_name, list):
                 test_name = test_name[0]
-            if test_name is None or "default" == test_name:
+            if test_name is None or test_name == "default":
                 test_name = f"{name}[{idx}]"
             logger.debug(f"() node: {test_name}")
             test = self._get_test(
@@ -411,10 +408,7 @@ def testdocutils(
         name = os.path.basename(filename)
 
     # Assemble the globals.
-    if globs is None:
-        globs = {}
-    else:
-        globs = globs.copy()
+    globs = {} if globs is None else globs.copy()
     if extraglobs is not None:
         globs.update(extraglobs)
     if "__name__" not in globs:

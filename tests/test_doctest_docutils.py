@@ -3,9 +3,8 @@ import pathlib
 import textwrap
 import typing as t
 
-import pytest
-
 import doctest_docutils
+import pytest
 
 FixtureFileDict = t.Dict[str, str]
 
@@ -206,7 +205,6 @@ def test_DocutilsDocTestFinder(
     elif file_path_mode != "relative":
         raise NotImplementedError(f"No file_path_mode supported for {file_path_mode}")
 
-    # Setup: Files
     tests_path.mkdir()
     for file_name, text in files.items():
         rst_file = tests_path / file_name
@@ -215,7 +213,6 @@ def test_DocutilsDocTestFinder(
             encoding="utf-8",
         )
 
-    # Setup: Environment
     if file_path_mode == "relative":
         monkeypatch.chdir(tests_path)
 
