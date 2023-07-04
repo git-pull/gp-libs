@@ -134,15 +134,15 @@ class TestDirective(Directive):
 
 
 class TestsetupDirective(TestDirective):
-    option_spec: OptionSpec = {"skipif": directives.unchanged_required}
+    option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}
 
 
 class TestcleanupDirective(TestDirective):
-    option_spec: OptionSpec = {"skipif": directives.unchanged_required}
+    option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}
 
 
 class DoctestDirective(TestDirective):
-    option_spec: OptionSpec = {
+    option_spec: t.ClassVar[OptionSpec] = {
         "hide": directives.flag,
         "no-trim-doctest-flags": directives.flag,
         "options": directives.unchanged,
@@ -230,7 +230,7 @@ class DocutilsDocTestFinder:
             if name is None:
                 raise ValueError(
                     "DocTestFinder.find: name must be given "
-                    "when string.__name__ doesn't exist: %r" % (type(string),)
+                    "when string.__name__ doesn't exist: {!r}".format(type(string))
                 )
 
         # No access to a loader, so assume it's a normal
@@ -240,10 +240,7 @@ class DocutilsDocTestFinder:
             source_lines = None
 
         # Initialize globals, and merge in extraglobs.
-        if globs is None:
-            globs = {}
-        else:
-            globs = globs.copy()
+        globs = {} if globs is None else globs.copy()
         if extraglobs is not None:
             globs.update(extraglobs)
         if "__name__" not in globs:
@@ -346,7 +343,7 @@ class DocutilsDocTestFinder:
             test_name = node.get("groups")
             if isinstance(test_name, list):
                 test_name = test_name[0]
-            if test_name is None or "default" == test_name:
+            if test_name is None or test_name == "default":
                 test_name = f"{name}[{idx}]"
             logger.debug(f"() node: {test_name}")
             test = self._get_test(
@@ -377,6 +374,13 @@ class DocutilsDocTestFinder:
         return self._parser.get_doctest(string, globs, name, filename, lineno)
 
 
+class TestDocutilsPackageRelativeError(Exception):
+    def __init__(self) -> None:
+        return super().__init__(
+            "Package may only be specified for module-relative paths."
+        )
+
+
 def testdocutils(
     filename: str,
     module_relative: bool = True,
@@ -398,7 +402,7 @@ def testdocutils(
     global master
 
     if package and not module_relative:
-        raise ValueError("Package may only be specified for module-" "relative paths.")
+        raise TestDocutilsPackageRelativeError()
 
     # Keep the absolute file paths. This is needed for Include directies to work.
     # The absolute path will be applied to source_path when creating the docutils doc.
@@ -408,13 +412,10 @@ def testdocutils(
 
     # If no name was given, then use the file's name.
     if name is None:
-        name = os.path.basename(filename)
+        name = pathlib.Path(filename).stem
 
     # Assemble the globals.
-    if globs is None:
-        globs = {}
-    else:
-        globs = globs.copy()
+    globs = {} if globs is None else globs.copy()
     if extraglobs is not None:
         globs.update(extraglobs)
     if "__name__" not in globs:

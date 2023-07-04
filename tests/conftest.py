@@ -3,7 +3,6 @@ import sys
 import typing as t
 
 import pytest
-
 from sphinx.testing.path import path as sphinx_path
 
 pytest_plugins = ["sphinx.testing.fixtures", "pytester"]
