@@ -134,15 +134,15 @@ class TestDirective(Directive):
 
 
 class TestsetupDirective(TestDirective):
-    option_spec: OptionSpec = {"skipif": directives.unchanged_required}
+    option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}
 
 
 class TestcleanupDirective(TestDirective):
-    option_spec: OptionSpec = {"skipif": directives.unchanged_required}
+    option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}
 
 
 class DoctestDirective(TestDirective):
-    option_spec: OptionSpec = {
+    option_spec: t.ClassVar[OptionSpec] = {
         "hide": directives.flag,
         "no-trim-doctest-flags": directives.flag,
         "options": directives.unchanged,
@@ -374,6 +374,13 @@ class DocutilsDocTestFinder:
         return self._parser.get_doctest(string, globs, name, filename, lineno)
 
 
+class TestDocutilsPackageRelativeError(Exception):
+    def __init__(self) -> None:
+        return super().__init__(
+            "Package may only be specified for module-relative paths."
+        )
+
+
 def testdocutils(
     filename: str,
     module_relative: bool = True,
@@ -395,7 +402,7 @@ def testdocutils(
     global master
 
     if package and not module_relative:
-        raise ValueError("Package may only be specified for module-" "relative paths.")
+        raise TestDocutilsPackageRelativeError()
 
     # Keep the absolute file paths. This is needed for Include directies to work.
     # The absolute path will be applied to source_path when creating the docutils doc.
@@ -405,7 +412,7 @@ def testdocutils(
 
     # If no name was given, then use the file's name.
     if name is None:
-        name = os.path.basename(filename)
+        name = pathlib.Path(filename).stem
 
     # Assemble the globals.
     globs = {} if globs is None else globs.copy()

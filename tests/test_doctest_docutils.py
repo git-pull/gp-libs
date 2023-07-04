@@ -184,6 +184,11 @@ Here's a test:
 ]
 
 
+class FilePathModeNotImplemented(Exception):
+    def __init__(self, file_path_mode: str) -> None:
+        return super().__init__(f"No file_path_mode supported for {file_path_mode}")
+
+
 @pytest.mark.parametrize(
     DocTestFinderFixture._fields, FIXTURES, ids=[f.test_id for f in FIXTURES]
 )
@@ -203,7 +208,7 @@ def test_DocutilsDocTestFinder(
     if file_path_mode == "absolute":
         first_test_filename = str(tests_path / first_test_filename)
     elif file_path_mode != "relative":
-        raise NotImplementedError(f"No file_path_mode supported for {file_path_mode}")
+        raise FilePathModeNotImplemented(file_path_mode)
 
     tests_path.mkdir()
     for file_name, text in files.items():
