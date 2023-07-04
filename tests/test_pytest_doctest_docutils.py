@@ -216,7 +216,7 @@ addopts=-p no:doctest -vv
     first_test_key = list(files.keys())[0]
     first_test_filename = str(tests_path / first_test_key)
 
-    # Setup: Files
+    # Setup Files
     tests_path.mkdir()
     for file_name, text in files.items():
         rst_file = tests_path / file_name
@@ -284,7 +284,7 @@ def hello(statement: str) -> None:
     first_test_key = list(files.keys())[0]
     first_test_filename = str(tests_path / first_test_key)
 
-    # Setup: Files
+    # Setup Files
     tests_path.mkdir()
     for file_name, text in files.items():
         rst_file = tests_path / file_name
@@ -376,7 +376,7 @@ The rest:
     first_test_key = list(files.keys())[0]
     first_test_filename = str(tests_path / first_test_key)
 
-    # Setup: Files
+    # Setup Files
     tests_path.mkdir()
     for file_name, text in files.items():
         md_file = tests_path / file_name
