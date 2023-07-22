@@ -129,7 +129,7 @@ copybutton_remove_prompts = True
 rediraffe_redirects = "redirects.txt"
 rediraffe_branch = "master~1"
 
-htmlhelp_basename = "%sdoc" % about["__title__"]
+htmlhelp_basename = f"{about['__title__']}doc"
 
 latex_documents = [
     (
