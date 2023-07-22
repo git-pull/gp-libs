@@ -83,7 +83,7 @@ def pytest_collect_file(
             )
         ):
             mod: Tuple[
-                "DocTestDocutilsFile", "_pytest.doctest.DoctestModule"
+                DocTestDocutilsFile, _pytest.doctest.DoctestModule
             ] = _pytest.doctest.DoctestModule.from_parent(parent, path=file_path)
             return mod
     elif _is_doctest(config, file_path, parent):

@@ -203,7 +203,7 @@ def test_DocutilsDocTestFinder(
 ) -> None:
     # Initialize variables
     tests_path = tmp_path / "tests"
-    first_test_key = list(files.keys())[0]
+    first_test_key = next(iter(files.keys()))
     first_test_filename = first_test_key
     if file_path_mode == "absolute":
         first_test_filename = str(tests_path / first_test_filename)

@@ -212,7 +212,7 @@ addopts=-p no:doctest -vv
         ),
     )
     tests_path = pytester.path / "tests"
-    first_test_key = list(files.keys())[0]
+    first_test_key = next(iter(files.keys()))
     first_test_filename = str(tests_path / first_test_key)
 
     # Setup Files
@@ -280,7 +280,7 @@ def hello(statement: str) -> None:
         """
         )
     }
-    first_test_key = list(files.keys())[0]
+    first_test_key = next(iter(files.keys()))
     first_test_filename = str(tests_path / first_test_key)
 
     # Setup Files
@@ -372,7 +372,7 @@ The rest:
         """
         )
     }
-    first_test_key = list(files.keys())[0]
+    first_test_key = next(iter(files.keys()))
     first_test_filename = str(tests_path / first_test_key)
 
     # Setup Files
