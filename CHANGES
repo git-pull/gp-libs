@@ -77,7 +77,7 @@ pytest-doctest-docutils:
 
 ### Infrastructure
 
-- Ruff (additional linting rules): Added in #20
+- Ruff (additional linting rules): Added in #20 and #21
 - CI: docutils testgrid (#16)
 - CI speedups (#13)
 
