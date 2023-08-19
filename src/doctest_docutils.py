@@ -179,6 +179,14 @@ master = None
 parser = doctest.DocTestParser()
 
 
+class DocTestFinderNameDoesNotExist(ValueError):
+    def __init__(self, string: str):
+        return super().__init__(
+            "DocTestFinder.find: name must be given "
+            f"when string.__name__ doesn't exist: {type(string)!r}"
+        )
+
+
 class DocutilsDocTestFinder:
     """
     A class used to extract the DocTests that are relevant to a given
@@ -224,14 +232,12 @@ class DocutilsDocTestFinder:
         to {}.
 
         """
+
         # If name was not specified, then extract it from the string.
         if name is None:
             name = getattr(string, "__name__", None)
             if name is None:
-                raise ValueError(
-                    "DocTestFinder.find: name must be given "
-                    "when string.__name__ doesn't exist: {!r}".format(type(string))
-                )
+                raise DocTestFinderNameDoesNotExist(string=string)
 
         # No access to a loader, so assume it's a normal
         # filesystem path
