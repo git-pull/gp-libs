@@ -84,7 +84,7 @@ pytest-doctest-docutils:
   - Split out release to separate job so the PyPI Upload docker image isn't pulled on normal runs
   - Clean up CodeQL
 
-- Poetry: Bump 1.1.x to 1.2.x
+- Poetry: Bump 1.1.x to 1.6.x
 
 <!---
 .. vim: set filetype=markdown:
