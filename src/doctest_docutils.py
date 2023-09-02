@@ -190,7 +190,7 @@ class DocTestFinderNameDoesNotExist(ValueError):
 class DocutilsDocTestFinder:
     """
     A class used to extract the DocTests that are relevant to a given
-    docutils file. Doctests can be extracted from the followwing directive
+    docutils file. Doctests can be extracted from the following directive
     types: doctest_block (doctest), DocTestDirective. Myst-parser is also
     supported for parsing markdown files.
     """
