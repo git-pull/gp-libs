@@ -1,20 +1,11 @@
 import re
-import sys
+from typing import TypedDict
 
 from docutils import nodes
 from sphinx.application import Sphinx
 from sphinx.transforms import SphinxTransform
 
 from docutils_compat import findall
-
-if sys.version_info >= (3, 8):
-    from typing import TypedDict
-else:
-    try:
-        from typing_extensions import TypedDict
-    except ImportError:
-        TypedDict = dict
-
 
 DEFAULT_ISSUE_RE = r"#(?P<issue_id>\d+)"
 """Default pattern to search plain nodes for issues."""
