@@ -150,7 +150,7 @@ You can test the unpublished version of g before its released.
 
 # More information
 
-- Python support: >= 3.7, pypy
+- Python support: >= 3.8, pypy
 - Source: <https://github.com/git-pull/gp-libs>
 - Docs: <https://gp-libs.git-pull.com>
 - Changelog: <https://gp-libs.git-pull.com/history.html>
