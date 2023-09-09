@@ -1,5 +1,4 @@
 import pathlib
-import sys
 import typing as t
 
 import pytest
@@ -9,13 +8,8 @@ pytest_plugins = ["sphinx.testing.fixtures", "pytester"]
 
 AppParams = t.Tuple[t.Any, t.Dict[str, t.Any]]
 
-if sys.version_info >= (3, 8):
-    from typing import Protocol
-else:
-    from typing_extensions import Protocol
 
-
-class MakeAppParams(Protocol):
+class MakeAppParams(t.Protocol):
     def __call__(
         self,
         #: index content
