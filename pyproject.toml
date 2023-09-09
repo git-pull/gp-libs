@@ -14,7 +14,6 @@ classifiers = [
   "Operating System :: MacOS :: MacOS X",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.7",
   "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
@@ -40,7 +39,7 @@ Repository = "https://github.com/git-pull/gp-libs"
 Changes = "https://github.com/git-pull/gp-libs/blob/master/CHANGES"
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.8"
 myst_parser = ">=0.18.1"
 docutils = "*"
 
@@ -50,7 +49,7 @@ sphinx = "*"
 furo = "*"
 sphinx-autodoc-typehints = "*"
 sphinx-autobuild = "*"
-sphinx-inline-tabs = "<2023.4.21" # For Python 3.7 support
+sphinx-inline-tabs = "*"
 sphinxext-opengraph = "<0.8" # https://github.com/wpilibsuite/sphinxext-opengraph/issues/100
 sphinx-copybutton = "*"
 sphinxext-rediraffe = "*"
@@ -69,7 +68,7 @@ pytest-cov = "*"
 black = "*"
 ruff = "*"
 mypy = "*"
-typing-extensions = { version = "*", python = "^3.7" }
+typing-extensions = { version = "*" }
 types-docutils = "*"
 
 [tool.poetry.extras]
