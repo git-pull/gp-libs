@@ -14,7 +14,7 @@ turn compatible with {mod}`doctest`.
 
 ## Using fixtures
 
-Normal pytest convention apply, {ref}`a visible conftest.py must be available <pytest:using-fixtures>`
+Normal pytest convention apply, {ref}`a visible conftest.py must be available <pytest:about-fixtures>`
 for the file being tested.
 
 This requires a understanding of `confest.py` - in the same way {ref}`pytest's vanilla doctest plugin <pytest:doctest>` does.

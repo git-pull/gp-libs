@@ -12,12 +12,12 @@ pytest plugin for doctest w/ reStructuredText and markdown
 """
 import bdb
 import doctest
+import io
 import logging
+import pathlib
 import sys
 import types
-from io import StringIO
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Optional, Tuple, Type
+import typing as t
 
 import _pytest
 import pytest
@@ -25,7 +25,7 @@ from _pytest import outcomes
 from _pytest.outcomes import OutcomeException
 from doctest_docutils import DocutilsDocTestFinder, setup
 
-if TYPE_CHECKING:
+if t.TYPE_CHECKING:
     from doctest import _Out
 
     from _pytest.config.argparsing import Parser
@@ -71,8 +71,8 @@ def pytest_unconfigure() -> None:
 
 
 def pytest_collect_file(
-    file_path: Path, parent: pytest.Collector
-) -> Optional[Tuple["DocTestDocutilsFile", "_pytest.doctest.DoctestModule"]]:
+    file_path: pathlib.Path, parent: pytest.Collector
+) -> t.Optional[t.Union["DocTestDocutilsFile", "_pytest.doctest.DoctestModule"]]:
     config = parent.config
     if file_path.suffix == ".py":
         if config.option.doctestmodules and not any(
@@ -82,7 +82,7 @@ def pytest_collect_file(
                 _pytest.doctest._is_main_py(file_path),
             )
         ):
-            mod: Tuple[
+            mod: t.Union[
                 DocTestDocutilsFile, _pytest.doctest.DoctestModule
             ] = _pytest.doctest.DoctestModule.from_parent(parent, path=file_path)
             return mod
@@ -91,14 +91,16 @@ def pytest_collect_file(
     return None
 
 
-def _is_doctest(config: pytest.Config, path: Path, parent: pytest.Collector) -> bool:
+def _is_doctest(
+    config: pytest.Config, path: pathlib.Path, parent: pytest.Collector
+) -> bool:
     if path.suffix in (".rst", ".md") and parent.session.isinitpath(path):
         return True
     globs = config.getoption("doctestglob") or ["*.rst", "*.md"]
     return any(path.match(path_pattern=glob) for glob in globs)
 
 
-def _init_runner_class() -> Type["doctest.DocTestRunner"]:
+def _init_runner_class() -> t.Type["doctest.DocTestRunner"]:
     import doctest
 
     class PytestDoctestRunner(doctest.DebugRunner):
@@ -110,8 +112,8 @@ def _init_runner_class() -> Type["doctest.DocTestRunner"]:
 
         def __init__(
             self,
-            checker: Optional["doctest.OutputChecker"] = None,
-            verbose: Optional[bool] = None,
+            checker: t.Optional["doctest.OutputChecker"] = None,
+            verbose: t.Optional[bool] = None,
             optionflags: int = 0,
             continue_on_failure: bool = True,
         ) -> None:
@@ -137,7 +139,9 @@ def _init_runner_class() -> Type["doctest.DocTestRunner"]:
             out: "_Out",
             test: "doctest.DocTest",
             example: "doctest.Example",
-            exc_info: Tuple[Type[BaseException], BaseException, types.TracebackType],
+            exc_info: t.Tuple[
+                t.Type[BaseException], BaseException, types.TracebackType
+            ],
         ) -> None:
             if isinstance(exc_info[1], OutcomeException):
                 raise exc_info[1]
@@ -154,8 +158,8 @@ def _init_runner_class() -> Type["doctest.DocTestRunner"]:
 
 
 def _get_runner(
-    checker: Optional["doctest.OutputChecker"] = None,
-    verbose: Optional[bool] = None,
+    checker: t.Optional["doctest.OutputChecker"] = None,
+    verbose: t.Optional[bool] = None,
     optionflags: int = 0,
     continue_on_failure: bool = True,
 ) -> "doctest.DocTestRunner":
@@ -175,9 +179,9 @@ def _get_runner(
 
 class DocutilsDocTestRunner(doctest.DocTestRunner):
     def summarize(  # type: ignore
-        self, out: "_Out", verbose: Optional[bool] = None
-    ) -> Tuple[int, int]:
-        string_io = StringIO()
+        self, out: "_Out", verbose: t.Optional[bool] = None
+    ) -> t.Tuple[int, int]:
+        string_io = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = string_io
         try:
@@ -188,8 +192,8 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
         return res
 
     def _DocTestRunner__patched_linecache_getlines(
-        self, filename: str, module_globals: Any = None
-    ) -> Any:
+        self, filename: str, module_globals: t.Any = None
+    ) -> t.Any:
         # this is overridden from DocTestRunner adding the try-except below
         m = self._DocTestRunner__LINECACHE_FILENAME_RE.match(filename)  # type: ignore
         if m and m.group("name") == self.test.name:
@@ -206,7 +210,7 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
 
 
 class DocTestDocutilsFile(pytest.Module):
-    def collect(self) -> Iterable["DoctestItem"]:
+    def collect(self) -> t.Iterable["DoctestItem"]:
         setup()
 
         encoding = self.config.getini("doctest_encoding")

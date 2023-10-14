@@ -1,5 +1,5 @@
 import re
-from typing import TypedDict
+import typing as t
 
 from docutils import nodes
 from sphinx.application import Sphinx
@@ -57,7 +57,7 @@ class LinkifyIssues(SphinxTransform):
             node.parent.replace(node, retnodes)
 
 
-class SetupDict(TypedDict):
+class SetupDict(t.TypedDict):
     version: str
     parallel_read_safe: bool
     parallel_write_safe: bool
