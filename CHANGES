@@ -8,6 +8,24 @@ To install the unreleased gp-libs version, see [developmental releases](https://
 $ pip install --user --upgrade --pre gp-libs
 ```
 
+## gp-libs 0.0.3 (unreleased)
+
+### Fixes
+
+#### doctest_docutils
+
+- `_from_module`: Backport {func}`functools.cached_property` support (#25)
+
+#### pytest_doctest_docutils
+
+- `pytest_collect_file`: Typing fix (#25)
+
+### Development
+
+- Use `import typing as t` everywhere (#25)
+
+  See also: <https://github.com/pytest-dev/pytest/pull/11317>
+
 ### Packaging
 
 - Move pytest configuration to `pyproject.toml` (#24)
