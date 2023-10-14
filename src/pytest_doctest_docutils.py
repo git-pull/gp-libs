@@ -17,7 +17,7 @@ import sys
 import types
 from io import StringIO
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, Iterable, Optional, Tuple, Type, Union
 
 import _pytest
 import pytest
@@ -72,7 +72,7 @@ def pytest_unconfigure() -> None:
 
 def pytest_collect_file(
     file_path: Path, parent: pytest.Collector
-) -> Optional[Tuple["DocTestDocutilsFile", "_pytest.doctest.DoctestModule"]]:
+) -> Optional[Union["DocTestDocutilsFile", "_pytest.doctest.DoctestModule"]]:
     config = parent.config
     if file_path.suffix == ".py":
         if config.option.doctestmodules and not any(
@@ -82,7 +82,7 @@ def pytest_collect_file(
                 _pytest.doctest._is_main_py(file_path),
             )
         ):
-            mod: Tuple[
+            mod: Union[
                 DocTestDocutilsFile, _pytest.doctest.DoctestModule
             ] = _pytest.doctest.DoctestModule.from_parent(parent, path=file_path)
             return mod
