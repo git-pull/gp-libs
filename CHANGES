@@ -25,6 +25,9 @@ $ pip install --user --upgrade --pre gp-libs
 - Use `import typing as t` everywhere (#25)
 
   See also: <https://github.com/pytest-dev/pytest/pull/11317>
+- poetry: 1.6.1 -> 1.7.0
+
+  See also: https://github.com/python-poetry/poetry/blob/1.7.0/CHANGELOG.md
 
 ### Packaging
 
