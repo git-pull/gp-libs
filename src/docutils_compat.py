@@ -1,4 +1,5 @@
 """Helpers for cross compatibility across dependency versions."""
+
 import typing as t
 
 if t.TYPE_CHECKING:

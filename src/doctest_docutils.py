@@ -337,7 +337,8 @@ class DocutilsDocTestFinder:
                 or (
                     isinstance(node, nodes.literal_block)
                     and re.match(
-                        doctest.DocTestParser._EXAMPLE_RE, node.astext()  # type:ignore
+                        doctest.DocTestParser._EXAMPLE_RE,
+                        node.astext(),  # type:ignore
                     )
                     is not None
                 )
@@ -378,8 +379,9 @@ class DocutilsDocTestFinder:
 
             # Type ignored because this is a private function.
             return t.cast(
-                bool, super()._from_module(module, object)  # type:ignore[misc]
-            )  
+                bool,
+                super()._from_module(module, object),  # type:ignore[misc]
+            )
 
     else:  # pragma: no cover
         pass
