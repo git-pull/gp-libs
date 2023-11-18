@@ -337,8 +337,8 @@ class DocutilsDocTestFinder:
                 or (
                     isinstance(node, nodes.literal_block)
                     and re.match(
-                        doctest.DocTestParser._EXAMPLE_RE,
-                        node.astext(),  # type:ignore
+                        doctest.DocTestParser._EXAMPLE_RE,  # type:ignore
+                        node.astext(),
                     )
                     is not None
                 )

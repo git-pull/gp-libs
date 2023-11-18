@@ -238,8 +238,8 @@ class DocTestDocutilsFile(pytest.Module):
         ):
             if test.examples:  # skip empty doctests
                 yield DoctestItem.from_parent(
-                    self,
+                    self,  # type: ignore
                     name=test.name,
                     runner=runner,
-                    dtest=test,  # type: ignore
+                    dtest=test,
                 )
