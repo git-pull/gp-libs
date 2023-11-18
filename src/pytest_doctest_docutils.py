@@ -10,6 +10,7 @@ pytest plugin for doctest w/ reStructuredText and markdown
    This is a derivative of my PR https://github.com/thisch/pytest-sphinx/pull/38 to
    pytest-sphinx (BSD 3-clause), 2022-09-03.
 """
+
 import bdb
 import doctest
 import io
@@ -237,5 +238,8 @@ class DocTestDocutilsFile(pytest.Module):
         ):
             if test.examples:  # skip empty doctests
                 yield DoctestItem.from_parent(
-                    self, name=test.name, runner=runner, dtest=test  # type: ignore
+                    self,  # type: ignore
+                    name=test.name,
+                    runner=runner,
+                    dtest=test,
                 )
