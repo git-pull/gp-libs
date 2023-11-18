@@ -43,7 +43,7 @@ python = "^3.8"
 myst_parser = ">=0.18.1"
 docutils = "*"
 
-[tool.poetry.group.dev.dependencies]
+[tool.poetry.group.docs.dependencies]
 ### Docs ###
 sphinx = "*"
 furo = "*"
@@ -54,41 +54,24 @@ sphinxext-opengraph = "<0.8" # https://github.com/wpilibsuite/sphinxext-opengrap
 sphinx-copybutton = "*"
 sphinxext-rediraffe = "*"
 
+[tool.poetry.group.test.dependencies]
 ### Testing ###
 pytest = "*"
 pytest-rerunfailures = "*"
 pytest-watcher = "*"
 
+[tool.poetry.group.coverage.dependencies]
 ### Coverage ###
 codecov = "*"
 coverage = "*"
 pytest-cov = "*"
 
+[tool.poetry.group.lint.dependencies]
 ### Lint ###
 ruff = "*"
 mypy = "*"
 typing-extensions = { version = "*" }
 types-docutils = "*"
-
-[tool.poetry.extras]
-docs = [
-  "sphinx",
-  "sphinx-autodoc-typehints",
-  "sphinx-autobuild",
-  "sphinx-copybutton",
-  "sphinxext-opengraph",
-  "sphinx-inline-tabs",
-  "sphinxext-rediraffe",
-  "furo",
-]
-test = ["pytest", "pytest-rerunfailures", "pytest-watcher"]
-coverage = ["codecov", "coverage", "pytest-cov"]
-lint = [
-  "ruff",
-  "mypy",
-  "types-docutils",
-  "typing-extensions",
-]
 
 [tool.poetry.plugins.pytest11]
 sphinx = "pytest_doctest_docutils"
