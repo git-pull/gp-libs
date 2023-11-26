@@ -1,3 +1,4 @@
+"""Doctest module for docutils."""
 import doctest
 import functools
 import linecache
@@ -63,6 +64,7 @@ class TestDirective(Directive):
         node.source, node.line = self.get_source_info()
 
     def run(self) -> t.List[Node]:
+        """Run docutils test directive."""
         # use ordinary docutils nodes for test code: they get special attributes
         # so that our builder recognizes them, and the other builders are happy.
         code = "\n".join(self.content)
@@ -136,14 +138,20 @@ class TestDirective(Directive):
 
 
 class TestsetupDirective(TestDirective):
+    """Test setup directive."""
+
     option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}
 
 
 class TestcleanupDirective(TestDirective):
+    """Test cleanup directive."""
+
     option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}
 
 
 class DoctestDirective(TestDirective):
+    """Doctest directive."""
+
     option_spec: t.ClassVar[OptionSpec] = {
         "hide": directives.flag,
         "no-trim-doctest-flags": directives.flag,
@@ -155,6 +163,8 @@ class DoctestDirective(TestDirective):
 
 
 class MockTabDirective(TestDirective):
+    """Mock tab directive."""
+
     def run(self) -> t.List[Node]:
         """Parse a mock-tabs directive."""
         self.assert_has_content()
@@ -165,6 +175,7 @@ class MockTabDirective(TestDirective):
 
 
 def setup() -> t.Dict[str, t.Any]:
+    """Configure doctest for doctest_docutils."""
     directives.register_directive("testsetup", TestsetupDirective)
     directives.register_directive("testcleanup", TestcleanupDirective)
     directives.register_directive("doctest", DoctestDirective)
@@ -182,6 +193,8 @@ parser = doctest.DocTestParser()
 
 
 class DocTestFinderNameDoesNotExist(ValueError):
+    """Raised with doctest lookup name not provided."""
+
     def __init__(self, string: str):
         return super().__init__(
             "DocTestFinder.find: name must be given "
@@ -190,11 +203,11 @@ class DocTestFinderNameDoesNotExist(ValueError):
 
 
 class DocutilsDocTestFinder:
-    """
-    A class used to extract the DocTests that are relevant to a given
-    docutils file. Doctests can be extracted from the following directive
-    types: doctest_block (doctest), DocTestDirective. Myst-parser is also
-    supported for parsing markdown files.
+    """DocTestFinder for doctest-docutils.
+
+    Class used to extract the DocTests relevant to a docutils file. Doctests are
+    extracted from the following directive types: doctest_block (doctest),
+    DocTestDirective. Myst-parser is also supported for parsing markdown files.
     """
 
     def __init__(
@@ -202,13 +215,11 @@ class DocutilsDocTestFinder:
         verbose: bool = False,
         parser: "doctest.DocTestParser" = parser,
     ):
-        """
-        Create a new doctest finder.
+        """Create a new doctest finder.
 
-        The optional argument `parser` specifies a class or
-        function that should be used to create new DocTest objects (or
-        objects that implement the same interface as DocTest).  The
-        signature for this factory function should match the signature
+        The optional argument `parser` specifies a class or function that should be used
+        to create new DocTest objects (or objects that implement the same interface as
+        DocTest).  The signature for this factory function should match the signature
         of the DocTest constructor.
         """
         self._parser = parser
@@ -221,18 +232,13 @@ class DocutilsDocTestFinder:
         globs: t.Optional[t.Dict[str, t.Any]] = None,
         extraglobs: t.Optional[t.Dict[str, t.Any]] = None,
     ) -> t.List[doctest.DocTest]:
-        """
-        Return a list of the DocTests that are defined by the given
-        string (its parsed directives).
+        """Return list of the DocTests defined by given string (its parsed directives).
 
-        The globals for each DocTest is formed by combining `globs`
-        and `extraglobs` (bindings in `extraglobs` override bindings
-        in `globs`).  A new copy of the globals dictionary is created
-        for each DocTest.  If `globs` is not specified, then it
-        defaults to the module's `__dict__`, if specified, or {}
-        otherwise.  If `extraglobs` is not specified, then it defaults
-        to {}.
-
+        The globals for each DocTest is formed by combining `globs` and `extraglobs`
+        (bindings in `extraglobs` override bindings in `globs`).  A new copy of the
+        globals dictionary is created for each DocTest.  If `globs` is not specified,
+        then it defaults to the module's `__dict__`, if specified, or {} otherwise.
+        If `extraglobs` is not specified, then it defaults to {}.
         """
         # If name was not specified, then extract it from the string.
         if name is None:
@@ -367,7 +373,9 @@ class DocutilsDocTestFinder:
         def _from_module(
             self, module: t.Optional[t.Union[str, types.ModuleType]], object: object
         ) -> bool:
-            """`cached_property` objects are never considered a part
+            """Return true if the given object lives in the given module.
+
+            `cached_property` objects are never considered a part
             of the 'current module'. As such they are skipped by doctest.
             Here we override `_from_module` to check the underlying
             function instead. https://github.com/python/cpython/issues/107995.
@@ -392,10 +400,7 @@ class DocutilsDocTestFinder:
         globs: t.Dict[str, t.Any],
         source_lines: t.List[str],
     ) -> doctest.DocTest:
-        """
-        Return a DocTest for the given string, if it defines a docstring;
-        otherwise, return None.
-        """
+        """Return a DocTest for given string, or return None."""
         lineno = int(source_lines[0])
 
         # Return a DocTest for this string.
@@ -403,6 +408,8 @@ class DocutilsDocTestFinder:
 
 
 class TestDocutilsPackageRelativeError(Exception):
+    """Raise when doctest_docutils is called for package not relative to module."""
+
     def __init__(self) -> None:
         return super().__init__(
             "Package may only be specified for module-relative paths."
@@ -474,7 +481,9 @@ def testdocutils(
 
 
 def _test() -> int:
-    """Changes from standard library at 3.10.
+    """Execute doctest module via CLI.
+
+    Port changes from standard library at 3.10:
 
     - Sets up logging.basicLogging(level=logging.DEBUG) w/ args.verbose
     """
