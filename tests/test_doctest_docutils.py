@@ -1,3 +1,4 @@
+"""Tests for doctest_docutils."""
 import doctest
 import pathlib
 import textwrap
@@ -10,6 +11,8 @@ FixtureFileDict = t.Dict[str, str]
 
 
 class DocTestFinderFixture(t.NamedTuple):
+    """Test fixture for doctest_docutils."""
+
     # pytest
     test_id: str
 
@@ -185,6 +188,8 @@ Here's a test:
 
 
 class FilePathModeNotImplemented(Exception):
+    """Raised if file_path_mode not supported."""
+
     def __init__(self, file_path_mode: str) -> None:
         return super().__init__(f"No file_path_mode supported for {file_path_mode}")
 
@@ -201,6 +206,7 @@ def test_DocutilsDocTestFinder(
     tests_found: int,
     file_path_mode: str,
 ) -> None:
+    """Test for doctest_docutils."""
     # Initialize variables
     tests_path = tmp_path / "tests"
     first_test_key = next(iter(files.keys()))
