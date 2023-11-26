@@ -38,6 +38,7 @@ RUNNER_CLASS = None
 
 
 def pytest_addoption(parser: "Parser") -> None:
+    """Add options to py.test for doctest_doctests."""
     group = parser.getgroup("collect")
     group.addoption(
         "--doctest-docutils-modules",
@@ -64,6 +65,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_unconfigure() -> None:
+    """Unconfigure hook for pytest-doctest-docutils."""
     global RUNNER_CLASS
 
     RUNNER_CLASS = None
@@ -72,6 +74,7 @@ def pytest_unconfigure() -> None:
 def pytest_collect_file(
     file_path: pathlib.Path, parent: pytest.Collector
 ) -> t.Optional[t.Union["DocTestDocutilsFile", "_pytest.doctest.DoctestModule"]]:
+    """Test collector for pytest-doctest-docutils."""
     config = parent.config
     if file_path.suffix == ".py":
         if config.option.doctestmodules and not any(
@@ -177,9 +180,12 @@ def _get_runner(
 
 
 class DocutilsDocTestRunner(doctest.DocTestRunner):
+    """DocTestRunner for doctest_docutils."""
+
     def summarize(  # type: ignore
         self, out: "_Out", verbose: t.Optional[bool] = None
     ) -> t.Tuple[int, int]:
+        """Summarize the test runs."""
         string_io = io.StringIO()
         old_stdout = sys.stdout
         sys.stdout = string_io
@@ -209,7 +215,10 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
 
 
 class DocTestDocutilsFile(pytest.Module):
+    """Pytest module for doctest_docutils."""
+
     def collect(self) -> t.Iterable["DoctestItem"]:
+        """Collect tests for pytest module."""
         setup()
 
         encoding = self.config.getini("doctest_encoding")
