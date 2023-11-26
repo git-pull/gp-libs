@@ -38,15 +38,13 @@ def is_allowed_version(version: str, spec: str) -> bool:
         >>> is_allowed_version('3.3', '<=3.2')
         False
         >>> is_allowed_version('3.3', '>3.2, <4.0')
-        True
+        True.
     """
     return Version(version) in SpecifierSet(spec)
 
 
 class TestDirective(Directive):
-    """
-    Base class for doctest-related directives.
-    """
+    """Base class for doctest-related directives."""
 
     has_content = True
     required_arguments = 0
@@ -271,9 +269,7 @@ class DocutilsDocTestFinder:
         seen: t.Dict[int, int],
         source_path: t.Optional[pathlib.Path] = None,
     ) -> None:
-        """
-        Find tests for the given string, and add them to `tests`.
-        """
+        """Find tests for the given string, and add them to `tests`."""
         if self._verbose:
             print("Finding tests in %s" % name)
 
@@ -371,7 +367,7 @@ class DocutilsDocTestFinder:
             """`cached_property` objects are never considered a part
             of the 'current module'. As such they are skipped by doctest.
             Here we override `_from_module` to check the underlying
-            function instead. https://github.com/python/cpython/issues/107995
+            function instead. https://github.com/python/cpython/issues/107995.
             """
             if isinstance(object, functools.cached_property):
                 object = object.func
@@ -475,7 +471,7 @@ def testdocutils(
 
 
 def _test() -> int:
-    """Changes from standard library at 3.10
+    """Changes from standard library at 3.10.
 
     - Sets up logging.basicLogging(level=logging.DEBUG) w/ args.verbose
     """
