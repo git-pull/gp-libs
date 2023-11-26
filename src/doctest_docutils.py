@@ -233,7 +233,6 @@ class DocutilsDocTestFinder:
         to {}.
 
         """
-
         # If name was not specified, then extract it from the string.
         if name is None:
             name = getattr(string, "__name__", None)
