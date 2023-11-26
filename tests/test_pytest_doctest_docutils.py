@@ -1,3 +1,4 @@
+"""Test pytest plugin for doctest_docutils."""
 import textwrap
 import typing as t
 
@@ -8,6 +9,8 @@ FixtureFileDict = t.Dict[str, str]
 
 
 class PytestDocTestFinderFixture(t.NamedTuple):
+    """Pytest fixture for DocTestFinder."""
+
     # pytest
     test_id: str
 
@@ -199,6 +202,7 @@ def test_pluginDocutilsDocTestFinder(
     files: FixtureFileDict,
     tests_found: int,
 ) -> None:
+    """Verify DocTestFinder's collection of doctests."""
     # Initialize variables
     pytester.plugins = ["pytest_doctest_docutils"]
     pytester.makefile(
@@ -233,6 +237,7 @@ def test_conftest_py(
     pytester: _pytest.pytester.Pytester,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test pytest plugin with python file doctests."""
     # Initialize variables
     pytester.plugins = ["pytest_doctest_docutils"]
     pytester.makefile(
@@ -304,6 +309,7 @@ def test_conftest_md(
     pytester: _pytest.pytester.Pytester,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Test pytest plugin with doctests in markdown."""
     # Initialize variables
     pytester.plugins = ["pytest_doctest_docutils"]
     pytester.makefile(
