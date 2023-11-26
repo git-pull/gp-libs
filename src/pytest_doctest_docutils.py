@@ -1,6 +1,4 @@
-"""pytest_doctest_docutils.
-
-pytest plugin for doctest w/ reStructuredText and markdown
+"""pytest plugin for doctest w/ reStructuredText and markdown.
 
 .. seealso::
 
