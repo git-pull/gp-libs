@@ -30,15 +30,18 @@ OptionSpec = t.Dict[str, t.Callable[[str], t.Any]]
 
 def is_allowed_version(version: str, spec: str) -> bool:
     """Check `spec` satisfies `version` or not.
+
     This obeys PEP-440 specifiers:
     https://peps.python.org/pep-0440/#version-specifiers
+
     Some examples:
-        >>> is_allowed_version('3.3', '<=3.5')
-        True
-        >>> is_allowed_version('3.3', '<=3.2')
-        False
-        >>> is_allowed_version('3.3', '>3.2, <4.0')
-        True.
+
+    >>> is_allowed_version('3.3', '<=3.5')
+    True
+    >>> is_allowed_version('3.3', '<=3.2')
+    False
+    >>> is_allowed_version('3.3', '>3.2, <4.0')
+    True
     """
     return Version(version) in SpecifierSet(spec)
 
