@@ -1,4 +1,5 @@
 # flake8: noqa: E501
+"""Sphinx configuration for gp_libs."""
 import contextlib
 import inspect
 import pathlib
@@ -205,6 +206,7 @@ def linkcode_resolve(domain: str, info: t.Dict[str, str]) -> t.Union[None, str]:
 
 
 def remove_tabs_js(app: "Sphinx", exc: Exception) -> None:
+    """Remove tabs.js from _static after build."""
     # Fix for sphinx-inline-tabs#18
     if app.builder.format == "html" and not exc:
         tabs_js = pathlib.Path(app.builder.outdir) / "_static" / "tabs.js"
@@ -213,4 +215,5 @@ def remove_tabs_js(app: "Sphinx", exc: Exception) -> None:
 
 
 def setup(app: "Sphinx") -> None:
+    """Configure Sphinx app hooks."""
     app.connect("build-finished", remove_tabs_js)
