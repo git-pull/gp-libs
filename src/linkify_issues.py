@@ -1,3 +1,4 @@
+"""Autolinking extension for Sphinx."""
 import re
 import typing as t
 
@@ -12,9 +13,12 @@ DEFAULT_ISSUE_RE = r"#(?P<issue_id>\d+)"
 
 
 class LinkifyIssues(SphinxTransform):
+    """Autolink references for Sphinx."""
+
     default_priority = 999
 
     def apply(self) -> None:
+        """Apply Sphinx transform."""
         config = self.document.settings.env.config
         issue_re: re.Pattern[str] = (
             re.compile(config.issue_re)
@@ -58,12 +62,15 @@ class LinkifyIssues(SphinxTransform):
 
 
 class SetupDict(t.TypedDict):
+    """Setup mapping for Sphinx app."""
+
     version: str
     parallel_read_safe: bool
     parallel_write_safe: bool
 
 
 def setup(app: Sphinx) -> SetupDict:
+    """Initialize Sphinx extension for linkify_issues."""
     app.add_transform(LinkifyIssues)
     app.add_config_value("issue_re", re.compile(DEFAULT_ISSUE_RE), "env")
     app.add_config_value(
