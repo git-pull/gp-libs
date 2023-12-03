@@ -1,3 +1,12 @@
+"""Conftest.py (root-level).
+
+We keep this in root pytest fixtures in pytest's doctest plugin to be available, as well
+as avoiding conftest.py from being included in the wheel, in addition to pytest_plugin
+for pytester only being available via the root directory.
+
+See "pytest_plugins in non-top-level conftest files" in
+https://docs.pytest.org/en/stable/deprecations.html
+"""
 import pathlib
 import typing as t
 
@@ -10,6 +19,8 @@ AppParams = t.Tuple[t.Any, t.Dict[str, t.Any]]
 
 
 class MakeAppParams(t.Protocol):
+    """Typing protocol for sphinx make_app_params."""
+
     def __call__(
         self,
         #: index content
@@ -17,6 +28,7 @@ class MakeAppParams(t.Protocol):
         *args: object,
         **kwargs: t.Any,
     ) -> AppParams:
+        """Create Sphinx App factory with params."""
         ...
 
 
@@ -26,6 +38,8 @@ def make_app_params(
     app_params: AppParams,
     tmp_path: pathlib.Path,
 ) -> t.Generator[t.Callable[[t.Any], AppParams], None, None]:
+    """Return Sphinx App factory, accepts custom params."""
+
     def fn(
         #: index content
         index: t.Optional[t.Union[t.IO[str], str]] = None,

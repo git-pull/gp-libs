@@ -1,3 +1,4 @@
+"""Tests for linkify_issues extension for sphinx."""
 import pathlib
 import typing as t
 
@@ -9,6 +10,8 @@ if t.TYPE_CHECKING:
 
 
 class LinkTestFixture(t.NamedTuple):
+    """Pytest fixtures for linkify_issues."""
+
     # pytest
     test_id: str
 
@@ -47,6 +50,7 @@ def test_links_show(
     text: str,
     issue_id: str,
 ) -> None:
+    """Test linkification of issues."""
     args, kwargs = make_app_params(
         index=text,
         confoverrides={"issue_url_tpl": issue_url_tpl, "extensions": "linkify_issues"},

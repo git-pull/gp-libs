@@ -16,6 +16,14 @@ $ pip install --user --upgrade --pre gp-libs
 
 - Move CodeQL from advanced configuration file to GitHub's default
 
+### Development
+
+- ci: Add pydocstyle rule to ruff (#28)
+
+### Documentation
+
+- Add docstrings to functions, methods, classes, and packages (#28)
+
 ## gp-libs 0.0.4 (2023-11-19)
 
 ### Development
