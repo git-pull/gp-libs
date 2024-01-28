@@ -159,6 +159,70 @@ def _init_runner_class() -> t.Type["doctest.DocTestRunner"]:
     return PytestDoctestRunner
 
 
+def _get_allow_unicode_flag() -> int:
+    """Register and return the ALLOW_UNICODE flag."""
+    import doctest
+
+    return doctest.register_optionflag("ALLOW_UNICODE")
+
+
+def _get_allow_bytes_flag() -> int:
+    """Register and return the ALLOW_BYTES flag."""
+    import doctest
+
+    return doctest.register_optionflag("ALLOW_BYTES")
+
+
+def _get_number_flag() -> int:
+    """Register and return the NUMBER flag."""
+    import doctest
+
+    return doctest.register_optionflag("NUMBER")
+
+
+def _get_flag_lookup() -> t.Dict[str, int]:
+    import doctest
+
+    return {
+        "DONT_ACCEPT_TRUE_FOR_1": doctest.DONT_ACCEPT_TRUE_FOR_1,
+        "DONT_ACCEPT_BLANKLINE": doctest.DONT_ACCEPT_BLANKLINE,
+        "NORMALIZE_WHITESPACE": doctest.NORMALIZE_WHITESPACE,
+        "ELLIPSIS": doctest.ELLIPSIS,
+        "IGNORE_EXCEPTION_DETAIL": doctest.IGNORE_EXCEPTION_DETAIL,
+        "COMPARISON_FLAGS": doctest.COMPARISON_FLAGS,
+        "ALLOW_UNICODE": _get_allow_unicode_flag(),
+        "ALLOW_BYTES": _get_allow_bytes_flag(),
+        "NUMBER": _get_number_flag(),
+    }
+
+
+def get_optionflags(config: pytest.Config) -> int:
+    """Fetch optionflags from pytest configuration.
+
+    Extracted from pytest.doctest 8.0 (license: MIT).
+    """
+    optionflags = config.getini("doctest_optionflags")
+    # It takes this rocket surgery to satisfy mypy
+    optionflags_str = (
+        [str(i) for i in optionflags]
+        if isinstance(optionflags, list)
+        and all(
+            isinstance(
+                item,
+                str,
+            )
+            for item in optionflags
+        )
+        else []
+    )
+
+    flag_lookup_table = _get_flag_lookup()
+    flag_acc = 0
+    for flag in optionflags_str:
+        flag_acc |= flag_lookup_table[flag]
+    return flag_acc
+
+
 def _get_runner(
     checker: t.Optional["doctest.OutputChecker"] = None,
     verbose: t.Optional[bool] = None,
@@ -227,15 +291,13 @@ class DocTestDocutilsFile(pytest.Module):
         # Uses internal doctest module parsing mechanism.
         finder = DocutilsDocTestFinder()
 
-        optionflags = _pytest.doctest.get_optionflags(self)  # type: ignore
+        optionflags = get_optionflags(self.config)
 
         runner = _get_runner(
             verbose=False,
             optionflags=optionflags,
             checker=_pytest.doctest._get_checker(),
-            continue_on_failure=_pytest.doctest._get_continue_on_failure(  # type:ignore
-                self.config
-            ),
+            continue_on_failure=_pytest.doctest._get_continue_on_failure(self.config),
         )
         from _pytest.doctest import DoctestItem
 
