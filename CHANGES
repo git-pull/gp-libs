@@ -12,6 +12,13 @@ $ pip install --user --upgrade --pre gp-libs
 
 - _Add your latest changes from PRs here_
 
+### Breaking change
+
+- Support pytest >8 (#29)
+
+  - Update doctest pytest plugin for pytest 8.
+
+
 ## gp-libs 0.0.5 (2023-12-03)
 
 _Maintenance release: no bug fixes or new features._
