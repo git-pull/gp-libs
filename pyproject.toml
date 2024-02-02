@@ -57,7 +57,7 @@ sphinxext-rediraffe = "*"
 
 [tool.poetry.group.test.dependencies]
 ### Testing ###
-pytest = "~8"
+pytest = "~7"
 pytest-rerunfailures = "*"
 pytest-watcher = "*"
 

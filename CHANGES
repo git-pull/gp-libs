@@ -12,6 +12,12 @@ $ pip install --user --upgrade --pre gp-libs
 
 - _Add your latest changes from PRs here_
 
+## gp-libs 0.0.6post0 (2024-02-01)
+
+### Packaging
+
+- Relax pytest version constraint from 8+ to 7+ (#30)
+
 ## gp-libs 0.0.6 (2024-02-01)
 
 ### Breaking change

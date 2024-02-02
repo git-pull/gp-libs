@@ -297,7 +297,7 @@ class DocTestDocutilsFile(pytest.Module):
             verbose=False,
             optionflags=optionflags,
             checker=_pytest.doctest._get_checker(),
-            continue_on_failure=_pytest.doctest._get_continue_on_failure(self.config),
+            continue_on_failure=_pytest.doctest._get_continue_on_failure(self.config),  # type: ignore
         )
         from _pytest.doctest import DoctestItem
 
