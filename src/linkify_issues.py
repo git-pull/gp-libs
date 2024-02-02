@@ -39,7 +39,7 @@ class LinkifyIssues(SphinxTransform):
 
         for node in findall(self.document)(condition):
             text = node.astext()
-            retnodes = []
+            retnodes: t.List[t.Union[nodes.reference, nodes.Text]] = []
             pos = 0
             for match in issue_re.finditer(text):
                 if match.start() > pos:
