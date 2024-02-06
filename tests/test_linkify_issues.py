@@ -40,7 +40,7 @@ FIXTURES = [
 
 
 @pytest.mark.parametrize(
-    LinkTestFixture._fields, FIXTURES, ids=[f.test_id for f in FIXTURES]
+    LinkTestFixture._fields, FIXTURES, ids=[f.test_id for f in FIXTURES],
 )
 def test_links_show(
     make_app: t.Callable[[t.Any], SphinxTestApp],

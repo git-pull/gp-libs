@@ -72,7 +72,7 @@ def pytest_unconfigure() -> None:
 
 
 def pytest_collect_file(
-    file_path: pathlib.Path, parent: pytest.Collector
+    file_path: pathlib.Path, parent: pytest.Collector,
 ) -> t.Optional[t.Union["DocTestDocutilsFile", "_pytest.doctest.DoctestModule"]]:
     """Test collector for pytest-doctest-docutils."""
     config = parent.config
@@ -82,10 +82,10 @@ def pytest_collect_file(
             (
                 _pytest.doctest._is_setup_py(file_path),
                 _pytest.doctest._is_main_py(file_path),
-            )
+            ),
         ):
             mod: t.Union[
-                DocTestDocutilsFile, _pytest.doctest.DoctestModule
+                DocTestDocutilsFile, _pytest.doctest.DoctestModule,
             ] = _pytest.doctest.DoctestModule.from_parent(parent, path=file_path)
             return mod
     elif _is_doctest(config, file_path, parent):
@@ -94,7 +94,7 @@ def pytest_collect_file(
 
 
 def _is_doctest(
-    config: pytest.Config, path: pathlib.Path, parent: pytest.Collector
+    config: pytest.Config, path: pathlib.Path, parent: pytest.Collector,
 ) -> bool:
     if path.suffix in (".rst", ".md") and parent.session.isinitpath(path):
         return True
@@ -142,7 +142,7 @@ def _init_runner_class() -> t.Type["doctest.DocTestRunner"]:
             test: "doctest.DocTest",
             example: "doctest.Example",
             exc_info: t.Tuple[
-                t.Type[BaseException], BaseException, types.TracebackType
+                t.Type[BaseException], BaseException, types.TracebackType,
             ],
         ) -> None:
             if isinstance(exc_info[1], OutcomeException):
@@ -247,7 +247,7 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
     """DocTestRunner for doctest_docutils."""
 
     def summarize(  # type: ignore
-        self, out: "_Out", verbose: t.Optional[bool] = None
+        self, out: "_Out", verbose: t.Optional[bool] = None,
     ) -> t.Tuple[int, int]:
         """Summarize the test runs."""
         string_io = io.StringIO()
@@ -261,7 +261,7 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
         return res
 
     def _DocTestRunner__patched_linecache_getlines(
-        self, filename: str, module_globals: t.Any = None
+        self, filename: str, module_globals: t.Any = None,
     ) -> t.Any:
         # this is overridden from DocTestRunner adding the try-except below
         m = self._DocTestRunner__LINECACHE_FILENAME_RE.match(filename)  # type: ignore

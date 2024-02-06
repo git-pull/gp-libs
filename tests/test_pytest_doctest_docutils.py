@@ -30,8 +30,8 @@ FIXTURES = [
                 """
 >>> 4 + 4
 8
-        """
-            )
+        """,
+            ),
         },
         tests_found=1,
     ),
@@ -44,8 +44,8 @@ FIXTURES = [
 
    >>> 4 + 4
    8
-        """
-            )
+        """,
+            ),
         },
         tests_found=1,
     ),
@@ -61,8 +61,8 @@ FIXTURES = [
 >>> 4 + 4
 8
 ```
-        """
-            )
+        """,
+            ),
         },
         tests_found=1,
     ),
@@ -75,8 +75,8 @@ Here's a test:
 
     >>> 4 + 4
     8
-        """
-            )
+        """,
+            ),
         },
         tests_found=1,
     ),
@@ -90,8 +90,8 @@ Here's a test:
     >>> 4 + 4
     8
 :::
-        """
-            )
+        """,
+            ),
         },
         tests_found=1,
     ),
@@ -105,8 +105,8 @@ Here's a test:
     >>> 4 + 4
     8
 ```
-        """
-            )
+        """,
+            ),
         },
         tests_found=1,
     ),
@@ -122,8 +122,8 @@ Here's a test:
       >>> 4 + 4
       8
 :::
-        """
-            )
+        """,
+            ),
         },
         tests_found=1,
     ),
@@ -139,8 +139,8 @@ Here's a test:
       >>> 4 + 4
       8
 ```
-        """
-            )
+        """,
+            ),
         },
         tests_found=1,
     ),
@@ -160,8 +160,8 @@ def hello(statement: str) -> None:
     '''
     print(statement)
 
-        """
-            )
+        """,
+            ),
         },
         tests_found=1,
     ),
@@ -184,8 +184,8 @@ def hello(statement: str) -> None:
 6
 ```
 ````
-        """
-            )
+        """,
+            ),
         },
         tests_found=2,
     ),
@@ -193,7 +193,7 @@ def hello(statement: str) -> None:
 
 
 @pytest.mark.parametrize(
-    PytestDocTestFinderFixture._fields, FIXTURES, ids=[f.test_id for f in FIXTURES]
+    PytestDocTestFinderFixture._fields, FIXTURES, ids=[f.test_id for f in FIXTURES],
 )
 def test_pluginDocutilsDocTestFinder(
     pytester: _pytest.pytester.Pytester,
@@ -212,7 +212,7 @@ def test_pluginDocutilsDocTestFinder(
 [pytest]
 addopts=-p no:doctest -vv
 
-        """.strip()
+        """.strip(),
         ),
     )
     tests_path = pytester.path / "tests"
@@ -247,7 +247,7 @@ def test_conftest_py(
 [pytest]
 addopts=-p no:doctest -vv
 
-        """.strip()
+        """.strip(),
         ),
     )
     pytester.makeconftest(
@@ -267,8 +267,8 @@ def add_doctest_fixtures(
     def add(a: int, b: int) -> int:
         return a + b
     doctest_namespace["add"] = add
-    """
-        )
+    """,
+        ),
     )
     tests_path = pytester.path / "tests"
     files = {
@@ -282,8 +282,8 @@ def hello(statement: str) -> None:
     '''
     print(statement)
 
-        """
-        )
+        """,
+        ),
     }
     first_test_key = next(iter(files.keys()))
     first_test_filename = str(tests_path / first_test_key)
@@ -319,7 +319,7 @@ def test_conftest_md(
 [pytest]
 addopts=-p no:doctest -vv
 
-        """.strip()
+        """.strip(),
         ),
     )
     pytester.makeconftest(
@@ -339,8 +339,8 @@ def add_doctest_fixtures(
     def add(a: int, b: int) -> int:
         return a + b
     doctest_namespace["add"] = add
-    """
-        )
+    """,
+        ),
     )
     tests_path = pytester.path / "tests"
     files = {
@@ -375,8 +375,8 @@ The rest:
 >>> add(5, 1)
 6
 ```
-        """
-        )
+        """,
+        ),
     }
     first_test_key = next(iter(files.keys()))
     first_test_filename = str(tests_path / first_test_key)
