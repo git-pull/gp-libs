@@ -126,7 +126,8 @@ class TestDirective(Directive):
                     node["options"][flag] = True  # Skip the test
             except InvalidSpecifier:
                 self.state.document.reporter.warning(
-                    "'%s' is not a valid pyversion option" % spec, line=self.lineno,
+                    "'%s' is not a valid pyversion option" % spec,
+                    line=self.lineno,
                 )
         if "skipif" in self.options:
             node["skipif"] = self.options["skipif"]
@@ -328,7 +329,8 @@ class DocutilsDocTestFinder:
             settings = OptionParser(components=(Parser,)).get_default_values()
 
             doc = docutils.utils.new_document(
-                source_path=str(source_path), settings=settings,
+                source_path=str(source_path),
+                settings=settings,
             )
             parser.parse(string, doc)
 
@@ -371,7 +373,9 @@ class DocutilsDocTestFinder:
     if sys.version_info < (3, 13):
 
         def _from_module(
-            self, module: t.Optional[t.Union[str, types.ModuleType]], object: object,
+            self,
+            module: t.Optional[t.Union[str, types.ModuleType]],
+            object: object,
         ) -> bool:
             """Return true if the given object lives in the given module.
 
@@ -442,7 +446,10 @@ def testdocutils(
     # Keep the absolute file paths. This is needed for Include directies to work.
     # The absolute path will be applied to source_path when creating the docutils doc.
     text, _ = doctest._load_testfile(  # type: ignore
-        filename, package, module_relative, encoding or "utf-8",
+        filename,
+        package,
+        module_relative,
+        encoding or "utf-8",
     )
 
     # If no name was given, then use the file's name.

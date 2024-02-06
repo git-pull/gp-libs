@@ -193,7 +193,9 @@ def hello(statement: str) -> None:
 
 
 @pytest.mark.parametrize(
-    PytestDocTestFinderFixture._fields, FIXTURES, ids=[f.test_id for f in FIXTURES],
+    PytestDocTestFinderFixture._fields,
+    FIXTURES,
+    ids=[f.test_id for f in FIXTURES],
 )
 def test_pluginDocutilsDocTestFinder(
     pytester: _pytest.pytester.Pytester,

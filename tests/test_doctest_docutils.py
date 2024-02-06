@@ -195,7 +195,9 @@ class FilePathModeNotImplemented(Exception):
 
 
 @pytest.mark.parametrize(
-    DocTestFinderFixture._fields, FIXTURES, ids=[f.test_id for f in FIXTURES],
+    DocTestFinderFixture._fields,
+    FIXTURES,
+    ids=[f.test_id for f in FIXTURES],
 )
 @pytest.mark.parametrize("file_path_mode", ["relative", "absolute"])
 def test_DocutilsDocTestFinder(
@@ -230,7 +232,10 @@ def test_DocutilsDocTestFinder(
     # Test
     finder = doctest_docutils.DocutilsDocTestFinder()
     text, _ = doctest._load_testfile(  # type: ignore
-        str(first_test_filename), package=None, module_relative=False, encoding="utf-8",
+        str(first_test_filename),
+        package=None,
+        module_relative=False,
+        encoding="utf-8",
     )
     tests = finder.find(text, str(first_test_filename))
     tests.sort(key=lambda test: test.name)
