@@ -126,7 +126,8 @@ class TestDirective(Directive):
                     node["options"][flag] = True  # Skip the test
             except InvalidSpecifier:
                 self.state.document.reporter.warning(
-                    "'%s' is not a valid pyversion option" % spec, line=self.lineno
+                    "'%s' is not a valid pyversion option" % spec,
+                    line=self.lineno,
                 )
         if "skipif" in self.options:
             node["skipif"] = self.options["skipif"]
@@ -198,7 +199,7 @@ class DocTestFinderNameDoesNotExist(ValueError):
     def __init__(self, string: str):
         return super().__init__(
             "DocTestFinder.find: name must be given "
-            f"when string.__name__ doesn't exist: {type(string)!r}"
+            f"when string.__name__ doesn't exist: {type(string)!r}",
         )
 
 
@@ -298,8 +299,8 @@ class DocutilsDocTestFinder:
                     "source_lines": source_lines,
                     "globs": globs,
                     "seen": seen,
-                }
-            )
+                },
+            ),
         )
         ext = pathlib.Path(name).suffix
         logger.debug(f"parse, ext: {ext}")
@@ -328,7 +329,8 @@ class DocutilsDocTestFinder:
             settings = OptionParser(components=(Parser,)).get_default_values()
 
             doc = docutils.utils.new_document(
-                source_path=str(source_path), settings=settings
+                source_path=str(source_path),
+                settings=settings,
             )
             parser.parse(string, doc)
 
@@ -371,7 +373,9 @@ class DocutilsDocTestFinder:
     if sys.version_info < (3, 13):
 
         def _from_module(
-            self, module: t.Optional[t.Union[str, types.ModuleType]], object: object
+            self,
+            module: t.Optional[t.Union[str, types.ModuleType]],
+            object: object,  # NOQA: A002
         ) -> bool:
             """Return true if the given object lives in the given module.
 
@@ -386,7 +390,7 @@ class DocutilsDocTestFinder:
             # Type ignored because this is a private function.
             return t.cast(
                 bool,
-                super()._from_module(module, object),  # type:ignore[misc]
+                super()._from_module(module, object),  # type:ignore[misc] # NOQA: A002
             )
 
     else:  # pragma: no cover
@@ -412,7 +416,7 @@ class TestDocutilsPackageRelativeError(Exception):
 
     def __init__(self) -> None:
         return super().__init__(
-            "Package may only be specified for module-relative paths."
+            "Package may only be specified for module-relative paths.",
         )
 
 
@@ -442,7 +446,10 @@ def testdocutils(
     # Keep the absolute file paths. This is needed for Include directies to work.
     # The absolute path will be applied to source_path when creating the docutils doc.
     text, _ = doctest._load_testfile(  # type: ignore
-        filename, package, module_relative, encoding or "utf-8"
+        filename,
+        package,
+        module_relative,
+        encoding or "utf-8",
     )
 
     # If no name was given, then use the file's name.

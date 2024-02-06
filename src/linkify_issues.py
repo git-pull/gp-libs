@@ -33,7 +33,8 @@ class LinkifyIssues(SphinxTransform):
                 isinstance(node, nodes.Text)
                 and len(re.findall(issue_re, node.astext())) > 0
             ) and not isinstance(
-                node.parent, (nodes.literal, nodes.FixedTextElement, nodes.reference)
+                node.parent,
+                (nodes.literal, nodes.FixedTextElement, nodes.reference),
             )
             return cond
 
@@ -74,7 +75,9 @@ def setup(app: Sphinx) -> SetupDict:
     app.add_transform(LinkifyIssues)
     app.add_config_value("issue_re", re.compile(DEFAULT_ISSUE_RE), "env")
     app.add_config_value(
-        "issue_url_tpl", r"https://github.com/git-pull/gp-libs/issues/{issue_id}", "env"
+        "issue_url_tpl",
+        r"https://github.com/git-pull/gp-libs/issues/{issue_id}",
+        "env",
     )
 
     return SetupDict(
@@ -82,5 +85,5 @@ def setup(app: Sphinx) -> SetupDict:
             "version": "0.1",
             "parallel_read_safe": True,
             "parallel_write_safe": True,
-        }
+        },
     )
