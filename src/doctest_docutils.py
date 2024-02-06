@@ -375,7 +375,7 @@ class DocutilsDocTestFinder:
         def _from_module(
             self,
             module: t.Optional[t.Union[str, types.ModuleType]],
-            object: object,
+            object: object,  # NOQA: A002
         ) -> bool:
             """Return true if the given object lives in the given module.
 
@@ -390,7 +390,7 @@ class DocutilsDocTestFinder:
             # Type ignored because this is a private function.
             return t.cast(
                 bool,
-                super()._from_module(module, object),  # type:ignore[misc]
+                super()._from_module(module, object),  # type:ignore[misc] # NOQA: A002
             )
 
     else:  # pragma: no cover
