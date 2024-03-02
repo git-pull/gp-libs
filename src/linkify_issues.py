@@ -1,4 +1,5 @@
 """Autolinking extension for Sphinx."""
+
 import re
 import typing as t
 

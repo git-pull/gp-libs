@@ -1,4 +1,5 @@
 """Doctest module for docutils."""
+
 import doctest
 import functools
 import linecache

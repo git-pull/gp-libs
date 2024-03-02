@@ -1,4 +1,5 @@
 """Tests for linkify_issues extension for sphinx."""
+
 import pathlib
 import typing as t
 

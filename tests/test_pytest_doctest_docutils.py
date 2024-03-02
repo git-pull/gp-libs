@@ -1,4 +1,5 @@
 """Test pytest plugin for doctest_docutils."""
+
 import textwrap
 import typing as t
 

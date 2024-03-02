@@ -1,4 +1,5 @@
 """Tests for doctest_docutils."""
+
 import doctest
 import pathlib
 import textwrap
