@@ -14,6 +14,12 @@ $ pip install --user --upgrade --pre gp-libs
 
 ### Development
 
+- ruff 0.2.2 -> 0.3.0 (#32)
+
+  Related formattings. Update CI to use `ruff check .` instead of `ruff .`.
+
+  See also: https://github.com/astral-sh/ruff/blob/v0.3.0/CHANGELOG.md
+
 - Strengthen linting (#31)
 
   - Add flake8-commas (COM)
