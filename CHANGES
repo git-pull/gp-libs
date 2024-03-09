@@ -12,6 +12,19 @@ $ pip install --user --upgrade --pre gp-libs
 
 - _Add your latest changes from PRs here_
 
+### Breaking changes
+
+#### Minimum requirements
+
+To lift the development burden of supporting legacy APIs, as this package is
+lightly used, minimum constraints have been pinned:
+
+- docutils: 0.20.1+
+- myst-parser: 2.0.0+
+
+If you have even passing interested in supporting legacy versions, file an
+issue on the tracker.
+
 ### Development
 
 - poetry: 1.7.1 -> 1.8.1
