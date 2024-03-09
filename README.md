@@ -148,6 +148,17 @@ You can test the unpublished version of g before its released.
   $ pip install --user --upgrade --pre gp-libs
   ```
 
+# Minimum requirements
+
+To lift the development burden of supporting legacy APIs, as this package is
+lightly used, minimum constraints have been pinned:
+
+- docutils: 0.20.1+
+- myst-parser: 2.0.0+
+
+If you have even passing interested in supporting legacy versions, file an
+issue on the tracker.
+
 # More information
 
 - Python support: >= 3.8, pypy
