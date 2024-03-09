@@ -142,20 +142,19 @@ class TestDirective(Directive):
 class TestsetupDirective(TestDirective):
     """Test setup directive."""
 
-    option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}
+    option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}  # type:ignore
 
 
 class TestcleanupDirective(TestDirective):
     """Test cleanup directive."""
 
-    option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}
+    option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}  # type:ignore
 
 
 class DoctestDirective(TestDirective):
     """Doctest directive."""
 
-    option_spec: t.ClassVar[OptionSpec] = {
-        "hide": directives.flag,
+    option_spec: t.ClassVar[OptionSpec] = {  # type:ignore
         "no-trim-doctest-flags": directives.flag,
         "options": directives.unchanged,
         "pyversion": directives.unchanged_required,
