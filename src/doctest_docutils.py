@@ -27,8 +27,6 @@ logger = logging.getLogger(__name__)
 blankline_re = re.compile(r"^\s*<BLANKLINE>", re.MULTILINE)
 doctestopt_re = re.compile(r"#\s*doctest:.+$", re.MULTILINE)
 
-OptionSpec = t.Dict[str, t.Callable[[str], t.Any]]
-
 
 def is_allowed_version(version: str, spec: str) -> bool:
     """Check `spec` satisfies `version` or not.
@@ -142,19 +140,19 @@ class TestDirective(Directive):
 class TestsetupDirective(TestDirective):
     """Test setup directive."""
 
-    option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}  # type:ignore
+    option_spec = {"skipif": directives.unchanged_required}
 
 
 class TestcleanupDirective(TestDirective):
     """Test cleanup directive."""
 
-    option_spec: t.ClassVar[OptionSpec] = {"skipif": directives.unchanged_required}  # type:ignore
+    option_spec = {"skipif": directives.unchanged_required}
 
 
 class DoctestDirective(TestDirective):
     """Doctest directive."""
 
-    option_spec: t.ClassVar[OptionSpec] = {  # type:ignore
+    option_spec = {
         "no-trim-doctest-flags": directives.flag,
         "options": directives.unchanged,
         "pyversion": directives.unchanged_required,
