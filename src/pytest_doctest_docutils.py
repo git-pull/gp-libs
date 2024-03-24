@@ -100,7 +100,7 @@ def _is_doctest(
     path: pathlib.Path,
     parent: pytest.Collector,
 ) -> bool:
-    if path.suffix in (".rst", ".md") and parent.session.isinitpath(path):
+    if path.suffix in {".rst", ".md"} and parent.session.isinitpath(path):
         return True
     globs = config.getoption("doctestglob") or ["*.rst", "*.md"]
     return any(path.match(path_pattern=glob) for glob in globs)

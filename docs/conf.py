@@ -196,14 +196,13 @@ def linkcode_resolve(domain: str, info: t.Dict[str, str]) -> t.Union[None, str]:
             fn,
             linespec,
         )
-    else:
-        return "{}/blob/v{}/{}/{}{}".format(
-            about["__github__"],
-            about["__version__"],
-            "src",
-            fn,
-            linespec,
-        )
+    return "{}/blob/v{}/{}/{}{}".format(
+        about["__github__"],
+        about["__version__"],
+        "src",
+        fn,
+        linespec,
+    )
 
 
 def remove_tabs_js(app: "Sphinx", exc: Exception) -> None:
