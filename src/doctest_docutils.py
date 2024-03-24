@@ -279,7 +279,7 @@ class DocutilsDocTestFinder:
     ) -> None:
         """Find tests for the given string, and add them to `tests`."""
         if self._verbose:
-            print("Finding tests in %s" % name)
+            logger.info(f"Finding tests in {name}")
 
         # If we've already processed this string, then ignore it.
         if id(string) in seen:
