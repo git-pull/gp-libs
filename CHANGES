@@ -41,18 +41,18 @@ issue on the tracker.
 
   - Add flake8-commas (COM)
 
-	- https://docs.astral.sh/ruff/rules/#flake8-commas-com
-	- https://pypi.org/project/flake8-commas/
+    - https://docs.astral.sh/ruff/rules/#flake8-commas-com
+    - https://pypi.org/project/flake8-commas/
 
   - Add flake8-builtins (A)
 
-	- https://docs.astral.sh/ruff/rules/#flake8-builtins-a
-	- https://pypi.org/project/flake8-builtins/
+    - https://docs.astral.sh/ruff/rules/#flake8-builtins-a
+    - https://pypi.org/project/flake8-builtins/
 
   - Add flake8-errmsg (EM)
 
     - https://docs.astral.sh/ruff/rules/#flake8-errmsg-em
-	- https://pypi.org/project/flake8-errmsg/
+    - https://pypi.org/project/flake8-errmsg/
 
 ## gp-libs 0.0.6post0 (2024-02-01)
 
