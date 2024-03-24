@@ -83,7 +83,7 @@ class TestDirective(Directive):
                     test = code
                 code = doctestopt_re.sub("", code)
         nodetype: t.Type[TextElement] = nodes.literal_block
-        if self.name in ("testsetup", "testcleanup") or "hide" in self.options:
+        if self.name in {"testsetup", "testcleanup"} or "hide" in self.options:
             nodetype = nodes.comment
         if self.arguments:
             groups = [x.strip() for x in self.arguments[0].split(",")]
@@ -194,7 +194,7 @@ parser = doctest.DocTestParser()
 class DocTestFinderNameDoesNotExist(ValueError):
     """Raised with doctest lookup name not provided."""
 
-    def __init__(self, string: str):
+    def __init__(self, string: str) -> None:
         return super().__init__(
             "DocTestFinder.find: name must be given "
             f"when string.__name__ doesn't exist: {type(string)!r}",
@@ -213,7 +213,7 @@ class DocutilsDocTestFinder:
         self,
         verbose: bool = False,
         parser: "doctest.DocTestParser" = parser,
-    ):
+    ) -> None:
         """Create a new doctest finder.
 
         The optional argument `parser` specifies a class or function that should be used
@@ -279,7 +279,7 @@ class DocutilsDocTestFinder:
     ) -> None:
         """Find tests for the given string, and add them to `tests`."""
         if self._verbose:
-            print("Finding tests in %s" % name)
+            logger.info(f"Finding tests in {name}")
 
         # If we've already processed this string, then ignore it.
         if id(string) in seen:
@@ -388,7 +388,7 @@ class DocutilsDocTestFinder:
             # Type ignored because this is a private function.
             return t.cast(
                 bool,
-                super()._from_module(module, object),  # type:ignore[misc] # NOQA: A002
+                super()._from_module(module, object),  # type:ignore[misc]
             )
 
     else:  # pragma: no cover
@@ -439,7 +439,7 @@ def testdocutils(
     global master
 
     if package and not module_relative:
-        raise TestDocutilsPackageRelativeError()
+        raise TestDocutilsPackageRelativeError
 
     # Keep the absolute file paths. This is needed for Include directies to work.
     # The absolute path will be applied to source_path when creating the docutils doc.
@@ -554,7 +554,7 @@ def _test() -> int:
     if args.fail_fast:
         options |= doctest.FAIL_FAST
     for filename in testfiles:
-        if filename.endswith(".rst") or filename.endswith(".md") or args.docutils:
+        if filename.endswith((".rst", ".md")) or args.docutils:
             failures, _ = testdocutils(
                 filename,
                 module_relative=False,

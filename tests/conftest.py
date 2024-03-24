@@ -33,12 +33,12 @@ class MakeAppParams(t.Protocol):
         ...
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture()
 def make_app_params(
     request: pytest.FixtureRequest,
     app_params: AppParams,
     tmp_path: pathlib.Path,
-) -> t.Generator[t.Callable[[t.Any], AppParams], None, None]:
+) -> t.Callable[[t.Any], AppParams]:
     """Return Sphinx App factory, accepts custom params."""
 
     def fn(
@@ -73,4 +73,4 @@ def make_app_params(
 
         return args, kws
 
-    yield fn
+    return fn

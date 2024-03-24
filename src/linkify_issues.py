@@ -30,14 +30,13 @@ class LinkifyIssues(SphinxTransform):
         assert issue_re.groups == 1
 
         def condition(node: nodes.Node) -> bool:
-            cond = (
+            return (
                 isinstance(node, nodes.Text)
                 and len(re.findall(issue_re, node.astext())) > 0
             ) and not isinstance(
                 node.parent,
                 (nodes.literal, nodes.FixedTextElement, nodes.reference),
             )
-            return cond
 
         for node in findall(self.document)(condition):
             text = node.astext()
