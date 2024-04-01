@@ -12,6 +12,12 @@ $ pip install --user --upgrade --pre gp-libs
 
 - _Add your latest changes from PRs here_
 
+### Development
+
+- poetry: 1.8.1 -> 1.8.2
+
+  See also: https://github.com/python-poetry/poetry/blob/1.8.2/CHANGELOG.md
+
 ## gp-libs 0.0.7 (2024-03-24)
 
 ### Breaking changes
