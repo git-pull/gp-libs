@@ -18,6 +18,10 @@ $ pip install --user --upgrade --pre gp-libs
 
   See also: https://github.com/python-poetry/poetry/blob/1.8.2/CHANGELOG.md
 
+### Documentation
+
+- Automatically linkify links that were previously only text.
+
 ## gp-libs 0.0.7 (2024-03-24)
 
 ### Breaking changes
