@@ -54,6 +54,7 @@ sphinx-inline-tabs = "*"
 sphinxext-opengraph = "<0.8" # https://github.com/wpilibsuite/sphinxext-opengraph/issues/100
 sphinx-copybutton = "*"
 sphinxext-rediraffe = "*"
+linkify-it-py = "*"
 
 [tool.poetry.group.test.dependencies]
 ### Testing ###
