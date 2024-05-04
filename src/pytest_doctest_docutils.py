@@ -38,7 +38,7 @@ RUNNER_CLASS = None
 
 
 def pytest_addoption(parser: "Parser") -> None:
-    """Add options to py.test for doctest_doctests."""
+    """Add options to py.test for doctest_docutils."""
     group = parser.getgroup("collect")
     group.addoption(
         "--doctest-docutils-modules",
