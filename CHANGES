@@ -8,9 +8,16 @@ To install the unreleased gp-libs version, see [developmental releases](https://
 $ pip install --user --upgrade --pre gp-libs
 ```
 
-## gp-libs 0.0.8 (unreleased)
+## gp-libs 0.0.9 (unreleased)
 
 - _Add your latest changes from PRs here_
+
+## gp-libs 0.0.8 (2024-10-19)
+
+### Breaking changes
+
+- Final Python 3.8 release, as it has reached end-of-life status October 7th,
+  2024, see [PEP-569](https://peps.python.org/pep-0569/).
 
 ### Development
 
