@@ -33,7 +33,7 @@ class MakeAppParams(t.Protocol):
         ...
 
 
-@pytest.fixture()
+@pytest.fixture
 def make_app_params(
     request: pytest.FixtureRequest,
     app_params: AppParams,

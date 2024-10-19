@@ -5,8 +5,9 @@ import pathlib
 import textwrap
 import typing as t
 
-import doctest_docutils
 import pytest
+
+import doctest_docutils
 
 FixtureFileDict = t.Dict[str, str]
 

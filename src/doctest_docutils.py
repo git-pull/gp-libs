@@ -104,13 +104,13 @@ class TestDirective(Directive):
                 prefix, option_name = option[0], option[1:]
                 if prefix not in "+-":
                     self.state.document.reporter.warning(
-                        "missing '+' or '-' in '%s' option." % option,
+                        f"missing '+' or '-' in '{option}' option.",
                         line=self.lineno,
                     )
                     continue
                 if option_name not in doctest.OPTIONFLAGS_BY_NAME:
                     self.state.document.reporter.warning(
-                        "'%s' is not a valid option." % option_name,
+                        f"'{option_name}' is not a valid option.",
                         line=self.lineno,
                     )
                     continue
@@ -125,7 +125,7 @@ class TestDirective(Directive):
                     node["options"][flag] = True  # Skip the test
             except InvalidSpecifier:
                 self.state.document.reporter.warning(
-                    "'%s' is not a valid pyversion option" % spec,
+                    f"'{spec}' is not a valid pyversion option",
                     line=self.lineno,
                 )
         if "skipif" in self.options:
@@ -288,16 +288,17 @@ class DocutilsDocTestFinder:
 
         # Find a test for this string, and add it to the list of tests.
         logger.debug(
-            "_find(%s)"
-            % pprint.pformat(
-                {
-                    "tests": tests,
-                    "string": string,
-                    "name": name,
-                    "source_lines": source_lines,
-                    "globs": globs,
-                    "seen": seen,
-                },
+            "_find({})".format(
+                pprint.pformat(
+                    {
+                        "tests": tests,
+                        "string": string,
+                        "name": name,
+                        "source_lines": source_lines,
+                        "globs": globs,
+                        "seen": seen,
+                    },
+                )
             ),
         )
         ext = pathlib.Path(name).suffix

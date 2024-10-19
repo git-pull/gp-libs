@@ -22,6 +22,7 @@ import _pytest
 import pytest
 from _pytest import outcomes
 from _pytest.outcomes import OutcomeException
+
 from doctest_docutils import DocutilsDocTestFinder, setup
 
 if t.TYPE_CHECKING:
