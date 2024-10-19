@@ -267,7 +267,7 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
         finally:
             sys.stdout = old_stdout
         out(string_io.getvalue())
-        return res
+        return res  # type:ignore[return-value,unused-ignore]
 
     def _DocTestRunner__patched_linecache_getlines(
         self,

@@ -556,7 +556,7 @@ def _test() -> int:
         options |= doctest.FAIL_FAST
     for filename in testfiles:
         if filename.endswith((".rst", ".md")) or args.docutils:
-            failures, _ = testdocutils(
+            failures, _ = testdocutils(  # type: ignore[misc,unused-ignore]
                 filename,
                 module_relative=False,
                 verbose=verbose,
@@ -570,9 +570,9 @@ def _test() -> int:
             sys.path.insert(0, dirname)
             m = __import__(filename[:-3])
             del sys.path[0]
-            failures, _ = doctest.testmod(m, verbose=verbose, optionflags=options)
+            failures, _ = doctest.testmod(m, verbose=verbose, optionflags=options)  # type:ignore[misc,unused-ignore]
         else:
-            failures, _ = doctest.testfile(
+            failures, _ = doctest.testfile(  # type:ignore[misc,unused-ignore]
                 filename,
                 module_relative=False,
                 verbose=verbose,
