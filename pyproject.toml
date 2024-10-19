@@ -2,7 +2,7 @@
 name = "gp-libs"
 version = "0.0.9"
 description = "Internal utilities for projects following git-pull python package spec"
-requires-python = ">=3.8,<4.0"
+requires-python = ">=3.9,<4.0"
 authors = [
   {name = "Tony Narlock", email = "tony@git-pull.com"}
 ]
