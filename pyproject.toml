@@ -1,9 +1,12 @@
-[tool.poetry]
+[project]
 name = "gp-libs"
 version = "0.0.8"
 description = "Internal utilities for projects following git-pull python package spec"
-license = "MIT"
-authors = ["Tony Narlock <tony@git-pull.com>"]
+requires-python = ">=3.8,<4.0"
+authors = [
+  {name = "Tony Narlock", email = "tony@git-pull.com"}
+]
+license = { text = "MIT" }
 classifiers = [
   "Development Status :: 4 - Beta",
   "License :: OSI Approved :: MIT License",
@@ -31,53 +34,100 @@ include = [
 ]
 readme = 'README.md'
 keywords = []
-
 homepage = "https://gp-libs.git-pull.com"
+dependencies = [
+  "myst_parser",
+  "docutils"
+]
 
-[tool.poetry.urls]
+[project.urls]
 "Bug Tracker" = "https://github.com/git-pull/gp-libs/issues"
 Documentation = "https://gp-libs.git-pull.com"
 Repository = "https://github.com/git-pull/gp-libs"
 Changes = "https://github.com/git-pull/gp-libs/blob/master/CHANGES"
 
-[tool.poetry.dependencies]
-python = "^3.8"
-myst_parser = "*"
-docutils = "*"
+[tool.uv]
+dev-dependencies = [
+  # Docs
+  "sphinx",
+  "furo",
+  "gp-libs",
+  "sphinx-autobuild",
+  "sphinx-autodoc-typehints",
+  "sphinx-inline-tabs",
+  "sphinxext-opengraph",
+  "sphinx-copybutton",
+  "sphinxext-rediraffe",
+  "myst-parser",
+  "linkify-it-py",
+  # Testing
+  "gp-libs",
+  "pytest",
+  "pytest-rerunfailures",
+  "pytest-mock",
+  "pytest-watcher",
+  # Coverage
+  "codecov",
+  "coverage",
+  "pytest-cov",
+  # Lint
+  "ruff",
+  "mypy",
+  "typing-extensions",
+  "types-docutils",
+]
 
-[tool.poetry.group.docs.dependencies]
-### Docs ###
-sphinx = "*"
-furo = "*"
-sphinx-autodoc-typehints = "*"
-sphinx-autobuild = "*"
-sphinx-inline-tabs = "*"
-sphinxext-opengraph = "*"
-sphinx-copybutton = "*"
-sphinxext-rediraffe = "*"
-linkify-it-py = "*"
+[dependency-groups]
+docs = [
+  "sphinx",
+  "furo",
+  "gp-libs",
+  "sphinx-autobuild",
+  "sphinx-autodoc-typehints",
+  "sphinx-inline-tabs",
+  "sphinxext-opengraph",
+  "sphinx-copybutton",
+  "sphinxext-rediraffe",
+  "myst-parser",
+  "linkify-it-py",
+]
+testing = [
+  "gp-libs",
+  "pytest",
+  "pytest-rerunfailures",
+  "pytest-mock",
+  "pytest-watcher",
+]
+coverage =[
+  "codecov",
+  "coverage",
+  "pytest-cov",
+]
+lint = [
+  "ruff",
+  "mypy",
+  "typing-extensions",
+  "types-docutils",
+]
 
-[tool.poetry.group.test.dependencies]
-### Testing ###
-pytest = "~7"
-pytest-rerunfailures = "*"
-pytest-watcher = "*"
-
-[tool.poetry.group.coverage.dependencies]
-### Coverage ###
-codecov = "*"
-coverage = "*"
-pytest-cov = "*"
-
-[tool.poetry.group.lint.dependencies]
-### Lint ###
-ruff = "*"
-mypy = "*"
-typing-extensions = { version = "*" }
-types-docutils = "*"
-
-[tool.poetry.plugins.pytest11]
+[project.entry-points.pytest11]
 sphinx = "pytest_doctest_docutils"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/*.py"]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+  "src/docutils_compat.py",
+  "src/doctest_docutils.py",
+  "src/gp_libs.py",
+  "src/linkify_issues.py",
+  "src/pytest_doctest_docutils.py"
+]
 
 [tool.mypy]
 strict = true
@@ -141,7 +191,3 @@ filterwarnings = [
   "ignore:distutils Version classes are deprecated. Use packaging.version instead.",
   "ignore:The frontend.Option(Parser)? class.*:DeprecationWarning::",
 ]
-
-[build-system]
-requires = ["poetry_core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
