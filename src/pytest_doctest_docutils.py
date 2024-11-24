@@ -92,7 +92,7 @@ def pytest_collect_file(
             ] = _pytest.doctest.DoctestModule.from_parent(parent, path=file_path)
             return mod
     elif _is_doctest(config, file_path, parent):
-        return DocTestDocutilsFile.from_parent(parent, path=file_path)  # type: ignore
+        return DocTestDocutilsFile.from_parent(parent, path=file_path)
     return None
 
 
@@ -308,7 +308,7 @@ class DocTestDocutilsFile(pytest.Module):
             verbose=False,
             optionflags=optionflags,
             checker=_pytest.doctest._get_checker(),
-            continue_on_failure=_pytest.doctest._get_continue_on_failure(self.config),  # type: ignore
+            continue_on_failure=_pytest.doctest._get_continue_on_failure(self.config),
         )
         from _pytest.doctest import DoctestItem
 
