@@ -12,6 +12,14 @@ $ pip install --user --upgrade --pre gp-libs
 
 - _Add your latest changes from PRs here_
 
+### Development
+
+#### Project and package management: poetry to uv (#39)
+
+[uv] is the new package and project manager for the project, replacing Poetry.
+
+[uv]: https://github.com/astral-sh/uv
+
 ## gp-libs 0.0.8 (2024-10-19)
 
 ### Breaking changes
