@@ -8,17 +8,27 @@ To install the unreleased gp-libs version, see [developmental releases](https://
 $ pip install --user --upgrade --pre gp-libs
 ```
 
-## gp-libs 0.0.9 (unreleased)
+## gp-libs 0.0.10 (unreleased)
 
 - _Add your latest changes from PRs here_
 
-### Development
+## gp-libs 0.0.9 (2024-11-26)
+
+### Breaking changes
 
 #### Project and package management: poetry to uv (#39)
 
 [uv] is the new package and project manager for the project, replacing Poetry.
 
 [uv]: https://github.com/astral-sh/uv
+
+#### Build system: poetry to hatchling (#39)
+
+[Build system] moved from [poetry] to [hatchling].
+
+[Build system]: https://packaging.python.org/en/latest/tutorials/packaging-projects/#choosing-a-build-backend
+[poetry]: https://github.com/python-poetry/poetry
+[hatchling]: https://hatch.pypa.io/latest/
 
 ## gp-libs 0.0.8 (2024-10-19)
 

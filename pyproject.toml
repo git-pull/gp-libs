@@ -1,6 +1,6 @@
 [project]
 name = "gp-libs"
-version = "0.0.8"
+version = "0.0.9"
 description = "Internal utilities for projects following git-pull python package spec"
 requires-python = ">=3.8,<4.0"
 authors = [

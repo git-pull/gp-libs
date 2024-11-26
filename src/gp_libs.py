@@ -3,7 +3,7 @@
 __title__ = "gp-libs"
 __package_name__ = "gp_libs"
 __description__ = "Internal utilities for git-pull projects"
-__version__ = "0.0.8"
+__version__ = "0.0.9"
 __author__ = "Tony Narlock"
 __github__ = "https://github.com/git-pull/gp-libs"
 __docs__ = "https://gp-libs.git-pull.com"
