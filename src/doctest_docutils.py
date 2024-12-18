@@ -54,7 +54,7 @@ class TestDirective(Directive):
     optional_arguments = 1
     final_argument_whitespace = True
 
-    def get_source_info(self) -> t.Tuple[str, int]:
+    def get_source_info(self) -> tuple[str, int]:
         """Get source and line number."""
         return self.state_machine.get_source_and_line(self.lineno)  # type: ignore
 
@@ -62,7 +62,7 @@ class TestDirective(Directive):
         """Set source and line number to the node."""
         node.source, node.line = self.get_source_info()
 
-    def run(self) -> t.List[Node]:
+    def run(self) -> list[Node]:
         """Run docutils test directive."""
         # use ordinary docutils nodes for test code: they get special attributes
         # so that our builder recognizes them, and the other builders are happy.
@@ -82,7 +82,7 @@ class TestDirective(Directive):
                 if not test:
                     test = code
                 code = doctestopt_re.sub("", code)
-        nodetype: t.Type[TextElement] = nodes.literal_block
+        nodetype: type[TextElement] = nodes.literal_block
         if self.name in {"testsetup", "testcleanup"} or "hide" in self.options:
             nodetype = nodes.comment
         if self.arguments:
@@ -164,7 +164,7 @@ class DoctestDirective(TestDirective):
 class MockTabDirective(TestDirective):
     """Mock tab directive."""
 
-    def run(self) -> t.List[Node]:
+    def run(self) -> list[Node]:
         """Parse a mock-tabs directive."""
         self.assert_has_content()
 
@@ -173,7 +173,7 @@ class MockTabDirective(TestDirective):
         return [content]
 
 
-def setup() -> t.Dict[str, t.Any]:
+def setup() -> dict[str, t.Any]:
     """Configure doctest for doctest_docutils."""
     directives.register_directive("testsetup", TestsetupDirective)
     directives.register_directive("testcleanup", TestcleanupDirective)
@@ -228,9 +228,9 @@ class DocutilsDocTestFinder:
         self,
         string: str,
         name: t.Optional[str] = None,
-        globs: t.Optional[t.Dict[str, t.Any]] = None,
-        extraglobs: t.Optional[t.Dict[str, t.Any]] = None,
-    ) -> t.List[doctest.DocTest]:
+        globs: t.Optional[dict[str, t.Any]] = None,
+        extraglobs: t.Optional[dict[str, t.Any]] = None,
+    ) -> list[doctest.DocTest]:
         """Return list of the DocTests defined by given string (its parsed directives).
 
         The globals for each DocTest is formed by combining `globs` and `extraglobs`
@@ -258,7 +258,7 @@ class DocutilsDocTestFinder:
         if "__name__" not in globs:
             globs["__name__"] = "__main__"  # provide a default module name
 
-        tests: t.List[doctest.DocTest] = []
+        tests: list[doctest.DocTest] = []
         self._find(tests, string, name, source_lines, globs, {}, name)
         # Sort the tests by alpha order of names, for consistency in
         # verbose-mode output.  This was a feature of doctest in Pythons
@@ -269,12 +269,12 @@ class DocutilsDocTestFinder:
 
     def _find(
         self,
-        tests: t.List[doctest.DocTest],
+        tests: list[doctest.DocTest],
         string: str,
         name: str,
-        source_lines: t.Optional[t.List[str]],
-        globs: t.Dict[str, t.Any],
-        seen: t.Dict[int, int],
+        source_lines: t.Optional[list[str]],
+        globs: dict[str, t.Any],
+        seen: dict[int, int],
         source_path: t.Optional[pathlib.Path] = None,
     ) -> None:
         """Find tests for the given string, and add them to `tests`."""
@@ -298,7 +298,7 @@ class DocutilsDocTestFinder:
                         "globs": globs,
                         "seen": seen,
                     },
-                )
+                ),
             ),
         )
         ext = pathlib.Path(name).suffix
@@ -388,7 +388,7 @@ class DocutilsDocTestFinder:
 
             # Type ignored because this is a private function.
             return t.cast(
-                bool,
+                "bool",
                 super()._from_module(module, object),  # type:ignore[misc]
             )
 
@@ -400,8 +400,8 @@ class DocutilsDocTestFinder:
         string: str,
         name: str,
         filename: str,
-        globs: t.Dict[str, t.Any],
-        source_lines: t.List[str],
+        globs: dict[str, t.Any],
+        source_lines: list[str],
     ) -> doctest.DocTest:
         """Return a DocTest for given string, or return None."""
         lineno = int(source_lines[0])
@@ -424,11 +424,11 @@ def testdocutils(
     module_relative: bool = True,
     name: t.Optional[str] = None,
     package: t.Optional[t.Union[str, types.ModuleType]] = None,
-    globs: t.Optional[t.Dict[str, t.Any]] = None,
+    globs: t.Optional[dict[str, t.Any]] = None,
     verbose: t.Optional[bool] = None,
     report: bool = True,
     optionflags: int = 0,
-    extraglobs: t.Optional[t.Dict[str, t.Any]] = None,
+    extraglobs: t.Optional[dict[str, t.Any]] = None,
     raise_on_error: bool = False,
     parser: "doctest.DocTestParser" = parser,
     encoding: t.Optional[str] = None,

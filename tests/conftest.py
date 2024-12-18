@@ -16,7 +16,7 @@ from sphinx.testing.path import path as sphinx_path
 
 pytest_plugins = ["sphinx.testing.fixtures", "pytester"]
 
-AppParams = t.Tuple[t.Any, t.Dict[str, t.Any]]
+AppParams = tuple[t.Any, dict[str, t.Any]]
 
 
 class MakeAppParams(t.Protocol):
