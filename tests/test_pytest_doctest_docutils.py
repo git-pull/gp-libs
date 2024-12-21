@@ -200,7 +200,6 @@ def hello(statement: str) -> None:
 )
 def test_pluginDocutilsDocTestFinder(
     pytester: _pytest.pytester.Pytester,
-    monkeypatch: pytest.MonkeyPatch,
     test_id: str,
     files: FixtureFileDict,
     tests_found: int,
@@ -238,7 +237,6 @@ addopts=-p no:doctest -vv
 
 def test_conftest_py(
     pytester: _pytest.pytester.Pytester,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test pytest plugin with python file doctests."""
     # Initialize variables
@@ -310,7 +308,6 @@ def hello(statement: str) -> None:
 
 def test_conftest_md(
     pytester: _pytest.pytester.Pytester,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test pytest plugin with doctests in markdown."""
     # Initialize variables
