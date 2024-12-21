@@ -13,7 +13,7 @@ $ pip install --user gp-libs
 Upgrading:
 
 ```console
-$ pip install --user --upgrade gplibs
+$ pip install --user --upgrade gp-libs
 ```
 
 (developmental-releases)=
