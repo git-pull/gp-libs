@@ -12,7 +12,6 @@ import pathlib
 import typing as t
 
 import pytest
-from sphinx.testing.path import path as sphinx_path
 
 pytest_plugins = ["sphinx.testing.fixtures", "pytester"]
 
@@ -53,7 +52,7 @@ def make_app_params(
         kws.setdefault("status", None)
         kws.setdefault("warning", None)
         kws.setdefault("freshenv", True)
-        kws["srcdir"] = sphinx_path(tmp_path)
+        kws["srcdir"] = pathlib.Path(tmp_path)
 
         for k, v in kwargs.items():
             if k == "confoverrides":
@@ -67,9 +66,11 @@ def make_app_params(
 
                 kws["confoverrides"].update(**v)
 
-        (kws["srcdir"] / "conf.py").write_text("", encoding="utf8")
+        conf_file = kws["srcdir"] / "conf.py"
+        conf_file.write_text("", encoding="utf8")
         if index is not None:
-            (kws["srcdir"] / "index.rst").write_text(index, encoding="utf8")
+            index_file = kws["srcdir"] / "index.rst"
+            index_file.write_text(index, encoding="utf8")
 
         return args, kws
 
