@@ -107,7 +107,7 @@ def _is_doctest(
     return any(path.match(path_pattern=glob) for glob in globs)
 
 
-def _init_runner_class() -> t.Type["doctest.DocTestRunner"]:
+def _init_runner_class() -> type["doctest.DocTestRunner"]:
     import doctest
 
     class PytestDoctestRunner(doctest.DebugRunner):
@@ -146,8 +146,8 @@ def _init_runner_class() -> t.Type["doctest.DocTestRunner"]:
             out: "_Out",
             test: "doctest.DocTest",
             example: "doctest.Example",
-            exc_info: t.Tuple[
-                t.Type[BaseException],
+            exc_info: tuple[
+                type[BaseException],
                 BaseException,
                 types.TracebackType,
             ],
@@ -187,7 +187,7 @@ def _get_number_flag() -> int:
     return doctest.register_optionflag("NUMBER")
 
 
-def _get_flag_lookup() -> t.Dict[str, int]:
+def _get_flag_lookup() -> dict[str, int]:
     import doctest
 
     return {
@@ -257,7 +257,7 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
         self,
         out: "_Out",
         verbose: t.Optional[bool] = None,
-    ) -> t.Tuple[int, int]:
+    ) -> tuple[int, int]:
         """Summarize the test runs."""
         string_io = io.StringIO()
         old_stdout = sys.stdout

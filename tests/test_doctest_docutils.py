@@ -9,7 +9,7 @@ import pytest
 
 import doctest_docutils
 
-FixtureFileDict = t.Dict[str, str]
+FixtureFileDict = dict[str, str]
 
 
 class DocTestFinderFixture(t.NamedTuple):

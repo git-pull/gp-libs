@@ -12,6 +12,16 @@ $ pip install --user --upgrade --pre gp-libs
 
 - _Add your latest changes from PRs here_
 
+### Development
+
+- Aggressive automated lint fixes via `ruff` (#41)
+
+  via ruff v0.8.4, all automated lint fixes, including unsafe and previews were applied for Python 3.9:
+
+  ```sh
+  ruff check --select ALL . --fix --unsafe-fixes --preview --show-fixes; ruff format .
+  ```
+
 ## gp-libs 0.0.9 (2024-11-26)
 
 ### Breaking changes

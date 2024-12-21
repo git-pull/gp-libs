@@ -131,13 +131,14 @@ packages = [
 
 [tool.mypy]
 strict = true
+python_version = "3.9"
 files = [
   "src/",
   "tests/",
 ]
 
 [tool.ruff]
-target-version = "py38"
+target-version = "py39"
 
 [tool.lint]
 select = [
