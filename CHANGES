@@ -14,9 +14,9 @@ $ pip install --user --upgrade --pre gp-libs
 
 ### Development
 
-##### chore: Implement PEP 563 deferred annotation resolution (#44)
+#### chore: Implement PEP 563 deferred annotation resolution (#44)
 
-- Add `from __future__ import annotations` to defer annotation resolution and reduce unnecessary symbol computations during type checking
+- Add `from __future__ import annotations` to defer annotation resolution and reduce unnecessary runtime computations during type checking.
 - Enable Ruff checks for PEP-compliant annotations:
   - [non-pep585-annotation (UP006)](https://docs.astral.sh/ruff/rules/non-pep585-annotation/)
   - [non-pep604-annotation (UP007)](https://docs.astral.sh/ruff/rules/non-pep604-annotation/)
