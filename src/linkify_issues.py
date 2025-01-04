@@ -1,13 +1,17 @@
 """Autolinking extension for Sphinx."""
 
+from __future__ import annotations
+
 import re
 import typing as t
 
 from docutils import nodes
-from sphinx.application import Sphinx
 from sphinx.transforms import SphinxTransform
 
 from docutils_compat import findall
+
+if t.TYPE_CHECKING:
+    from sphinx.application import Sphinx
 
 DEFAULT_ISSUE_RE = r"#(?P<issue_id>\d+)"
 """Default pattern to search plain nodes for issues."""
@@ -40,7 +44,7 @@ class LinkifyIssues(SphinxTransform):
 
         for node in findall(self.document)(condition):
             text = node.astext()
-            retnodes: list[t.Union[nodes.reference, nodes.Text]] = []
+            retnodes: list[nodes.reference | nodes.Text] = []
             pos = 0
             for match in issue_re.finditer(text):
                 if match.start() > pos:

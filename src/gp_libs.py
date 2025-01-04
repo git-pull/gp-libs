@@ -1,5 +1,7 @@
 """Metadata package for gp-libs."""
 
+from __future__ import annotations
+
 __title__ = "gp-libs"
 __package_name__ = "gp_libs"
 __description__ = "Internal utilities for git-pull projects"

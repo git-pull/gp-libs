@@ -9,15 +9,14 @@
    pytest-sphinx (BSD 3-clause), 2022-09-03.
 """
 
+from __future__ import annotations
+
 import bdb
 import doctest
 import io
 import logging
-import pathlib
 import sys
-import types
 import typing as t
-from collections.abc import Iterable
 
 import _pytest
 import pytest
@@ -27,6 +26,9 @@ from _pytest.outcomes import OutcomeException
 from doctest_docutils import DocutilsDocTestFinder, setup
 
 if t.TYPE_CHECKING:
+    import pathlib
+    import types
+    from collections.abc import Iterable
     from doctest import _Out
 
     from _pytest.config.argparsing import Parser
@@ -39,7 +41,7 @@ logger = logging.getLogger(__name__)
 RUNNER_CLASS = None
 
 
-def pytest_addoption(parser: "Parser") -> None:
+def pytest_addoption(parser: Parser) -> None:
     """Add options to py.test for doctest_docutils."""
     group = parser.getgroup("collect")
     group.addoption(
@@ -76,7 +78,7 @@ def pytest_unconfigure() -> None:
 def pytest_collect_file(
     file_path: pathlib.Path,
     parent: pytest.Collector,
-) -> t.Optional[t.Union["DocTestDocutilsFile", "_pytest.doctest.DoctestModule"]]:
+) -> DocTestDocutilsFile | _pytest.doctest.DoctestModule | None:
     """Test collector for pytest-doctest-docutils."""
     config = parent.config
     if file_path.suffix == ".py":
@@ -87,10 +89,9 @@ def pytest_collect_file(
                 _pytest.doctest._is_main_py(file_path),
             ),
         ):
-            mod: t.Union[
-                DocTestDocutilsFile,
-                _pytest.doctest.DoctestModule,
-            ] = _pytest.doctest.DoctestModule.from_parent(parent, path=file_path)
+            mod: DocTestDocutilsFile | _pytest.doctest.DoctestModule = (
+                _pytest.doctest.DoctestModule.from_parent(parent, path=file_path)
+            )
             return mod
     elif _is_doctest(config, file_path, parent):
         return DocTestDocutilsFile.from_parent(parent, path=file_path)
@@ -108,7 +109,7 @@ def _is_doctest(
     return any(path.match(path_pattern=glob) for glob in globs)
 
 
-def _init_runner_class() -> type["doctest.DocTestRunner"]:
+def _init_runner_class() -> type[doctest.DocTestRunner]:
     import doctest
 
     class PytestDoctestRunner(doctest.DebugRunner):
@@ -120,8 +121,8 @@ def _init_runner_class() -> type["doctest.DocTestRunner"]:
 
         def __init__(
             self,
-            checker: t.Optional["doctest.OutputChecker"] = None,
-            verbose: t.Optional[bool] = None,
+            checker: doctest.OutputChecker | None = None,
+            verbose: bool | None = None,
             optionflags: int = 0,
             continue_on_failure: bool = True,
         ) -> None:
@@ -130,9 +131,9 @@ def _init_runner_class() -> type["doctest.DocTestRunner"]:
 
         def report_failure(
             self,
-            out: "_Out",
-            test: "doctest.DocTest",
-            example: "doctest.Example",
+            out: _Out,
+            test: doctest.DocTest,
+            example: doctest.Example,
             got: str,
         ) -> None:
             failure = doctest.DocTestFailure(test, example, got)
@@ -144,9 +145,9 @@ def _init_runner_class() -> type["doctest.DocTestRunner"]:
 
         def report_unexpected_exception(
             self,
-            out: "_Out",
-            test: "doctest.DocTest",
-            example: "doctest.Example",
+            out: _Out,
+            test: doctest.DocTest,
+            example: doctest.Example,
             exc_info: tuple[
                 type[BaseException],
                 BaseException,
@@ -232,11 +233,11 @@ def get_optionflags(config: pytest.Config) -> int:
 
 
 def _get_runner(
-    checker: t.Optional["doctest.OutputChecker"] = None,
-    verbose: t.Optional[bool] = None,
+    checker: doctest.OutputChecker | None = None,
+    verbose: bool | None = None,
     optionflags: int = 0,
     continue_on_failure: bool = True,
-) -> "doctest.DocTestRunner":
+) -> doctest.DocTestRunner:
     # We need this in order to do a lazy import on doctest
     global RUNNER_CLASS
     if RUNNER_CLASS is None:
@@ -256,8 +257,8 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
 
     def summarize(  # type: ignore
         self,
-        out: "_Out",
-        verbose: t.Optional[bool] = None,
+        out: _Out,
+        verbose: bool | None = None,
     ) -> tuple[int, int]:
         """Summarize the test runs."""
         string_io = io.StringIO()
@@ -293,7 +294,7 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
 class DocTestDocutilsFile(pytest.Module):
     """Pytest module for doctest_docutils."""
 
-    def collect(self) -> Iterable["DoctestItem"]:
+    def collect(self) -> Iterable[DoctestItem]:
         """Collect tests for pytest module."""
         setup()
 
