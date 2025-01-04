@@ -17,6 +17,7 @@ import pathlib
 import sys
 import types
 import typing as t
+from collections.abc import Iterable
 
 import _pytest
 import pytest
@@ -292,7 +293,7 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
 class DocTestDocutilsFile(pytest.Module):
     """Pytest module for doctest_docutils."""
 
-    def collect(self) -> t.Iterable["DoctestItem"]:
+    def collect(self) -> Iterable["DoctestItem"]:
         """Collect tests for pytest module."""
         setup()
 

@@ -10,6 +10,7 @@ https://docs.pytest.org/en/stable/deprecations.html
 
 import pathlib
 import typing as t
+from collections.abc import Callable
 
 import pytest
 
@@ -37,7 +38,7 @@ def make_app_params(
     request: pytest.FixtureRequest,
     app_params: AppParams,
     tmp_path: pathlib.Path,
-) -> t.Callable[[t.Any], AppParams]:
+) -> Callable[[t.Any], AppParams]:
     """Return Sphinx App factory, accepts custom params."""
 
     def fn(

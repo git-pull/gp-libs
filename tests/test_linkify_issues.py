@@ -2,6 +2,7 @@
 
 import pathlib
 import typing as t
+from collections.abc import Callable
 
 import pytest
 from sphinx.testing.util import SphinxTestApp
@@ -46,7 +47,7 @@ FIXTURES = [
     ids=[f.test_id for f in FIXTURES],
 )
 def test_links_show(
-    make_app: t.Callable[[t.Any], SphinxTestApp],
+    make_app: Callable[[t.Any], SphinxTestApp],
     make_app_params: "MakeAppParams",
     test_id: str,
     issue_url_tpl: str,
