@@ -1,13 +1,17 @@
 """Tests for linkify_issues extension for sphinx."""
 
+from __future__ import annotations
+
 import pathlib
 import typing as t
-from collections.abc import Callable
 
 import pytest
-from sphinx.testing.util import SphinxTestApp
 
 if t.TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from sphinx.testing.util import SphinxTestApp
+
     from .conftest import MakeAppParams
 
 
@@ -48,7 +52,7 @@ FIXTURES = [
 )
 def test_links_show(
     make_app: Callable[[t.Any], SphinxTestApp],
-    make_app_params: "MakeAppParams",
+    make_app_params: MakeAppParams,
     test_id: str,
     issue_url_tpl: str,
     text: str,

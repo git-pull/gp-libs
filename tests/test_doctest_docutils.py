@@ -1,13 +1,17 @@
 """Tests for doctest_docutils."""
 
+from __future__ import annotations
+
 import doctest
-import pathlib
 import textwrap
 import typing as t
 
 import pytest
 
 import doctest_docutils
+
+if t.TYPE_CHECKING:
+    import pathlib
 
 FixtureFileDict = dict[str, str]
 

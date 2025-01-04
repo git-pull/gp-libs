@@ -1,5 +1,7 @@
 """Doctest module for docutils."""
 
+from __future__ import annotations
+
 import doctest
 import functools
 import linecache
@@ -9,17 +11,20 @@ import pathlib
 import pprint
 import re
 import sys
-import types
 import typing as t
 
 import docutils
 from docutils import nodes
-from docutils.nodes import Node, TextElement
 from docutils.parsers.rst import Directive, directives
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
 
 from docutils_compat import findall
+
+if t.TYPE_CHECKING:
+    import types
+
+    from docutils.nodes import Node, TextElement
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +217,7 @@ class DocutilsDocTestFinder:
     def __init__(
         self,
         verbose: bool = False,
-        parser: "doctest.DocTestParser" = parser,
+        parser: doctest.DocTestParser = parser,
     ) -> None:
         """Create a new doctest finder.
 
@@ -227,9 +232,9 @@ class DocutilsDocTestFinder:
     def find(
         self,
         string: str,
-        name: t.Optional[str] = None,
-        globs: t.Optional[dict[str, t.Any]] = None,
-        extraglobs: t.Optional[dict[str, t.Any]] = None,
+        name: str | None = None,
+        globs: dict[str, t.Any] | None = None,
+        extraglobs: dict[str, t.Any] | None = None,
     ) -> list[doctest.DocTest]:
         """Return list of the DocTests defined by given string (its parsed directives).
 
@@ -272,10 +277,10 @@ class DocutilsDocTestFinder:
         tests: list[doctest.DocTest],
         string: str,
         name: str,
-        source_lines: t.Optional[list[str]],
+        source_lines: list[str] | None,
         globs: dict[str, t.Any],
         seen: dict[int, int],
-        source_path: t.Optional[pathlib.Path] = None,
+        source_path: pathlib.Path | None = None,
     ) -> None:
         """Find tests for the given string, and add them to `tests`."""
         if self._verbose:
@@ -373,7 +378,7 @@ class DocutilsDocTestFinder:
 
         def _from_module(
             self,
-            module: t.Optional[t.Union[str, types.ModuleType]],
+            module: str | types.ModuleType | None,
             object: object,  # NOQA: A002
         ) -> bool:
             """Return true if the given object lives in the given module.
@@ -422,16 +427,16 @@ class TestDocutilsPackageRelativeError(Exception):
 def testdocutils(
     filename: str,
     module_relative: bool = True,
-    name: t.Optional[str] = None,
-    package: t.Optional[t.Union[str, types.ModuleType]] = None,
-    globs: t.Optional[dict[str, t.Any]] = None,
-    verbose: t.Optional[bool] = None,
+    name: str | None = None,
+    package: str | types.ModuleType | None = None,
+    globs: dict[str, t.Any] | None = None,
+    verbose: bool | None = None,
     report: bool = True,
     optionflags: int = 0,
-    extraglobs: t.Optional[dict[str, t.Any]] = None,
+    extraglobs: dict[str, t.Any] | None = None,
     raise_on_error: bool = False,
-    parser: "doctest.DocTestParser" = parser,
-    encoding: t.Optional[str] = None,
+    parser: doctest.DocTestParser = parser,
+    encoding: str | None = None,
 ) -> doctest.TestResults:
     """Docutils-based test entrypoint.
 
@@ -465,7 +470,7 @@ def testdocutils(
     # Find, parse, and run all tests in the given module.
     finder = DocutilsDocTestFinder()
 
-    runner: t.Union[doctest.DebugRunner, doctest.DocTestRunner]
+    runner: doctest.DebugRunner | doctest.DocTestRunner
 
     if raise_on_error:
         runner = doctest.DebugRunner(verbose=verbose, optionflags=optionflags)

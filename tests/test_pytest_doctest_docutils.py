@@ -1,10 +1,14 @@
 """Test pytest plugin for doctest_docutils."""
 
+from __future__ import annotations
+
 import textwrap
 import typing as t
 
-import _pytest.pytester
 import pytest
+
+if t.TYPE_CHECKING:
+    import _pytest.pytester
 
 FixtureFileDict = dict[str, str]
 

@@ -8,11 +8,15 @@ See "pytest_plugins in non-top-level conftest files" in
 https://docs.pytest.org/en/stable/deprecations.html
 """
 
+from __future__ import annotations
+
 import pathlib
 import typing as t
-from collections.abc import Callable
 
 import pytest
+
+if t.TYPE_CHECKING:
+    from collections.abc import Callable
 
 pytest_plugins = ["sphinx.testing.fixtures", "pytester"]
 
@@ -25,7 +29,7 @@ class MakeAppParams(t.Protocol):
     def __call__(
         self,
         #: index content
-        index: t.Optional[t.Union[t.IO[str], str]] = ...,
+        index: t.IO[str] | str | None = ...,
         *args: object,
         **kwargs: t.Any,
     ) -> AppParams:
@@ -43,7 +47,7 @@ def make_app_params(
 
     def fn(
         #: index content
-        index: t.Optional[t.Union[t.IO[str], str]] = None,
+        index: t.IO[str] | str | None = None,
         *args: object,
         **kwargs: t.Any,
     ) -> AppParams:
