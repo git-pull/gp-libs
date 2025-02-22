@@ -8,9 +8,11 @@ To install the unreleased gp-libs version, see [developmental releases](https://
 $ pip install --user --upgrade --pre gp-libs
 ```
 
-## gp-libs 0.0.11 (unreleased)
+## gp-libs 0.0.12 (unreleased)
 
 - _Add your latest changes from PRs here_
+
+## gp-libs 0.0.11 (2025-02-22)
 
 ### Bug fixes
 
