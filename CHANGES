@@ -12,6 +12,10 @@ $ pip install --user --upgrade --pre gp-libs
 
 - _Add your latest changes from PRs here_
 
+### Bug fixes
+
+- Fix for `pytest-asyncio` compatibility (#46)
+
 ### Development
 
 #### chore: Implement PEP 563 deferred annotation resolution (#44)
