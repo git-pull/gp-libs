@@ -294,6 +294,8 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
 class DocTestDocutilsFile(pytest.Module):
     """Pytest module for doctest_docutils."""
 
+    obj = None  # Fix pytest-asyncio issue. #46, pytest-asyncio#872
+
     def collect(self) -> Iterable[DoctestItem]:
         """Collect tests for pytest module."""
         setup()
