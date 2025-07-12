@@ -8,13 +8,19 @@ To install the unreleased gp-libs version, see [developmental releases](https://
 $ pip install --user --upgrade --pre gp-libs
 ```
 
-## gp-libs 0.0.12 (unreleased)
+## gp-libs 0.0.13 (unreleased)
+#
+#- _Add your latest changes from PRs here_
 
-- _Add your latest changes from PRs here_
+## gp-libs 0.0.12 (2025-07-12)
 
 ### Bug fixes
 
 - Type annotation and linting fixes (resolves #48)
+
+### Deveopment
+
+- Internal package updates to uv, py.test, mypy, ruff, etc.
 
 ## gp-libs 0.0.11 (2025-02-22)
 
