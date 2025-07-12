@@ -12,6 +12,10 @@ $ pip install --user --upgrade --pre gp-libs
 
 - _Add your latest changes from PRs here_
 
+### Bug fixes
+
+- Type annotation and linting fixes (resolves #48)
+
 ## gp-libs 0.0.11 (2025-02-22)
 
 ### Bug fixes
