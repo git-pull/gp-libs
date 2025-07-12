@@ -264,7 +264,10 @@ class DocutilsDocTestFinder:
             globs["__name__"] = "__main__"  # provide a default module name
 
         tests: list[doctest.DocTest] = []
-        self._find(tests, string, name, source_lines, globs, {}, name)
+        source_path: pathlib.Path | None = (
+            pathlib.Path(name) if name is not None else None
+        )
+        self._find(tests, string, name, source_lines, globs, {}, source_path)
         # Sort the tests by alpha order of names, for consistency in
         # verbose-mode output.  This was a feature of doctest in Pythons
         # <= 2.3 that got lost by accident in 2.4.  It was repaired in
@@ -321,7 +324,10 @@ class DocutilsDocTestFinder:
             config: MdParserConfig = MdParserConfig(commonmark_only=False)
             md_parser = create_md_parser(config, DocutilsRenderer)
 
-            doc = make_document(source_path=source_path, parser_cls=DocutilsParser)
+            doc = make_document(
+                source_path=str(source_path),
+                parser_cls=DocutilsParser,
+            )
             md_parser.options["document"] = doc
             md_parser.render(string)
         else:
@@ -330,7 +336,7 @@ class DocutilsDocTestFinder:
             from docutils.parsers.rst import Parser
 
             parser = Parser()
-            settings = OptionParser(components=(Parser,)).get_default_values()
+            settings = OptionParser(components=(Parser,)).get_default_values()  # type:ignore
 
             doc = docutils.utils.new_document(
                 source_path=str(source_path),
