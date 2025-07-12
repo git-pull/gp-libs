@@ -112,7 +112,7 @@ Here's a test:
     >>> 4 + 4
     8
 :::
-        """,  # noqa: RUF027
+        """,
             ),
         },
         tests_found=1,
@@ -127,7 +127,7 @@ Here's a test:
     >>> 4 + 4
     8
 ```
-        """,  # noqa: RUF027
+        """,
             ),
         },
         tests_found=1,
