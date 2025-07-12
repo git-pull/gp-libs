@@ -145,19 +145,19 @@ class TestDirective(Directive):
 class TestsetupDirective(TestDirective):
     """Test setup directive."""
 
-    option_spec = {"skipif": directives.unchanged_required}
+    option_spec: t.ClassVar = {"skipif": directives.unchanged_required}
 
 
 class TestcleanupDirective(TestDirective):
     """Test cleanup directive."""
 
-    option_spec = {"skipif": directives.unchanged_required}
+    option_spec: t.ClassVar = {"skipif": directives.unchanged_required}
 
 
 class DoctestDirective(TestDirective):
     """Doctest directive."""
 
-    option_spec = {
+    option_spec: t.ClassVar = {
         "no-trim-doctest-flags": directives.flag,
         "options": directives.unchanged,
         "pyversion": directives.unchanged_required,
@@ -389,7 +389,7 @@ class DocutilsDocTestFinder:
             function instead. https://github.com/python/cpython/issues/107995.
             """
             if isinstance(object, functools.cached_property):
-                object = object.func
+                object = object.func  # noqa: A001
 
             # Type ignored because this is a private function.
             return t.cast(
