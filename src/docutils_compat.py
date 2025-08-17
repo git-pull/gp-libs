@@ -12,7 +12,7 @@ if t.TYPE_CHECKING:
     _N = t.TypeVar("_N", bound=Node)
 
 
-def findall(node: type[_N]) -> Callable[..., Iterable[_N]]:
+def findall(node: _N) -> Callable[..., Iterable[_N]]:
     """Iterate through nodes.
 
     nodes.findall() replaces traverse in docutils v0.18.

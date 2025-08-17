@@ -42,6 +42,7 @@ class LinkifyIssues(SphinxTransform):
                 (nodes.literal, nodes.FixedTextElement, nodes.reference),
             )
 
+        node: nodes.Node
         for node in findall(self.document)(condition):
             text = node.astext()
             retnodes: list[nodes.reference | nodes.Text] = []

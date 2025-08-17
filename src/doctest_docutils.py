@@ -336,7 +336,7 @@ class DocutilsDocTestFinder:
             from docutils.parsers.rst import Parser
 
             parser = Parser()
-            settings = OptionParser(components=(Parser,)).get_default_values()  # type:ignore
+            settings = OptionParser(components=(Parser,)).get_default_values()
 
             doc = docutils.utils.new_document(
                 source_path=str(source_path),
@@ -361,7 +361,7 @@ class DocutilsDocTestFinder:
                 or isinstance(node, nodes.doctest_block)
             )
 
-        for idx, node in enumerate(findall(doc)(condition)):  # type:ignore
+        for idx, node in enumerate(findall(doc)(condition)):
             logger.debug(f"() node: {node.astext()}")
             assert isinstance(node, nodes.Element)
             test_name = node.get("groups")

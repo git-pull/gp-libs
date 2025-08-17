@@ -9,8 +9,12 @@ $ pip install --user --upgrade --pre gp-libs
 ```
 
 ## gp-libs 0.0.13 (unreleased)
-#
-#- _Add your latest changes from PRs here_
+
+- _Add your latest changes from PRs here_
+
+### Bug fixes
+
+- Type annotation fixes (#49)
 
 ## gp-libs 0.0.12 (2025-07-12)
 
