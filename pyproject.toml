@@ -45,8 +45,8 @@ Documentation = "https://gp-libs.git-pull.com"
 Repository = "https://github.com/git-pull/gp-libs"
 Changes = "https://github.com/git-pull/gp-libs/blob/master/CHANGES"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
   # Docs
   "sphinx",
   "furo",
@@ -76,7 +76,6 @@ dev-dependencies = [
   "types-docutils",
 ]
 
-[dependency-groups]
 docs = [
   "sphinx",
   "furo",
