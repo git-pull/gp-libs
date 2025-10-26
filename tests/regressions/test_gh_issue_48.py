@@ -118,10 +118,6 @@ def purge_doctest_directives() -> t.Iterator[None]:
     ids=[fixture.test_id for fixture in FIXTURES],
 )
 @pytest.mark.parametrize("file_path_mode", ["relative", "absolute"])
-@pytest.mark.xfail(
-    reason="GH-48: directives are not registered unless doctest_docutils.setup() runs",
-    strict=False,
-)
 def test_docutils_doctest_finder_without_registered_directives(
     purge_doctest_directives: None,
     tmp_path: pathlib.Path,
