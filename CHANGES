@@ -10,6 +10,10 @@ $ pip install --user --upgrade --pre gp-libs
 
 ## gp-libs 0.0.14 (unreleased)
 
+### Bug fixes
+
+- Ensure docutils/myst doctest directives auto-register so Arch Linux packaging tests pass without manual setup (#52, fixes #48)
+
 - _Add your latest changes from PRs here_
 
 ## gp-libs 0.0.13 (2025-08-17)
