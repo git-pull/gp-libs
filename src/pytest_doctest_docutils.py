@@ -23,7 +23,7 @@ import pytest
 from _pytest import outcomes
 from _pytest.outcomes import OutcomeException
 
-from doctest_docutils import DocutilsDocTestFinder, setup
+from doctest_docutils import DocutilsDocTestFinder, _ensure_directives_registered
 
 if t.TYPE_CHECKING:
     import pathlib
@@ -298,7 +298,7 @@ class DocTestDocutilsFile(pytest.Module):
 
     def collect(self) -> Iterable[DoctestItem]:
         """Collect tests for pytest module."""
-        setup()
+        _ensure_directives_registered()
 
         encoding = self.config.getini("doctest_encoding")
         text = self.path.read_text(encoding)

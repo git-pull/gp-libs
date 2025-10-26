@@ -194,6 +194,24 @@ def setup() -> dict[str, t.Any]:
 master = None
 
 parser = doctest.DocTestParser()
+_DIRECTIVES_READY = False
+_REQUIRED_DIRECTIVES = ("doctest", "testsetup", "testcleanup", "tab")
+
+
+def _directive_registry() -> dict[str, t.Any]:
+    """Return docutils directive registry with typing info."""
+    return t.cast(dict[str, t.Any], directives.__dict__["_directives"])
+
+
+def _ensure_directives_registered() -> None:
+    """Register doctest-related directives once per interpreter."""
+    global _DIRECTIVES_READY
+    registry = _directive_registry()
+    missing = any(name not in registry for name in _REQUIRED_DIRECTIVES)
+    if _DIRECTIVES_READY and not missing:
+        return
+    setup()
+    _DIRECTIVES_READY = True
 
 
 class DocTestFinderNameDoesNotExist(ValueError):
@@ -226,6 +244,7 @@ class DocutilsDocTestFinder:
         DocTest).  The signature for this factory function should match the signature
         of the DocTest constructor.
         """
+        _ensure_directives_registered()
         self._parser = parser
         self._verbose = verbose
 
@@ -455,6 +474,7 @@ def testdocutils(
 
     # Keep the absolute file paths. This is needed for Include directies to work.
     # The absolute path will be applied to source_path when creating the docutils doc.
+    _ensure_directives_registered()
     text, _ = doctest._load_testfile(  # type: ignore
         filename,
         package,
@@ -567,6 +587,7 @@ def _test() -> int:
         options |= doctest.FAIL_FAST
     for filename in testfiles:
         if filename.endswith((".rst", ".md")) or args.docutils:
+            _ensure_directives_registered()
             failures, _ = testdocutils(  # type: ignore[misc,unused-ignore]
                 filename,
                 module_relative=False,
