@@ -161,7 +161,7 @@ issue on the tracker.
 
 # More information
 
-- Python support: >= 3.9, pypy
+- Python support: >= 3.10, pypy
 - Source: <https://github.com/git-pull/gp-libs>
 - Docs: <https://gp-libs.git-pull.com>
 - Changelog: <https://gp-libs.git-pull.com/history.html>
