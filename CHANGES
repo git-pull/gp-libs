@@ -12,6 +12,14 @@ $ pip install --user --upgrade --pre gp-libs
 
 - _Add your latest changes from PRs here_
 
+### Breaking changes
+
+- Drop Python 3.9 (#54)
+
+  The minimum version of Python in this and future releases is Python 3.10.
+
+  Python 3.9 reached end-of-life status on October 5th, 2025 (see PEP 596).
+
 ### Development
 
 - Add Python 3.14 to test matrix (#53)
