@@ -8,6 +8,24 @@ To install the unreleased gp-libs version, see [developmental releases](https://
 $ pip install --user --upgrade --pre gp-libs
 ```
 
+[pipx](https://pypa.github.io/pipx/docs/):
+
+```console
+$ pipx install --suffix=@next 'gp-libs' --pip-args '\--pre' --force
+```
+
+[uv](https://docs.astral.sh/uv/):
+
+```console
+$ uv add gp-libs --prerelease allow
+```
+
+[uvx](https://docs.astral.sh/uv/guides/tools/):
+
+```console
+$ uvx --from 'gp-libs' --prerelease allow gp-libs
+```
+
 ## gp-libs 0.0.15 (unreleased)
 
 - _Add your latest changes from PRs here_
