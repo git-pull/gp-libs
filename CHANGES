@@ -12,6 +12,10 @@ $ pip install --user --upgrade --pre gp-libs
 
 - _Add your latest changes from PRs here_
 
+### Development
+
+- Add Python 3.14 to test matrix (#53)
+
 ## gp-libs 0.0.14 (2025-10-26)
 
 ### Bug fixes
