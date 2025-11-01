@@ -26,9 +26,11 @@ $ uv add gp-libs --prerelease allow
 $ uvx --from 'gp-libs' --prerelease allow gp-libs
 ```
 
-## gp-libs 0.0.15 (unreleased)
+## gp-libs 0.0.16 (unreleased)
 
 - _Add your latest changes from PRs here_
+
+## gp-libs 0.0.15 (2025-11-01)
 
 ### Breaking changes
 
