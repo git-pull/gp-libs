@@ -30,6 +30,24 @@ In their versions you will see notification like `a1`, `b1`, and `rc1`, respecti
   $ pip install --user --upgrade --pre gp-libs
   ```
 
+- [pipx]\:
+
+  ```console
+  $ pipx install --suffix=@next 'gp-libs' --pip-args '\--pre' --force
+  ```
+
+- [uv]\:
+
+  ```console
+  $ uv add gp-libs --prerelease allow
+  ```
+
+- [uvx]\:
+
+  ```console
+  $ uvx --from 'gp-libs' --prerelease allow gp-libs
+  ```
+
 via trunk (can break easily):
 
 - [pip]\:
@@ -38,4 +56,19 @@ via trunk (can break easily):
   $ pip install --user -e git+https://github.com/git-pull/gp-libs.git#egg=gp-libs
   ```
 
+- [pipx]\:
+
+  ```console
+  $ pipx install --suffix=@master 'gp-libs @ git+https://github.com/git-pull/gp-libs.git@master' --force
+  ```
+
+- [uv]\:
+
+  ```console
+  $ uv add gp-libs --from git+https://github.com/git-pull/gp-libs.git
+  ```
+
 [pip]: https://pip.pypa.io/en/stable/
+[pipx]: https://pypa.github.io/pipx/docs/
+[uv]: https://docs.astral.sh/uv/
+[uvx]: https://docs.astral.sh/uv/guides/tools/
