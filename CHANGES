@@ -30,6 +30,20 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 
 - _Add your latest changes from PRs here_
 
+### Bug fixes
+
+#### pytest_doctest_docutils
+
+- Autouse fixtures from `conftest.py` are now properly discovered for doctest files (#56)
+
+  Backported from pytest commit [9cd14b4ff](https://github.com/pytest-dev/pytest/commit/9cd14b4ff) (2024-02-06).
+
+#### doctest_docutils
+
+- Doctest directive comments with leading whitespace (e.g., `  # doctest: +SKIP`) are now properly matched (#56)
+
+  Backported from Sphinx commit [ad0c343d3](https://github.com/sphinx-doc/sphinx/commit/ad0c343d3) (2025-01-04).
+
 ## gp-libs 0.0.15 (2025-11-01)
 
 ### Breaking changes
