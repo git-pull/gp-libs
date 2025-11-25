@@ -28,7 +28,14 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 
 ## gp-libs 0.0.16 (unreleased)
 
-- _Add your latest changes from PRs here_
+### Features
+
+#### pytest_doctest_docutils
+
+- Add `_unblock_doctest()` helper for programmatic re-enabling of built-in doctest plugin (#56)
+
+  Uses the public `pluginmanager.unblock()` API introduced in pytest 8.1.0, with graceful
+  fallback for older versions.
 
 ### Bug fixes
 
@@ -43,6 +50,10 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 - Doctest directive comments with leading whitespace (e.g., `  # doctest: +SKIP`) are now properly matched (#56)
 
   Backported from Sphinx commit [ad0c343d3](https://github.com/sphinx-doc/sphinx/commit/ad0c343d3) (2025-01-04).
+
+### Development
+
+- CI: Add pytest 9.x to test matrix, with pytest 7.x/8.x compatibility testing (#56)
 
 ## gp-libs 0.0.15 (2025-11-01)
 
