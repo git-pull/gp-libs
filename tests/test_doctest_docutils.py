@@ -250,3 +250,74 @@ def test_DocutilsDocTestFinder(
 
     for test in tests:
         doctest.DebugRunner(verbose=False).run(test)
+
+
+class DoctestOptReTestCase(t.NamedTuple):
+    """Test fixture for doctestopt_re regex.
+
+    Backported from Sphinx commit ad0c343d3 (2025-01-04).
+    https://github.com/sphinx-doc/sphinx/commit/ad0c343d3
+
+    The original Sphinx test verified HTML output doesn't have trailing
+    whitespace after flag trimming. This test verifies the regex correctly
+    matches and removes leading whitespace before doctest flags.
+
+    Refs: sphinx-doc/sphinx#13164
+    """
+
+    test_id: str
+    input_code: str
+    expected_output: str
+
+
+DOCTESTOPT_RE_FIXTURES = [
+    DoctestOptReTestCase(
+        test_id="trailing-spaces-before-flag",
+        input_code="result = func()   # doctest: +SKIP",
+        expected_output="result = func()",
+    ),
+    DoctestOptReTestCase(
+        test_id="tab-before-flag",
+        input_code="result = func()\t# doctest: +SKIP",
+        expected_output="result = func()",
+    ),
+    DoctestOptReTestCase(
+        test_id="no-space-before-flag",
+        input_code="result = func()# doctest: +SKIP",
+        expected_output="result = func()",
+    ),
+    DoctestOptReTestCase(
+        test_id="multiline-with-leading-whitespace",
+        input_code="line1\nresult = func()   # doctest: +SKIP\nline3",
+        expected_output="line1\nresult = func()\nline3",
+    ),
+    DoctestOptReTestCase(
+        test_id="multiple-flags-on-separate-lines",
+        input_code="a = 1  # doctest: +SKIP\nb = 2  # doctest: +ELLIPSIS",
+        expected_output="a = 1\nb = 2",
+    ),
+    DoctestOptReTestCase(
+        test_id="mixed-tabs-and-spaces",
+        input_code="result = func() \t # doctest: +NORMALIZE_WHITESPACE",
+        expected_output="result = func()",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    DoctestOptReTestCase._fields,
+    DOCTESTOPT_RE_FIXTURES,
+    ids=[f.test_id for f in DOCTESTOPT_RE_FIXTURES],
+)
+def test_doctestopt_re_whitespace_trimming(
+    test_id: str,
+    input_code: str,
+    expected_output: str,
+) -> None:
+    """Verify doctestopt_re removes leading whitespace before doctest flags.
+
+    Regression test for Sphinx PR #13164.
+    Backported from Sphinx commit ad0c343d3 (2025-01-04).
+    """
+    result = doctest_docutils.doctestopt_re.sub("", input_code)
+    assert result == expected_output
