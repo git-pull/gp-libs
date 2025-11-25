@@ -37,6 +37,9 @@ if t.TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Parse pytest version for version-specific features
+PYTEST_VERSION = tuple(int(x) for x in pytest.__version__.split(".")[:2])
+
 # Lazy definition of runner class
 RUNNER_CLASS = None
 
@@ -66,6 +69,28 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     if config.pluginmanager.has_plugin("doctest"):
         config.pluginmanager.set_blocked("doctest")
+
+
+def _unblock_doctest(config: pytest.Config) -> bool:
+    """Unblock doctest plugin (pytest 8.1+ only).
+
+    Re-enables the built-in doctest plugin after it was blocked by
+    pytest_configure. Uses the public unblock() API introduced in pytest 8.1.0.
+
+    Parameters
+    ----------
+    config : pytest.Config
+        The pytest configuration object
+
+    Returns
+    -------
+    bool
+        True if unblocked successfully, False if API not available
+    """
+    pm = config.pluginmanager
+    if PYTEST_VERSION >= (8, 1) and hasattr(pm, "unblock"):
+        return pm.unblock("doctest")
+    return False
 
 
 def pytest_unconfigure() -> None:
@@ -305,6 +330,12 @@ class DocTestDocutilsFile(pytest.Module):
 
         # Uses internal doctest module parsing mechanism.
         finder = DocutilsDocTestFinder()
+
+        # While doctests in .rst/.md files don't support fixtures directly,
+        # we still need to pick up autouse fixtures.
+        # Backported from pytest commit 9cd14b4ff (2024-02-06).
+        # https://github.com/pytest-dev/pytest/commit/9cd14b4ff
+        self.session._fixturemanager.parsefactories(self)
 
         optionflags = get_optionflags(self.config)
 
