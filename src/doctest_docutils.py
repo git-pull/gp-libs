@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import doctest
-import functools
 import linecache
 import logging
 import os
@@ -401,32 +400,6 @@ class DocutilsDocTestFinder:
             )
             if test is not None:
                 tests.append(test)
-
-    if sys.version_info < (3, 13):
-
-        def _from_module(
-            self,
-            module: str | types.ModuleType | None,
-            object: object,  # NOQA: A002
-        ) -> bool:
-            """Return true if the given object lives in the given module.
-
-            `cached_property` objects are never considered a part
-            of the 'current module'. As such they are skipped by doctest.
-            Here we override `_from_module` to check the underlying
-            function instead. https://github.com/python/cpython/issues/107995.
-            """
-            if isinstance(object, functools.cached_property):
-                object = object.func  # noqa: A001
-
-            # Type ignored because this is a private function.
-            return t.cast(
-                "bool",
-                super()._from_module(module, object),  # type:ignore[misc]
-            )
-
-    else:  # pragma: no cover
-        pass
 
     def _get_test(
         self,
