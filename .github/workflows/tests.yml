@@ -11,6 +11,11 @@ jobs:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
         docutils-version: ['0.18', '0.19']
+        pytest-version: ['7', '8']
+        exclude:
+          # pytest 8 requires Python 3.10+, but exclude some combinations to reduce matrix size
+          - python-version: '3.14'
+            pytest-version: '7'
     steps:
       - uses: actions/checkout@v5
 
@@ -25,10 +30,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Print python versions
+      - name: Install specific pytest version
+        run: uv pip install "pytest~=${{ matrix.pytest-version }}.0"
+
+      - name: Print python and pytest versions
         run: |
           python -V
           uv run python -V
+          uv run pytest --version
 
       - name: Lint with ruff check
         run: uv run ruff check .
