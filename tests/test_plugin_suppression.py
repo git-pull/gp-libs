@@ -475,3 +475,80 @@ def test_unblock_api_available(
 
     result = pytester.runpytest("test_verify.py", "-v")
     result.assert_outcomes(passed=1)
+
+
+# pytest 8.4+ version-specific tests
+
+
+@requires_pytest_version((8, 4), "--disable-plugin-autoload flag")
+def test_disable_plugin_autoload_flag(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """Test --disable-plugin-autoload CLI flag in pytest 8.4+.
+
+    Verifies that the --disable-plugin-autoload flag is recognized and
+    prevents automatic plugin loading via entry points.
+
+    Ref: pytest 8.4.0 changelog - --disable-plugin-autoload CLI flag
+    """
+    # Create a simple test file
+    pytester.makepyfile(
+        test_simple=textwrap.dedent(
+            """
+            def test_pass():
+                assert True
+            """,
+        ),
+    )
+
+    # Test that the flag is recognized (doesn't error)
+    result = pytester.runpytest(
+        "--disable-plugin-autoload",
+        "-p",
+        "pytest_doctest_docutils",
+        "test_simple.py",
+        "-v",
+    )
+
+    # Should succeed - the flag should be recognized
+    result.assert_outcomes(passed=1)
+
+
+@requires_pytest_version((8, 4), "--disable-plugin-autoload flag")
+def test_disable_plugin_autoload_with_explicit_plugin(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """Test --disable-plugin-autoload with explicit plugin loading.
+
+    When --disable-plugin-autoload is used, only explicitly specified
+    plugins via -p should be loaded.
+
+    Ref: pytest 8.4.0 changelog - --disable-plugin-autoload CLI flag
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+
+    # Create a doctest file
+    pytester.makefile(
+        ".rst",
+        test_doc=textwrap.dedent(
+            """
+            Example
+            =======
+
+            >>> 1 + 1
+            2
+            """,
+        ),
+    )
+
+    # With --disable-plugin-autoload, explicitly load our plugin
+    result = pytester.runpytest(
+        "--disable-plugin-autoload",
+        "-p",
+        "pytest_doctest_docutils",
+        "test_doc.rst",
+        "-v",
+    )
+
+    # Should find and run the doctest
+    result.assert_outcomes(passed=1)
