@@ -30,7 +30,10 @@ logger = logging.getLogger(__name__)
 
 
 blankline_re = re.compile(r"^\s*<BLANKLINE>", re.MULTILINE)
-doctestopt_re = re.compile(r"#\s*doctest:.+$", re.MULTILINE)
+# Backported from Sphinx commit ad0c343d3 (2025-01-04).
+# https://github.com/sphinx-doc/sphinx/commit/ad0c343d3
+# Allow optional leading whitespace before doctest directive comments.
+doctestopt_re = re.compile(r"[ \t]*#\s*doctest:.+$", re.MULTILINE)
 
 
 def is_allowed_version(version: str, spec: str) -> bool:
