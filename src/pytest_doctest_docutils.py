@@ -306,6 +306,12 @@ class DocTestDocutilsFile(pytest.Module):
         # Uses internal doctest module parsing mechanism.
         finder = DocutilsDocTestFinder()
 
+        # While doctests in .rst/.md files don't support fixtures directly,
+        # we still need to pick up autouse fixtures.
+        # Backported from pytest commit 9cd14b4ff (2024-02-06).
+        # https://github.com/pytest-dev/pytest/commit/9cd14b4ff
+        self.session._fixturemanager.parsefactories(self)
+
         optionflags = get_optionflags(self.config)
 
         runner = _get_runner(
