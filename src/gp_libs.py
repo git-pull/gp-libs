@@ -5,7 +5,7 @@ from __future__ import annotations
 __title__ = "gp-libs"
 __package_name__ = "gp_libs"
 __description__ = "Internal utilities for git-pull projects"
-__version__ = "0.0.15"
+__version__ = "0.0.16"
 __author__ = "Tony Narlock"
 __github__ = "https://github.com/git-pull/gp-libs"
 __docs__ = "https://gp-libs.git-pull.com"
