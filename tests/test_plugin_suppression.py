@@ -1,7 +1,7 @@
 """Test pytest plugin suppression and precedence.
 
 Tests for pytest plugin blocking behavior in pytest_doctest_docutils.
-Ensures plugin suppression works correctly across pytest 7.x/8.x.
+Ensures plugin suppression works correctly across pytest 7.x/8.x/9.x.
 
 Ref: pytest's test_pluginmanager.py patterns for plugin blocking tests.
 """
@@ -14,6 +14,33 @@ import typing as t
 
 import _pytest.pytester
 import pytest
+
+# Parse pytest version for version-specific tests
+PYTEST_VERSION = tuple(int(x) for x in pytest.__version__.split(".")[:2])
+
+
+def requires_pytest_version(
+    min_version: tuple[int, int],
+    reason: str,
+) -> pytest.MarkDecorator:
+    """Skip test if pytest version is below minimum.
+
+    Parameters
+    ----------
+    min_version : tuple[int, int]
+        Minimum (major, minor) pytest version required
+    reason : str
+        Description of the feature requiring this version
+
+    Returns
+    -------
+    pytest.MarkDecorator
+        A skipif marker for the test
+    """
+    return pytest.mark.skipif(
+        min_version > PYTEST_VERSION,
+        reason=f"Requires pytest {'.'.join(map(str, min_version))}+: {reason}",
+    )
 
 
 class PluginSuppressionCase(t.NamedTuple):
@@ -375,3 +402,76 @@ def test_collector_routing(
     assert expected_collector_type in stdout, (
         f"Expected collector {expected_collector_type} not found in output:\n{stdout}"
     )
+
+
+# pytest 8.1+ version-specific tests
+
+
+@requires_pytest_version((8, 1), "pluginmanager.unblock() API")
+def test_unblock_api_available(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """Test pluginmanager.unblock() API available in pytest 8.1+.
+
+    Verifies that the unblock() method exists and can be used to
+    re-enable a previously blocked plugin.
+
+    Ref: pytest 8.1.0 changelog - pluginmanager.unblock() public API
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+
+    # Create conftest that tests unblock API
+    pytester.makeconftest(
+        textwrap.dedent(
+            """
+            import pytest
+
+            @pytest.hookimpl(trylast=True)
+            def pytest_configure(config):
+                pm = config.pluginmanager
+
+                # Verify unblock method exists
+                assert hasattr(pm, 'unblock'), "unblock() API not found"
+
+                # doctest should be blocked by pytest_doctest_docutils
+                assert pm.is_blocked('doctest'), "doctest should be blocked"
+
+                # Test unblock API
+                result = pm.unblock('doctest')
+
+                # Store results for test verification
+                config._unblock_api_exists = True
+                config._unblock_result = result
+                config._doctest_unblocked = not pm.is_blocked('doctest')
+
+            @pytest.fixture
+            def unblock_test_results(request):
+                return {
+                    'api_exists': getattr(request.config, '_unblock_api_exists', False),
+                    'unblock_result': getattr(request.config, '_unblock_result', None),
+                    'doctest_unblocked': getattr(
+                        request.config, '_doctest_unblocked', False
+                    ),
+                }
+            """,
+        ),
+    )
+
+    # Create test that verifies unblock worked
+    pytester.makepyfile(
+        test_verify=textwrap.dedent(
+            """
+            def test_unblock_api_works(unblock_test_results):
+                assert unblock_test_results['api_exists'], "unblock() API should exist"
+                assert unblock_test_results['unblock_result'] is True, (
+                    "unblock() should return True when successful"
+                )
+                assert unblock_test_results['doctest_unblocked'], (
+                    "doctest should be unblocked after calling unblock()"
+                )
+            """,
+        ),
+    )
+
+    result = pytester.runpytest("test_verify.py", "-v")
+    result.assert_outcomes(passed=1)
