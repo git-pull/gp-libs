@@ -196,7 +196,7 @@ For detailed coding standards, refer to `.cursor/rules/dev-loop.mdc`. Key highli
 
 ### Imports
 
-- **Use namespace imports**: `import enum` instead of `from enum import Enum`
+- **Use namespace imports for stdlib**: `import enum` instead of `from enum import Enum`; third-party packages may use `from X import Y`
 - **For typing**, use `import typing as t` and access via namespace: `t.NamedTuple`, etc.
 - **Use `from __future__ import annotations`** at the top of all Python files
 
