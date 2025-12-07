@@ -339,7 +339,7 @@ wheels = [
 
 [[package]]
 name = "gp-libs"
-version = "0.0.16"
+version = "0.0.17"
 source = { editable = "." }
 dependencies = [
     { name = "docutils" },
