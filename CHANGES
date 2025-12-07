@@ -28,7 +28,9 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 
 ## gp-libs 0.0.17 (unreleased)
 
-_Add your latest changes from PRs here_
+### CI
+
+- Migrate to PyPI Trusted Publisher (#57)
 
 ## gp-libs 0.0.16 (2025-11-25)
 
