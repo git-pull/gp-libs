@@ -266,6 +266,18 @@ what:
 - Register myst directives automatically
 - Add tests for Markdown doctest parsing
 ```
+For multi-line commits, use heredoc to preserve formatting:
+```bash
+git commit -m "$(cat <<'EOF'
+feat(Component[method]) add feature description
+
+why: Explanation of the change.
+what:
+- First change
+- Second change
+EOF
+)"
+```
 
 ## Debugging Tips
 
