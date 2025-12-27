@@ -30,6 +30,10 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 
 <!-- To maintainers and contributors: Please add notes for the forthcoming version below -->
 
+### Documentation
+
+- Migrate docs deployment to AWS OIDC authentication and AWS CLI
+
 ## gp-libs 0.0.17 (2025-12-07)
 
 ### CI
