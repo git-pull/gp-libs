@@ -248,13 +248,14 @@ True
 >>> is_allowed_version('3.3', '>3.2, <4.0')
 True
 
-**Async doctest pattern:**
+**Async doctest pattern (top-level await):**
 ```python
+>>> import asyncio
+>>> await asyncio.sleep(0)  # Top-level await works directly
 >>> async def example():
-...     result = await some_async_function()
-...     return result
->>> asyncio.run(example())
-'expected output'
+...     return 42
+>>> await example()
+42
 ```
 
 **Using fixtures in doctests:**
