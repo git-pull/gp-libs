@@ -144,6 +144,18 @@ def _make_runner(
 
     Returns asyncio.Runner on Python 3.11+, or _Runner310 shim on 3.10.
     Both have compatible interfaces (context manager with run() method).
+
+    Parameters
+    ----------
+    debug : bool | None, optional
+        Enable event loop debug mode, by default None
+    loop_factory : Callable[[], AbstractEventLoop] | None, optional
+        Factory function to create custom event loops, by default None
+
+    Returns
+    -------
+    _Runner310
+        Context manager with run() method for executing coroutines
     """
     Runner = getattr(asyncio, "Runner", None)
     if Runner is not None:
