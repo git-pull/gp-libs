@@ -10,6 +10,7 @@ https://docs.pytest.org/en/stable/deprecations.html
 
 from __future__ import annotations
 
+import asyncio
 import pathlib
 import typing as t
 
@@ -80,3 +81,14 @@ def make_app_params(
         return args, kws
 
     return fn
+
+
+@pytest.fixture(autouse=True)
+def doctest_namespace(doctest_namespace: dict[str, t.Any]) -> dict[str, t.Any]:
+    """Inject common fixtures into doctest namespace.
+
+    Provides:
+    - asyncio: The asyncio module for async doctests
+    """
+    doctest_namespace["asyncio"] = asyncio
+    return doctest_namespace
