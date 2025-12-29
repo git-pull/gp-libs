@@ -30,6 +30,14 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 
 <!-- To maintainers and contributors: Please add notes for the forthcoming version below -->
 
+### Development
+
+- Migrate from Make to just for task running (#60)
+
+  Replaces `Makefile` and `docs/Makefile` with `justfile` and `docs/justfile` using
+  [just](https://just.systems/) 1.45.0. Recipes are organized with `[group]` attributes
+  for improved discoverability via `just --list`.
+
 ### Documentation
 
 - Migrate docs deployment to AWS OIDC authentication and AWS CLI
