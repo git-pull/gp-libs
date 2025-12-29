@@ -600,6 +600,21 @@ class AsyncDocTestRunner(doctest.DocTestRunner):
     state to persist across examples within the same block.
 
     Usage is identical to doctest.DocTestRunner - async support is automatic.
+
+    Examples
+    --------
+    >>> import doctest
+    >>> from doctest_docutils import AsyncDocTestRunner
+    >>> runner = AsyncDocTestRunner(verbose=False)
+    >>> test = doctest.DocTest(
+    ...     [doctest.Example("import asyncio", ""),
+    ...      doctest.Example("await asyncio.sleep(0)", ""),
+    ...      doctest.Example("1 + 1", "2\\n")],
+    ...     {}, "example", "example.py", 0, None
+    ... )
+    >>> result = runner.run(test)
+    >>> result.failed
+    0
     """
 
     def run(
