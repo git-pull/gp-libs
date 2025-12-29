@@ -56,11 +56,27 @@ class _Runner310(AbstractContextManager["_Runner310"]):
         debug: bool | None = None,
         loop_factory: t.Callable[[], asyncio.AbstractEventLoop] | None = None,
     ) -> None:
+        """Initialize the async runner.
+
+        Parameters
+        ----------
+        debug : bool | None, optional
+            Enable event loop debug mode, by default None
+        loop_factory : Callable[[], AbstractEventLoop] | None, optional
+            Factory function to create custom event loops, by default None
+        """
         self._debug = debug
         self._loop_factory = loop_factory
         self._loop: asyncio.AbstractEventLoop | None = None
 
     def __enter__(self) -> _Runner310:
+        """Enter the context and create the event loop.
+
+        Returns
+        -------
+        _Runner310
+            Self, for use in with-statement
+        """
         if self._loop_factory is None:
             loop = asyncio.new_event_loop()
         else:
@@ -84,6 +100,19 @@ class _Runner310(AbstractContextManager["_Runner310"]):
         exc_val: BaseException | None,
         exc_tb: t.Any,
     ) -> None:
+        """Exit the context and clean up the event loop.
+
+        Cancels pending tasks, shuts down async generators, and closes the loop.
+
+        Parameters
+        ----------
+        exc_type : type[BaseException] | None
+            Exception type if an exception was raised
+        exc_val : BaseException | None
+            Exception instance if an exception was raised
+        exc_tb : Any
+            Traceback if an exception was raised
+        """
         loop = self._loop
         if loop is None:
             return
