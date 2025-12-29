@@ -34,6 +34,10 @@ _Notes on upcoming releases will be added here_
 
 ### Breaking changes
 
+#### `testdocutils()` is now `run_doctest_docutils()` (#59)
+
+The function was renamed to avoid pytest automatically collecting it as a test.
+
 #### pytest 8.3.3 is now required (#94)
 
 pytest is now a declared dependency with a floor of 8.3.3. It was previously
@@ -55,6 +59,24 @@ docutils below 0.22.
 ```toml
 "docutils>=0.20"
 ```
+
+### What's new
+
+#### Top-level `await` in doctests (#59)
+
+Async doctests run without `asyncio.run()` boilerplate. Detection is
+automatic, so sync doctests are unaffected and async ones need no marker:
+
+```python
+>>> await asyncio.sleep(0)
+>>> async def fetch():
+...     return 42
+>>> await fetch()
+42
+```
+
+The pytest plugin picks this up too, so async examples in `.rst` and `.md`
+files run the same way.
 
 ### Documentation
 
