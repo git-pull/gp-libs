@@ -36,7 +36,18 @@ class AsyncDoctestFixture(t.NamedTuple):
 
 
 def _rst_content(body: str) -> str:
-    """Wrap doctest body in RST format."""
+    """Wrap doctest body in RST format.
+
+    Parameters
+    ----------
+    body : str
+        The doctest example code to embed
+
+    Returns
+    -------
+    str
+        RST document with title and doctest body
+    """
     return f"""\
 Test
 ====
@@ -46,7 +57,18 @@ Test
 
 
 def _md_content(body: str) -> str:
-    """Wrap doctest body in Markdown format."""
+    """Wrap doctest body in Markdown format.
+
+    Parameters
+    ----------
+    body : str
+        The doctest example code to embed
+
+    Returns
+    -------
+    str
+        Markdown document with heading and fenced code block
+    """
     return f"""\
 # Test
 
