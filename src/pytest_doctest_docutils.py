@@ -23,7 +23,11 @@ import pytest
 from _pytest import outcomes
 from _pytest.outcomes import OutcomeException
 
-from doctest_docutils import DocutilsDocTestFinder, _ensure_directives_registered
+from doctest_docutils import (
+    AsyncDocTestRunner,
+    DocutilsDocTestFinder,
+    _ensure_directives_registered,
+)
 
 if t.TYPE_CHECKING:
     import pathlib
@@ -137,11 +141,11 @@ def _is_doctest(
 def _init_runner_class() -> type[doctest.DocTestRunner]:
     import doctest
 
-    class PytestDoctestRunner(doctest.DebugRunner):
-        """Runner to collect failures.
+    class PytestDoctestRunner(AsyncDocTestRunner):
+        """Runner to collect failures with async support.
 
-        Note that the out variable in this case is a list instead of a
-        stdout-like object.
+        Extends AsyncDocTestRunner to enable top-level await in doctests.
+        The out variable in this case is a list instead of a stdout-like object.
         """
 
         def __init__(
