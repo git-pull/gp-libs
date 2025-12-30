@@ -224,12 +224,41 @@ type
 """
 ```
 
-### Doctest Guidelines
+### Doctests
 
-1. **Use narrative descriptions** for test sections rather than inline comments
-2. **Move complex examples** to dedicated test files at `tests/examples/<path_to_module>/test_<example>.py`
-3. **Keep doctests simple and focused** on demonstrating usage
-4. **Add blank lines between test sections** for improved readability
+**All functions and methods MUST have working doctests.** Doctests serve as both documentation and tests.
+
+**CRITICAL RULES:**
+- Doctests MUST actually execute - never comment out function calls or use placeholder output
+- Doctests MUST NOT be converted to `.. code-block::` as a workaround (code-blocks don't run)
+- If you cannot create a working doctest, **STOP and ask for help**
+
+**Available tools for doctests:**
+- `doctest_namespace` fixtures: `tmp_path` (add more via `conftest.py`)
+- Ellipsis for variable output: `# doctest: +ELLIPSIS`
+- PEP-440 version specifiers via `is_allowed_version()` for version-conditional tests
+
+**`# doctest: +SKIP` is NOT permitted** - it's just another workaround that doesn't test anything. Use the fixtures and ellipsis patterns properly.
+
+**Simple doctest example:**
+```python
+>>> is_allowed_version('3.3', '<=3.5')
+True
+>>> is_allowed_version('3.3', '>3.2, <4.0')
+True
+```
+
+**When output varies, use ellipsis:**
+```python
+>>> parse_document(content)  # doctest: +ELLIPSIS
+<docutils.nodes.document ...>
+```
+
+**Additional guidelines:**
+1. Use narrative descriptions for test sections rather than inline comments
+2. Move complex examples to dedicated test files at `tests/examples/<path_to_module>/test_<example>.py`
+3. Keep doctests simple and focused on demonstrating usage
+4. Add blank lines between test sections for improved readability
 
 ### Git Commit Standards
 
