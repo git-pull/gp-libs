@@ -231,7 +231,8 @@ type
 **All functions and methods MUST have working doctests.** Doctests serve as both documentation and tests.
 
 **CRITICAL RULES:**
-- Doctests MUST actually execute - never comment out function calls or use placeholder output
+- Doctests MUST actually execute - never comment out function call `asyncio.run()` or similar calls
+  or use placeholder output
 - Doctests MUST NOT be converted to `.. code-block::` as a workaround (code-blocks don't run)
 - If you cannot create a working doctest, **STOP and ask for help**
 
@@ -248,6 +249,23 @@ type
 True
 >>> is_allowed_version('3.3', '>3.2, <4.0')
 True
+
+**Async doctest pattern (top-level await):**
+```python
+>>> import asyncio
+>>> await asyncio.sleep(0)  # Top-level await works directly
+>>> async def example():
+...     return 42
+>>> await example()
+42
+```
+
+**Using fixtures in doctests:**
+```python
+>>> from pathlib import Path
+>>> doc_path = tmp_path / "example.rst"  # tmp_path from doctest_namespace
+>>> doc_path.write_text(">>> 1 + 1\\n2")
+...
 ```
 
 **When output varies, use ellipsis:**
@@ -355,6 +373,119 @@ When stuck in debugging loops:
 2. **Minimize to MVP**: Remove all debugging cruft and experimental code
 3. **Document the issue** comprehensively for a fresh approach
 4. **Format for portability** (using quadruple backticks)
+
+## Asyncio Development
+
+### Async Subprocess Patterns
+
+**Always use `communicate()` for subprocess I/O:**
+```python
+proc = await asyncio.create_subprocess_shell(...)
+stdout, stderr = await proc.communicate()  # Prevents deadlocks
+```
+
+**Use `asyncio.timeout()` for timeouts:**
+```python
+async with asyncio.timeout(300):
+    stdout, stderr = await proc.communicate()
+```
+
+**Handle BrokenPipeError gracefully:**
+```python
+try:
+    proc.stdin.write(data)
+    await proc.stdin.drain()
+except BrokenPipeError:
+    pass  # Process already exited - expected behavior
+```
+
+### Async API Conventions
+
+- **Class naming**: Use `Async` prefix: `AsyncDocTestRunner`
+- **Callbacks**: Async APIs accept only async callbacks (no union types)
+- **Shared logic**: Extract argument-building to sync functions, share with async
+
+```python
+# Shared argument building (sync)
+def build_test_args(verbose: bool = False) -> dict[str, t.Any]:
+    args = {"verbose": verbose}
+    return args
+
+# Async method uses shared logic
+async def run_tests(self, verbose: bool = False) -> TestResults:
+    args = build_test_args(verbose)
+    return await self._run(**args)
+```
+
+### Async Testing
+
+**pytest configuration:**
+```toml
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+```
+
+**Async fixture pattern:**
+```python
+@pytest_asyncio.fixture(loop_scope="function")
+async def async_doc_runner(tmp_path: Path) -> t.AsyncGenerator[AsyncDocTestRunner, None]:
+    runner = AsyncDocTestRunner(path=tmp_path)
+    yield runner
+```
+
+**Parametrized async tests:**
+```python
+class DocTestFixture(t.NamedTuple):
+    test_id: str
+    doc_content: str
+    expected: list[str]
+
+DOC_FIXTURES = [
+    DocTestFixture("basic", ">>> 1 + 1\n2", ["pass"]),
+    DocTestFixture("failure", ">>> 1 + 1\n3", ["fail"]),
+]
+
+@pytest.mark.parametrize(
+    list(DocTestFixture._fields),
+    DOC_FIXTURES,
+    ids=[f.test_id for f in DOC_FIXTURES],
+)
+@pytest.mark.asyncio
+async def test_doctest(test_id: str, doc_content: str, expected: list) -> None:
+    ...
+```
+
+### Async Anti-Patterns
+
+**DON'T poll returncode:**
+```python
+# WRONG
+while proc.returncode is None:
+    await asyncio.sleep(0.1)
+
+# RIGHT
+await proc.wait()
+```
+
+**DON'T mix blocking calls in async code:**
+```python
+# WRONG
+async def bad():
+    subprocess.run(["python", "-m", "doctest", file])  # Blocks event loop!
+
+# RIGHT
+async def good():
+    proc = await asyncio.create_subprocess_shell(...)
+    await proc.wait()
+```
+
+**DON'T close the event loop in tests:**
+```python
+# WRONG - breaks pytest-asyncio cleanup
+loop = asyncio.get_running_loop()
+loop.close()
+```
 
 ## Sphinx/Docutils-Specific Considerations
 
