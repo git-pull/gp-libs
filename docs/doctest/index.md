@@ -5,6 +5,17 @@
 
 Built on {mod}`doctest`.
 
+::::{grid} 1 1 2 2
+:gutter: 2 2 3 3
+
+:::{grid-item-card} pytest plugin
+:link: pytest
+:link-type: doc
+Run doctests in `.rst` and `.md` files via pytest.
+:::
+
+::::
+
 :::{note}
 
 Before you begin, acquaint yourself with:
