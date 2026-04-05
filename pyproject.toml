@@ -48,7 +48,7 @@ Changes = "https://github.com/git-pull/gp-libs/blob/master/CHANGES"
 [dependency-groups]
 dev = [
   # Docs
-  "gp-sphinx==0.0.1a0",
+  "gp-sphinx==0.0.1a1",
   "gp-libs",
   "sphinx-autobuild",
   # Testing
@@ -69,7 +69,7 @@ dev = [
 ]
 
 docs = [
-  "gp-sphinx==0.0.1a0",
+  "gp-sphinx==0.0.1a1",
   "gp-libs",
   "sphinx-autobuild",
 ]
