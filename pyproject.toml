@@ -48,18 +48,9 @@ Changes = "https://github.com/git-pull/gp-libs/blob/master/CHANGES"
 [dependency-groups]
 dev = [
   # Docs
-  "sphinx<9",
-  "furo",
+  "gp-sphinx==0.0.1a1",
   "gp-libs",
   "sphinx-autobuild",
-  "sphinx-autodoc-typehints",
-  "sphinx-inline-tabs",
-  "sphinxext-opengraph",
-  "sphinx-copybutton",
-  "sphinxext-rediraffe",
-  "sphinx-design",
-  "myst-parser",
-  "linkify-it-py",
   # Testing
   "gp-libs",
   "pytest",
@@ -78,18 +69,9 @@ dev = [
 ]
 
 docs = [
-  "sphinx<9",
-  "furo",
+  "gp-sphinx==0.0.1a1",
   "gp-libs",
   "sphinx-autobuild",
-  "sphinx-autodoc-typehints",
-  "sphinx-inline-tabs",
-  "sphinxext-opengraph",
-  "sphinx-copybutton",
-  "sphinxext-rediraffe",
-  "sphinx-design",
-  "myst-parser",
-  "linkify-it-py",
 ]
 testing = [
   "gp-libs",
@@ -137,13 +119,6 @@ files = [
   "tests/",
 ]
 
-[[tool.mypy.overrides]]
-module = ["sphinx_fonts"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["tests.docs._ext.test_sphinx_fonts"]
-disable_error_code = ["arg-type"]
 
 [tool.ruff]
 target-version = "py310"
