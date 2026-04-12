@@ -42,6 +42,7 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 
 - Migrate docs deployment to AWS OIDC authentication and AWS CLI
 - Visual improvements to API docs from [gp-sphinx](https://gp-sphinx.git-pull.com)-based Sphinx packages (#67)
+- Bump gp-sphinx docs stack to v0.0.1a8 (#68)
 
 ## gp-libs 0.0.17 (2025-12-07)
 
