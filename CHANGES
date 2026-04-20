@@ -30,6 +30,47 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 
 <!-- To maintainers and contributors: Please add notes for the forthcoming version below -->
 
+### Features
+
+#### doctest_docutils
+
+- Add `AsyncDocTestRunner` for transparent top-level await support in doctests (#59)
+
+  Enables clean async doctests without `asyncio.run()` boilerplate:
+
+  ```python
+  # Before (required boilerplate)
+  >>> async def example():
+  ...     await asyncio.sleep(0)
+  ...     return 42
+  >>> asyncio.run(example())
+  42
+
+  # After (top-level await)
+  >>> await asyncio.sleep(0)
+  >>> async def fetch():
+  ...     return 42
+  >>> await fetch()
+  42
+  ```
+
+  Uses Python's `PyCF_ALLOW_TOP_LEVEL_AWAIT` compile flag (3.8+) with automatic
+  detection - sync doctests work unchanged, async doctests "just work."
+
+  Includes `_Runner310` shim for Python 3.10 compatibility (asyncio.Runner is 3.11+).
+
+#### pytest_doctest_docutils
+
+- Integrate `AsyncDocTestRunner` for async doctest support in pytest (#59)
+
+### Breaking changes
+
+#### doctest_docutils
+
+- Rename `testdocutils()` → `run_doctest_docutils()` (#59)
+
+  The function was renamed to avoid pytest automatically collecting it as a test.
+
 ### Development
 
 - Migrate from Make to just for task running (#60)
