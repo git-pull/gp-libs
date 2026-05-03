@@ -30,6 +30,12 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 
 <!-- To maintainers and contributors: Please add notes for the forthcoming version below -->
 
+### Documentation
+
+- Bump gp-sphinx docs stack to v0.0.1a16 — docs site now renders
+  via `gp-furo-theme`, a Tailwind v4 respin of Furo, with
+  `sphinx-vite-builder` handling theme-asset builds (#69)
+
 ### Development
 
 - Migrate from Make to just for task running (#60)
