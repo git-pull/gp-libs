@@ -138,7 +138,7 @@ gp-libs 0.0.14 fixes downstream packaging runs that execute the {mod}`doctest_do
 
 #### Doctest directives auto-register outside pytest (#52)
 
-{func}`doctest_docutils._ensure_directives_registered` registers the `doctest`, `testsetup`, `testcleanup`, and `tab` directives once per interpreter. That keeps `.. doctest::`, ````{doctest}``, and tabbed doctest examples discoverable in packaging environments that invoke pytest differently from gp-libs' own suite.
+{func}`doctest_docutils._ensure_directives_registered` registers the `doctest`, `testsetup`, `testcleanup`, and `tab` directives once per interpreter. That keeps `.. doctest::`, ```` ```{doctest} ````, and tabbed doctest examples discoverable in packaging environments that invoke pytest differently from gp-libs' own suite.
 
 This resolves the Arch Linux packaging failure reported in #48.
 
