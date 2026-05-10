@@ -28,410 +28,368 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 
 ## gp-libs 0.0.18 (unreleased)
 
-<!-- To maintainers and contributors: Please add notes for the forthcoming version below -->
+<!-- KEEP THIS PLACEHOLDER - DO NOT REMOVE OR MODIFY THIS LINE -->
+_Notes on upcoming releases will be added here_
+<!-- END PLACEHOLDER - ADD NEW CHANGELOG ENTRIES BELOW THIS LINE -->
+
+gp-libs 0.0.18 refreshes the project documentation and maintainer workflow around the shared git-pull docs stack. The docs now use the Library Skeleton page shape, the gp-sphinx theme and API presentation packages, and a just-based command surface that matches the rest of the workspace. Readers get a more navigable site; maintainers get reusable commands and fewer repo-local Sphinx assets to keep in sync.
+
+### What's new
+
+#### Project commands now use just (#60)
+
+The root project and docs site now use [just](https://just.systems/) instead of Make. The new recipes group testing, linting, type checking, docs builds, formatting, and watch tasks so `just --list` is useful as a local command index.
+
+The CI docs workflow, `.tmuxp.yaml`, and agent instructions were updated to call the just recipes. The old root and docs Makefiles were removed so new contributors have one task runner to learn.
+
+#### Documentation now follows the Library Skeleton pattern (#65)
+
+The documentation was reorganized around a landing page, topic cards, and a dedicated project section. The new structure keeps the user-facing extensions visible first: {doc}`doctest/index`, {doc}`doctest/pytest`, and {doc}`linkify_issues/index`.
+
+The history page still includes this file directly, so release notes continue to render as part of the docs site rather than living only in the repository.
+
+#### Shared gp-sphinx docs platform (#66)
+
+The docs site moved from repo-local Sphinx theme glue, templates, CSS, and JavaScript to the published gp-sphinx package stack. `docs/conf.py` now delegates common configuration to `gp_sphinx.config.merge_sphinx_config()`, while gp-libs keeps only the project-specific values such as intersphinx mappings, logos, linkcode, and redirects.
+
+This removes bundled docs support files that are now owned by shared packages and keeps gp-libs aligned with the broader git-pull documentation platform.
+
+#### API reference visuals from gp-sphinx (#67)
+
+The API pages now render with gp-sphinx's API-style autodoc presentation. Public objects such as {class}`doctest_docutils.DocutilsDocTestFinder`, {class}`pytest_doctest_docutils.DocTestDocutilsFile`, and {class}`linkify_issues.LinkifyIssues` get the newer card layout, badges, and cross-reference handling.
+
+The update makes the low-level doctest and Sphinx-extension APIs easier to scan without changing the runtime behavior of {mod}`doctest_docutils`, {mod}`pytest_doctest_docutils`, or {mod}`linkify_issues`.
+
+#### Faster, steadier docs frontend (#63)
+
+The docs frontend picked up the font, layout, and navigation work first proven in tmuxp. Self-hosted IBM Plex fonts, fallback metrics, preload hints, and fixed logo/badge dimensions reduce layout movement during page load.
+
+Internal docs links can now use lightweight page-region swaps with the browser View Transitions API when available, falling back to normal navigation when not supported.
 
 ### Documentation
 
-- Bump gp-sphinx docs stack to v0.0.1a16 — docs site now renders
-  via `gp-furo-theme`, a Tailwind v4 respin of Furo, with
-  `sphinx-vite-builder` handling theme-asset builds (#69)
+The docs stack was refreshed through gp-sphinx 0.0.1a17. The visible path included the 0.0.1a8 API-doc improvements (#68), the 0.0.1a16 `sphinx-vite-builder` consolidation (#69), and the follow-up 0.0.1a17 workspace pin refresh.
+
+Docs deployment now authenticates to AWS through OIDC rather than long-lived static credentials, and the S3 sync no longer passes the removed `--acl public-read` option.
 
 ### Development
 
-- Migrate from Make to just for task running (#60)
-
-  Replaces `Makefile` and `docs/Makefile` with `justfile` and `docs/justfile` using
-  [just](https://just.systems/) 1.45.0. Recipes are organized with `[group]` attributes
-  for improved discoverability via `just --list`.
-
-### Documentation
-
-- Migrate docs deployment to AWS OIDC authentication and AWS CLI
-- Visual improvements to API docs from [gp-sphinx](https://gp-sphinx.git-pull.com)-based Sphinx packages (#67)
-- Bump gp-sphinx docs stack to v0.0.1a8 (#68)
+The project agent instructions gained stricter changelog conventions, doctest requirements, logging standards, functional-test guidance, and commit-message examples. These rules are development policy only; they do not change the gp-libs runtime package.
 
 ## gp-libs 0.0.17 (2025-12-07)
 
-### CI
+gp-libs 0.0.17 updates the release pipeline to publish through PyPI Trusted Publisher. The package release workflow no longer needs a stored PyPI API token, and publishing can attach package attestations for supply-chain verification.
 
-- Migrate to PyPI Trusted Publisher (#57)
+### Development
+
+#### PyPI releases use Trusted Publisher (#57)
+
+The GitHub Actions release job now relies on PyPI's OIDC trusted-publishing flow. Maintainers configure the `git-pull/gp-libs` workflow as the publisher in PyPI, then tagged releases can publish without copying a long-lived secret into GitHub.
+
+The release workflow also drops the deprecated `skip_existing` upload parameter.
 
 ## gp-libs 0.0.16 (2025-11-25)
 
-### Features
+gp-libs 0.0.16 backports upstream doctest fixes from pytest and Sphinx, then expands compatibility coverage across pytest 7, 8, and 9. The release focuses on keeping documentation doctests reliable when projects use conftest fixtures, newer pytest plugin behavior, and Sphinx-style doctest comments.
 
-#### pytest_doctest_docutils
+### What's new
 
-- Add `_unblock_doctest()` helper for programmatic re-enabling of built-in doctest plugin (#56)
+#### Built-in pytest doctest can be restored programmatically (#56)
 
-  Uses the public `pluginmanager.unblock()` API introduced in pytest 8.1.0, with graceful
-  fallback for older versions.
-
-### Bug fixes
-
-#### pytest_doctest_docutils
-
-- Autouse fixtures from `conftest.py` are now properly discovered for doctest files (#56)
-
-  Backported from pytest commit [9cd14b4ff](https://github.com/pytest-dev/pytest/commit/9cd14b4ff) (2024-02-06).
-
-#### doctest_docutils
-
-- Doctest directive comments with leading whitespace (e.g., `  # doctest: +SKIP`) are now properly matched (#56)
-
-  Backported from Sphinx commit [ad0c343d3](https://github.com/sphinx-doc/sphinx/commit/ad0c343d3) (2025-01-04).
-
-### Development
-
-- CI: Add pytest 9.x to test matrix, with pytest 7.x/8.x compatibility testing (#56)
-
-## gp-libs 0.0.15 (2025-11-01)
-
-### Breaking changes
-
-- Drop Python 3.9 (#54)
-
-  The minimum version of Python in this and future releases is Python 3.10.
-
-  Python 3.9 reached end-of-life status on October 5th, 2025 (see PEP 596).
-
-### Development
-
-- Add Python 3.14 to test matrix (#53)
-
-## gp-libs 0.0.14 (2025-10-26)
-
-### Bug fixes
-
-- Ensure docutils/myst doctest directives auto-register so Arch Linux packaging tests pass without manual setup (#52, fixes #48)
-
-## gp-libs 0.0.13 (2025-08-17)
-
-### Bug fixes
-
-- Type annotation fixes (#49)
-
-## gp-libs 0.0.12 (2025-07-12)
-
-### Bug fixes
-
-- Type annotation and linting fixes (resolves #48)
-
-### Deveopment
-
-- Internal package updates to uv, py.test, mypy, ruff, etc.
-
-## gp-libs 0.0.11 (2025-02-22)
-
-### Bug fixes
-
-- Fix for `pytest-asyncio` compatibility (#46)
-
-### Development
-
-#### chore: Implement PEP 563 deferred annotation resolution (#44)
-
-- Add `from __future__ import annotations` to defer annotation resolution and reduce unnecessary runtime computations during type checking.
-- Enable Ruff checks for PEP-compliant annotations:
-  - [non-pep585-annotation (UP006)](https://docs.astral.sh/ruff/rules/non-pep585-annotation/)
-  - [non-pep604-annotation (UP007)](https://docs.astral.sh/ruff/rules/non-pep604-annotation/)
-
-For more details on PEP 563, see: https://peps.python.org/pep-0563/
-
-## gp-libs 0.0.10 (2024-12-20)
-
-_Maintenance release: no bug fixes or new features._
-
-### Breaking changes (#36)
-
-- Drop Python 3.8
-
-  The minimum version of Python in this and future releases is Python 3.9.
-
-  Python 3.8 reached end-of-life status on October 7th, 2024 (see PEP 569).
-
-### Development
-
-- Aggressive automated lint fixes via `ruff` (#41)
-
-  via ruff v0.8.4, all automated lint fixes, including unsafe and previews were applied for Python 3.9:
-
-  ```sh
-  ruff check --select ALL . --fix --unsafe-fixes --preview --show-fixes; ruff format .
-  ```
-
-## gp-libs 0.0.9 (2024-11-26)
-
-### Breaking changes
-
-#### Project and package management: poetry to uv (#39)
-
-[uv] is the new package and project manager for the project, replacing Poetry.
-
-[uv]: https://github.com/astral-sh/uv
-
-#### Build system: poetry to hatchling (#39)
-
-[Build system] moved from [poetry] to [hatchling].
-
-[Build system]: https://packaging.python.org/en/latest/tutorials/packaging-projects/#choosing-a-build-backend
-[poetry]: https://github.com/python-poetry/poetry
-[hatchling]: https://hatch.pypa.io/latest/
-
-## gp-libs 0.0.8 (2024-10-19)
-
-### Breaking changes
-
-- Final Python 3.8 release, as it has reached end-of-life status October 7th,
-  2024, see [PEP-569](https://peps.python.org/pep-0569/).
-
-### Development
-
-- poetry: 1.8.1 -> 1.8.2
-
-  See also: https://github.com/python-poetry/poetry/blob/1.8.2/CHANGELOG.md
-
-### Documentation
-
-- Automatically linkify links that were previously only text.
-
-## gp-libs 0.0.7 (2024-03-24)
-
-### Breaking changes
-
-#### Minimum requirements
-
-To lift the development burden of supporting legacy APIs, as this package is
-lightly used, minimum constraints have been pinned:
-
-- docutils: 0.20.1+
-- myst-parser: 2.0.0+
-
-If you have even passing interested in supporting legacy versions, file an
-issue on the tracker.
-
-### Development
-
-- Aggressive automated lint fixes via `ruff` (#33)
-
-  via ruff v0.3.4, all automated lint fixes, including unsafe and previews were applied:
-
-  ```sh
-  ruff check --select ALL . --fix --unsafe-fixes --preview --show-fixes; ruff format .
-  ```
-
-  Branches were treated with:
-
-  ```sh
-  git rebase \
-      --strategy-option=theirs \
-      --exec 'poetry run ruff check --select ALL . --fix --unsafe-fixes --preview --show-fixes; poetry run ruff format .; git add src tests; git commit --amend --no-edit' \
-      origin/master
-  ```
-
-- poetry: 1.7.1 -> 1.8.1
-
-  See also: https://github.com/python-poetry/poetry/blob/1.8.1/CHANGELOG.md
-
-- ruff 0.2.2 -> 0.3.0 (#32)
-
-  Related formattings. Update CI to use `ruff check .` instead of `ruff .`.
-
-  See also: https://github.com/astral-sh/ruff/blob/v0.3.0/CHANGELOG.md
-
-- Strengthen linting (#31)
-
-  - Add flake8-commas (COM)
-
-    - https://docs.astral.sh/ruff/rules/#flake8-commas-com
-    - https://pypi.org/project/flake8-commas/
-
-  - Add flake8-builtins (A)
-
-    - https://docs.astral.sh/ruff/rules/#flake8-builtins-a
-    - https://pypi.org/project/flake8-builtins/
-
-  - Add flake8-errmsg (EM)
-
-    - https://docs.astral.sh/ruff/rules/#flake8-errmsg-em
-    - https://pypi.org/project/flake8-errmsg/
-
-## gp-libs 0.0.6post0 (2024-02-01)
-
-### Packaging
-
-- Relax pytest version constraint from 8+ to 7+ (#30)
-
-## gp-libs 0.0.6 (2024-02-01)
-
-### Breaking change
-
-- Support pytest >8 (#29)
-
-  - Update doctest pytest plugin for pytest 8.
-
-### Development
-
-- ruff 0.2.0
-
-## gp-libs 0.0.5 (2023-12-03)
-
-_Maintenance release: no bug fixes or new features._
-
-### CI
-
-- Move CodeQL from advanced configuration file to GitHub's default
-
-### Development
-
-- ci: Add pydocstyle rule to ruff (#28)
-
-### Documentation
-
-- Add docstrings to functions, methods, classes, and packages (#28)
-
-## gp-libs 0.0.4 (2023-11-19)
-
-### Development
-
-- poetry: 1.6.1 -> 1.7.0
-
-  See also: https://github.com/python-poetry/poetry/blob/1.7.0/CHANGELOG.md
-
-- Move formatting from `black` to [`ruff format`] (#27)
-
-  This retains the same formatting style of `black` while eliminating a
-  dev dependency by using our existing rust-based `ruff` linter.
-
-  [`ruff format`]: https://docs.astral.sh/ruff/formatter/
-
-- CI: Update action packages to fix warnings
-
-  - [dorny/paths-filter]: 2.7.0 -> 2.11.1
-
-  [dorny/paths-filter]: https://github.com/dorny/paths-filter
-
-### Packaging
-
-- Add Python 3.12 to trove classifiers
-- Packaging (poetry): Fix development dependencies
-
-  Per [Poetry's docs on managing dependencies] and `poetry check`, we had it wrong: Instead of using extras, we should create these:
-
-  ```toml
-  [tool.poetry.group.group-name.dependencies]
-  dev-dependency = "1.0.0"
-  ```
-
-  Which we now do.
-
-  [Poetry's docs on managing dependencies]: https://python-poetry.org/docs/master/managing-dependencies/
-
-## gp-libs 0.0.3 (2023-10-14)
+{mod}`pytest_doctest_docutils` still blocks pytest's built-in doctest plugin by default so docs are not collected twice. Projects that need to re-enable the built-in plugin can now use the pytest 8.1+ public `pluginmanager.unblock()` path through {func}`pytest_doctest_docutils._unblock_doctest`, with a graceful fallback on older pytest versions.
 
 ### Fixes
 
-#### doctest_docutils
+#### Autouse fixtures apply to collected doctest files (#56)
 
-- `_from_module`: Backport {func}`functools.cached_property` support (#25)
+Autouse fixtures from `conftest.py` are now discovered for doctest files collected through {class}`pytest_doctest_docutils.DocTestDocutilsFile`. This backports pytest's upstream fixture-discovery behavior so documentation examples can rely on the same test setup as nearby Python tests.
 
-#### pytest_doctest_docutils
+#### Indented doctest comments are recognized (#56)
 
-- `pytest_collect_file`: Typing fix (#25)
+Doctest option comments with leading whitespace, such as `  # doctest: +SKIP`, are now matched by {mod}`doctest_docutils`. This mirrors Sphinx's upstream fix and keeps directive examples from silently losing their comparison flags.
 
 ### Development
 
-- Use `import typing as t` everywhere (#25)
+The CI matrix now exercises pytest 7.x, 8.x, and 9.x compatibility. Regression coverage was added for autouse fixtures, doctest option flags, plugin blocking and unblocking, and pytest's plugin-autoload behavior.
 
-  See also: <https://github.com/pytest-dev/pytest/pull/11317>
+## gp-libs 0.0.15 (2025-11-01)
 
-### Packaging
-
-- Move pytest configuration to `pyproject.toml` (#24)
-
-## gp-libs 0.0.2 (2023-09-09)
+gp-libs 0.0.15 drops Python 3.9 after its upstream end-of-life date and moves the supported runtime floor to Python 3.10. The release also adds Python 3.14 to the tested and advertised versions.
 
 ### Breaking changes
 
-- Python 3.7 Dropped (#23)
+#### Python 3.10 is now required (#54)
 
-## gp-libs 0.0.1 (2023-09-09)
+Python 3.9 reached end-of-life status on October 5, 2025. gp-libs now requires Python 3.10 or newer.
 
-- _Add your latest changes from PRs here_
+```toml
+requires-python = ">=3.10"
+```
 
-### New features
+### Development
 
-- linkify_issues: Automatically link
+Python 3.14 was added to the test matrix and project classifiers (#53).
 
-  _conf.py_:
+## gp-libs 0.0.14 (2025-10-26)
 
-  ```python
-  issue_url_tpl = 'https://github.com/git-pull/gp-libs/issues/{issue_id}'
-  ```
+gp-libs 0.0.14 fixes downstream packaging runs that execute the {mod}`doctest_docutils` finder without first importing the pytest plugin. The finder, CLI, and pytest plugin now share directive registration, so docutils and MyST doctest directives are available wherever the package entry point starts.
 
-- doctest_docutils: :mod:`doctest` w/ docutils support (and markdown)
-- doctest_docutils: Support for sphinx-inline-tab's `tab` directive was added in v0.0.1a17 (#18)
+### Fixes
 
-  `````markdown
-  ````{tab} example tab
+#### Doctest directives auto-register outside pytest (#52)
 
-  ```python
-  >>> 4 + 4
-  8
-  ```
+{func}`doctest_docutils._ensure_directives_registered` registers the `doctest`, `testsetup`, `testcleanup`, and `tab` directives once per interpreter. That keeps `.. doctest::`, ````{doctest}``, and tabbed doctest examples discoverable in packaging environments that invoke pytest differently from gp-libs' own suite.
 
-  ````
+This resolves the Arch Linux packaging failure reported in #48.
 
-  ````{tab} example second
+## gp-libs 0.0.13 (2025-08-17)
 
-  ```python
-  >>> 4 + 2
-  6
-  ```
+gp-libs 0.0.13 is a typing maintenance release. It fixes annotations after dependency updates so the package continues to pass the configured mypy gate.
 
-  ````
-  `````
+### Fixes
 
-### Removed features
+- Type annotation fixes across the doctest and pytest plugin modules (#49).
 
-- `sphinx_toctree_autodoc_fix` was removed in v0.0.1a12
+## gp-libs 0.0.12 (2025-07-12)
 
-  Overcome by [Sphinx 5.2](https://pypi.org/project/Sphinx/5.2.0) bakes this in by default:
+gp-libs 0.0.12 is a lint and typing maintenance release. It keeps the codebase current with newer ruff and mypy behavior without changing documented runtime behavior.
 
-  Settings options:
+### Fixes
 
-  - `add_function_parentheses = False` (default: `True`)
-  - `toc_object_entries_show_parents` can be (default: `'domain'`):
-    - `toc_object_entries_show_parents = 'domain'`
-    - `toc_object_entries_show_parents = 'hide'`
-    - `toc_object_entries_show_parents = 'all'`
+- Type annotation and linting fixes for the active toolchain (resolves #48).
 
-  See also:
+### Development
 
-  - https://github.com/sphinx-doc/sphinx/issues/6316
-  - https://github.com/sphinx-doc/sphinx/pull/10807
-  - https://gist.github.com/agoose77/e8f0f8f7d7133e73483ca5c2dd7b907f
+- Internal development dependencies were refreshed, including uv, pytest, mypy, and ruff.
+
+## gp-libs 0.0.11 (2025-02-22)
+
+gp-libs 0.0.11 fixes compatibility with pytest-asyncio and current pytest doctest behavior. Projects using the gp-libs pytest plugin can keep collecting docs without the built-in doctest plugin and pytest-asyncio conflicting during configuration.
+
+### Fixes
+
+#### pytest-asyncio compatibility (#46)
+
+{mod}`pytest_doctest_docutils` now handles the plugin interaction that previously broke pytest-asyncio users. The fix keeps documentation doctest collection available in projects that also load pytest-asyncio.
+
+### Development
+
+Deferred annotations were enabled project-wide with `from __future__ import annotations` (#44). Ruff's modern-typing checks were enabled so future annotation cleanup stays mechanical and consistent.
+
+## gp-libs 0.0.10 (2024-12-20)
+
+gp-libs 0.0.10 drops Python 3.8 and modernizes the codebase for the Python 3.9 floor. The runtime behavior is otherwise unchanged; this is a compatibility and maintenance release.
+
+### Breaking changes
+
+#### Python 3.9 is now required (#36)
+
+Python 3.8 reached end-of-life status on October 7, 2024. gp-libs now requires Python 3.9 or newer.
+
+```toml
+requires-python = ">=3.9"
+```
+
+### Development
+
+#### Python 3.9 modernization (#41)
+
+The codebase was reformatted and linted with ruff's Python 3.9-era rules, including preview and unsafe automated fixes where the branch verified cleanly. This removed old compatibility scaffolding and refreshed the mypy configuration for the new floor.
+
+## gp-libs 0.0.9 (2024-11-26)
+
+gp-libs 0.0.9 moves package and environment management from Poetry to uv, and moves the build backend from Poetry to Hatchling. The change aligns gp-libs with the current git-pull Python project workflow.
+
+### Breaking changes
+
+#### Project management moved from Poetry to uv (#39)
+
+Development commands now use [uv](https://github.com/astral-sh/uv) instead of Poetry.
+
+```console
+$ uv sync
+```
+
+Run project commands through uv-managed environments:
+
+```console
+$ uv run pytest
+```
+
+#### Build backend moved to Hatchling (#39)
+
+The package build backend is now [hatchling](https://hatch.pypa.io/latest/). This removes Poetry from the build path while keeping the package installable through standard Python packaging tools.
+
+## gp-libs 0.0.8 (2024-10-19)
+
+gp-libs 0.0.8 is the final Python 3.8-compatible release. It also refreshes documentation link handling and keeps the development toolchain current before the next release raises the runtime floor.
+
+### Breaking changes
+
+#### Final Python 3.8 line
+
+Python 3.8 reached end-of-life status on October 7, 2024. Users who still need Python 3.8 should stay on this release line.
 
 ### Documentation
 
-- Initial docs, packaging, etc.
+Markdown linkification was enabled in the docs so links that were previously plain text render as clickable links.
 
-### Tests
+### Development
 
-pytest-doctest-docutils:
+Poetry was updated from 1.8.1 to 1.8.2, and doctest examples were adjusted for ruff 0.7.0's `RUF027` behavior (#35).
 
-- Add tests for pytest conftest.py files (#9)
+## gp-libs 0.0.7 (2024-03-24)
 
-### Infrastructure
+gp-libs 0.0.7 raises the minimum documentation-parser versions and tightens linting. The release reduces the maintenance cost of supporting older docutils and MyST behavior while preserving gp-libs' core doctest use cases.
 
-- Ruff (additional linting rules): Added in #20 and #21
-- CI: docutils testgrid (#16)
-- CI speedups (#13)
+### Breaking changes
 
-  - Split out release to separate job so the PyPI Upload docker image isn't pulled on normal runs
-  - Clean up CodeQL
+#### New docutils and MyST parser floors
 
-- Poetry: Bump 1.1.x to 1.6.x
+Minimum supported parser versions are now:
+
+- `docutils>=0.20.1`
+- `myst-parser>=2.0.0`
+
+These floors let gp-libs rely on newer directive and node traversal behavior instead of carrying compatibility paths for older parser releases.
+
+### Development
+
+#### Stricter ruff linting (#31, #32, #33)
+
+The project added ruff coverage for flake8-commas, flake8-builtins, and flake8-errmsg, then moved through ruff 0.3.x and an aggressive automated cleanup pass. Diagnostics now use logging rather than `print()` in the doctest code path.
+
+## gp-libs 0.0.6post0 (2024-02-01)
+
+gp-libs 0.0.6post0 relaxes the pytest dependency after the pytest 8 compatibility release. Downstream packagers can continue using pytest 7 while gp-libs also supports pytest 8.
+
+### Dependencies
+
+Minimum `pytest>=7` (was `>=8`) (#30).
+
+## gp-libs 0.0.6 (2024-02-01)
+
+gp-libs 0.0.6 updates the pytest doctest integration for pytest 8. The release keeps documentation doctest collection working across pytest's changed internal doctest collector APIs.
+
+### Fixes
+
+#### pytest 8 support (#29)
+
+{mod}`pytest_doctest_docutils` was updated for pytest 8 so projects can keep collecting `.rst`, `.md`, and Python doctests through the gp-libs plugin.
+
+### Development
+
+Ruff 0.2.0 was adopted for the active lint configuration.
+
+## gp-libs 0.0.5 (2023-12-03)
+
+gp-libs 0.0.5 is a documentation and code-quality maintenance release. It adds docstrings across the package and switches CodeQL back to GitHub's default Python configuration.
+
+### Documentation
+
+#### Public docstrings for package APIs (#28)
+
+Functions, methods, classes, and modules gained NumPy-style docstrings. The change improves generated API pages for {mod}`doctest_docutils`, {mod}`pytest_doctest_docutils`, and {mod}`linkify_issues`.
+
+### Development
+
+Ruff's pydocstyle rules now use the NumPy convention (#28). CodeQL moved from an advanced configuration file to GitHub's default setup.
+
+## gp-libs 0.0.4 (2023-11-19)
+
+gp-libs 0.0.4 updates formatting, packaging metadata, and development dependencies. The release removes Black in favor of ruff format and fixes Poetry dependency group configuration.
+
+### Dependencies
+
+Python 3.12 was added to the project classifiers. Poetry development dependencies now use dependency groups, matching Poetry's documented configuration shape.
+
+### Development
+
+#### Formatting moved from Black to ruff format (#27)
+
+The project now uses `ruff format` for code formatting. The formatting style stays Black-compatible while removing a separate formatter dependency.
+
+CI actions and Poetry were refreshed to clear workflow warnings and keep development tooling current.
+
+## gp-libs 0.0.3 (2023-10-14)
+
+gp-libs 0.0.3 backports upstream doctest behavior and tightens typing around the pytest plugin. It also moves pytest configuration into `pyproject.toml`.
+
+### Fixes
+
+#### Cached-property doctest lookup support (#25)
+
+{mod}`doctest_docutils` backports upstream support for {func}`functools.cached_property` during doctest module lookup. This keeps gp-libs aligned with the standard-library and pytest doctest behavior it builds on.
+
+#### pytest collector typing fixes (#25)
+
+{mod}`pytest_doctest_docutils` gained collector typing fixes and project-wide `import typing as t` consistency.
+
+### Development
+
+Pytest configuration now lives in `pyproject.toml` (#24).
+
+## gp-libs 0.0.2 (2023-09-09)
+
+gp-libs 0.0.2 drops Python 3.7 after its upstream end-of-life date. The runtime floor moves to Python 3.8.
+
+### Breaking changes
+
+#### Python 3.8 is now required (#23)
+
+Python 3.7 reached end-of-life status on June 27, 2023. gp-libs now requires Python 3.8 or newer.
+
+```toml
+requires-python = ">=3.8"
+```
+
+## gp-libs 0.0.1 (2023-09-09)
+
+gp-libs 0.0.1 is the first stable release of the git-pull documentation utility package. It combines a docutils-aware doctest runner, a pytest plugin for documentation files, and a Sphinx extension for automatic issue linking.
+
+### Breaking changes
+
+#### Removed `sphinx_toctree_autodoc_fix`
+
+The old `sphinx_toctree_autodoc_fix` extension was removed before the stable release because Sphinx 5.2 gained the relevant toctree behavior directly. Existing projects should use Sphinx's built-in configuration options such as `add_function_parentheses` and `toc_object_entries_show_parents`.
+
+### What's new
+
+#### Doctest runner for docutils and MyST documents
+
+{mod}`doctest_docutils` extends the standard-library {mod}`doctest` workflow to parse documentation sources through docutils and, when installed, MyST Parser. It discovers examples in ordinary doctest blocks, `.. doctest::` directives, and MyST doctest fences.
+
+The module can be used directly from Python or from the command line:
+
+```console
+$ python -m doctest_docutils README.md -v
+```
+
+#### pytest plugin for documentation doctests (#3, #7, #9)
+
+{mod}`pytest_doctest_docutils` collects documentation doctests through pytest so `.rst` and `.md` examples can share pytest fixtures, including `doctest_namespace` and project `conftest.py` setup. It also exposes `--doctest-docutils-modules` and `--no-doctest-docutils-modules` for Python-module doctest collection when replacing pytest's built-in doctest plugin.
+
+#### Sphinx issue references become links
+
+{mod}`linkify_issues` converts issue references such as `#123` into Sphinx links using the project's `issue_url_tpl` setting. The extension keeps issue references readable in source while making rendered docs easier to navigate.
+
+#### Tabbed doctest examples are discovered (#18)
+
+{mod}`doctest_docutils` can collect examples nested inside sphinx-inline-tabs-style `{tab}` content. This supports documentation pages that compare examples across implementations while still executing the doctests.
+
+### Fixes
+
+- The old toctree helper skipped entries that did not expose `fullname`, which fixed sphinx-click-style generated pages before the helper was removed (#12).
+- `docutils_compat` provided a `findall()` abstraction while docutils moved away from `Node.traverse()` (#15, #16).
+- View-source links and docutils traversal behavior were corrected during the alpha series.
+
+### Documentation
+
+Initial documentation, README examples, Sphinx configuration, and package metadata shipped with the stable release. See {doc}`doctest/index`, {doc}`doctest/pytest`, and {doc}`linkify_issues/index` for the current guides.
+
+### Development
+
+The first stable line included CI speedups, a docutils compatibility test grid, stricter ruff linting, and the consolidation of package metadata into `src/gp_libs.py`.
 
 <!---
 .. vim: set filetype=markdown:
