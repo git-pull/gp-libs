@@ -29,7 +29,11 @@ conf = merge_sphinx_config(
     source_branch="master",
     light_logo="img/icons/logo.svg",
     dark_logo="img/icons/logo-dark.svg",
-    extra_extensions=["sphinx.ext.doctest", "sphinx_autodoc_api_style"],
+    extra_extensions=[
+        "sphinx.ext.doctest",
+        "sphinx_autodoc_api_style",
+        "sphinx_autodoc_pytest_fixtures",
+    ],
     intersphinx_mapping={
         "gp_sphinx": ("https://gp-sphinx.git-pull.com/", None),
         "py": ("https://docs.python.org/", None),
