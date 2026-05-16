@@ -72,9 +72,13 @@ The docs stack was refreshed through gp-sphinx 0.0.1a17. The visible path includ
 
 Docs deployment now authenticates to AWS through OIDC rather than long-lived static credentials, and the S3 sync no longer passes the removed `--acl public-read` option.
 
+The docs site also picks up `sphinx_autodoc_pytest_fixtures` from gp-sphinx 0.0.1a18 alongside the existing `sphinx_autodoc_api_style`. The new extension introspects pytest fixtures and renders them as first-class autodoc entries; gp-libs has no documentable fixtures today, so the wiring is inert at present and is in place to keep the project aligned with libvcs and libtmux.
+
 ### Development
 
 The project agent instructions gained stricter changelog conventions, doctest requirements, logging standards, functional-test guidance, and commit-message examples. These rules are development policy only; they do not change the gp-libs runtime package.
+
+The default pytest command now dogfoods gp-libs' own `--doctest-docutils-modules` flag in place of pytest's stdlib `--doctest-modules`, and explicitly disables the stdlib doctest plugin via `-p no:doctest`. The shape of `[tool.pytest.ini_options]` matches libvcs and libtmux verbatim. `--reruns=2` from `pytest-rerunfailures` is now part of the default test command, and `README.md` joins `testpaths` so future doctest blocks in it would run automatically.
 
 ## gp-libs 0.0.17 (2025-12-07)
 

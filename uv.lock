@@ -435,7 +435,7 @@ source = { editable = "." }
 dependencies = [
     { name = "docutils" },
     { name = "myst-parser", version = "4.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "myst-parser", version = "5.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "myst-parser", version = "5.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 
 [package.dev-dependencies]
@@ -459,6 +459,7 @@ dev = [
     { name = "sphinx-autobuild", version = "2024.10.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "sphinx-autobuild", version = "2025.8.25", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "sphinx-autodoc-api-style" },
+    { name = "sphinx-autodoc-pytest-fixtures" },
     { name = "types-docutils" },
     { name = "typing-extensions" },
 ]
@@ -468,6 +469,7 @@ docs = [
     { name = "sphinx-autobuild", version = "2024.10.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "sphinx-autobuild", version = "2025.8.25", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "sphinx-autodoc-api-style" },
+    { name = "sphinx-autodoc-pytest-fixtures" },
 ]
 lint = [
     { name = "mypy" },
@@ -509,6 +511,7 @@ dev = [
     { name = "ruff" },
     { name = "sphinx-autobuild" },
     { name = "sphinx-autodoc-api-style", specifier = "==0.0.1a18" },
+    { name = "sphinx-autodoc-pytest-fixtures", specifier = "==0.0.1a18" },
     { name = "types-docutils" },
     { name = "typing-extensions" },
 ]
@@ -517,6 +520,7 @@ docs = [
     { name = "gp-sphinx", specifier = "==0.0.1a18" },
     { name = "sphinx-autobuild" },
     { name = "sphinx-autodoc-api-style", specifier = "==0.0.1a18" },
+    { name = "sphinx-autodoc-pytest-fixtures", specifier = "==0.0.1a18" },
 ]
 lint = [
     { name = "mypy" },
@@ -541,7 +545,7 @@ dependencies = [
     { name = "gp-libs" },
     { name = "linkify-it-py" },
     { name = "myst-parser", version = "4.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "myst-parser", version = "5.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "myst-parser", version = "5.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "sphinx", version = "8.1.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "sphinx", version = "8.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "sphinx-autodoc-typehints-gp" },
@@ -933,7 +937,7 @@ wheels = [
 
 [[package]]
 name = "myst-parser"
-version = "5.0.0"
+version = "5.1.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -947,9 +951,9 @@ dependencies = [
     { name = "pyyaml", marker = "python_full_version >= '3.11'" },
     { name = "sphinx", version = "8.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/33/fa/7b45eef11b7971f0beb29d27b7bfe0d747d063aa29e170d9edd004733c8a/myst_parser-5.0.0.tar.gz", hash = "sha256:f6f231452c56e8baa662cc352c548158f6a16fcbd6e3800fc594978002b94f3a", size = 98535, upload-time = "2026-01-15T09:08:18.036Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/21/dc/603751677fff302f34396e206b610f556a59d7fe58b9a2145f54e96b48e8/myst_parser-5.1.0.tar.gz", hash = "sha256:ab69322dc6719dcc7f296479dbb70181b66df6ed315064f92dbc85c0e1bf2f02", size = 101182, upload-time = "2026-05-13T09:38:19.361Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d3/ac/686789b9145413f1a61878c407210e41bfdb097976864e0913078b24098c/myst_parser-5.0.0-py3-none-any.whl", hash = "sha256:ab31e516024918296e169139072b81592336f2fef55b8986aa31c9f04b5f7211", size = 84533, upload-time = "2026-01-15T09:08:16.788Z" },
+    { url = "https://files.pythonhosted.org/packages/09/dc/f3dfb7488b770f3f67e6545085bf2abea5172e88f57b8ad25ef860ca704c/myst_parser-5.1.0-py3-none-any.whl", hash = "sha256:9c91c52b3cdb4d94a6506e4fab4e2f296c7623a0da0dcbe6de1565c3dad67a8a", size = 85817, upload-time = "2026-05-13T09:38:17.904Z" },
 ]
 
 [[package]]
@@ -1318,6 +1322,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ad/0c/cd4d6481374ce9cb9ab3112593f94cc03d0ab1d37324dc7f0451c571cdc5/sphinx_autodoc_api_style-0.0.1a18.tar.gz", hash = "sha256:93169e01c2b2957e1308822bbc92c4b16231996bb415295f64425ca6b5594212", size = 8976, upload-time = "2026-05-11T02:23:38.022Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bc/3c/ebad54ba8bdd66689341b957e72442da0f8b134aa83df18bb6076d1ee33e/sphinx_autodoc_api_style-0.0.1a18-py3-none-any.whl", hash = "sha256:e2320b6d5a0b03f91041cd9f40e7f7c42c33080ced0dc6679f0f515b4b504ba3", size = 9065, upload-time = "2026-05-11T02:23:16.582Z" },
+]
+
+[[package]]
+name = "sphinx-autodoc-pytest-fixtures"
+version = "0.0.1a18"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+    { name = "sphinx", version = "8.1.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "sphinx", version = "8.2.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "sphinx-autodoc-typehints-gp" },
+    { name = "sphinx-ux-autodoc-layout" },
+    { name = "sphinx-ux-badges" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b9/5d/116db313eef1bcaf5cf583336b107efbe7ee9cbbd719ede2a9baa4ac4aff/sphinx_autodoc_pytest_fixtures-0.0.1a18.tar.gz", hash = "sha256:6499ca61572b491629a18a673385fcfe22aa9cc3cba6219b499927a261653ce3", size = 32708, upload-time = "2026-05-11T02:23:42.058Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d8/4d/6324936daccc640b498e4d387f4ae2aac70a896706b5568e19d277dda39b/sphinx_autodoc_pytest_fixtures-0.0.1a18-py3-none-any.whl", hash = "sha256:65ab1fbc077d8e85785fcfac71514af0456e53506a1b2b67ad29f7773d5d9f5f", size = 39230, upload-time = "2026-05-11T02:23:22.669Z" },
 ]
 
 [[package]]
