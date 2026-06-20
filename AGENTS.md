@@ -351,10 +351,15 @@ Format commit messages as:
 Scope(type[detail]): concise description
 
 why: Explanation of necessity or impact.
+
 what:
 - Specific technical changes made
 - Focused on a single topic
 ```
+
+Keep the subject ≤50 chars (excluding any trailing `(#NN)` PR ref); wrap
+body lines at ≤72 chars. Separate the `why:` and `what:` blocks with a
+blank line.
 
 Common commit types:
 - **feat**: New features or enhancements
@@ -375,6 +380,7 @@ Example:
 doctest_docutils(feat[parse]): Add support for myst-parser code blocks
 
 why: Enable doctest execution in Markdown documentation files
+
 what:
 - Add detection for ```{doctest} fence syntax
 - Register myst directives automatically
@@ -395,6 +401,7 @@ git commit -m "$(cat <<'EOF'
 feat(Component[method]) add feature description
 
 why: Explanation of the change.
+
 what:
 - First change
 - Second change
