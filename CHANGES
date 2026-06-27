@@ -66,6 +66,12 @@ The docs frontend picked up the font, layout, and navigation work first proven i
 
 Internal docs links can now use lightweight page-region swaps with the browser View Transitions API when available, falling back to normal navigation when not supported.
 
+### Fixes
+
+#### Sphinx `_build/` output no longer breaks collection (#75)
+
+{mod}`pytest_doctest_docutils` now skips Sphinx's `_build/` directory during collection. Built docs mirror their sources, keeping relative `{include}` directives that no longer resolve from the build tree, so once `docs/_build/` existed those copies aborted the whole test session. pytest's default recursion filter excludes `build` but not `_build`; the plugin now closes that gap.
+
 ### Documentation
 
 The docs stack was refreshed through gp-sphinx 0.0.1a17. The visible path included the 0.0.1a8 API-doc improvements (#68), the 0.0.1a16 `sphinx-vite-builder` consolidation (#69), and the follow-up 0.0.1a17 workspace pin refresh.

@@ -100,6 +100,24 @@ def pytest_unconfigure() -> None:
     RUNNER_CLASS = None
 
 
+def pytest_ignore_collect(collection_path: pathlib.Path) -> bool | None:
+    """Skip Sphinx ``_build/`` output during collection.
+
+    pytest's default ``norecursedirs`` excludes ``build`` but not ``_build``,
+    so Sphinx output (which mirrors sources, broken relative includes and all)
+    would otherwise be collected and abort the session.
+
+    >>> import pathlib
+    >>> pytest_ignore_collect(pathlib.Path("docs/_build/html/history.md"))
+    True
+    >>> pytest_ignore_collect(pathlib.Path("docs/history.md")) is None
+    True
+    """
+    if "_build" in collection_path.parts:
+        return True
+    return None
+
+
 def pytest_collect_file(
     file_path: pathlib.Path,
     parent: pytest.Collector,
