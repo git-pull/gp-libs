@@ -400,3 +400,83 @@ The rest:
     # Test
     result = pytester.runpytest(str(first_test_filename), "--doctest-docutils-modules")
     result.assert_outcomes(passed=4)
+
+
+class IgnoreBuildFixture(t.NamedTuple):
+    """Fixture for Sphinx ``_build/`` collection-ignore tests."""
+
+    test_id: str
+
+    # Path (relative to ``docs/``) of the build artifact that must be ignored.
+    artifact_path: str
+
+
+IGNORE_BUILD_FIXTURES = [
+    IgnoreBuildFixture(test_id="build-root", artifact_path="_build/history.md"),
+    IgnoreBuildFixture(
+        test_id="build-html-subdir",
+        artifact_path="_build/html/history.md",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    IgnoreBuildFixture._fields,
+    IGNORE_BUILD_FIXTURES,
+    ids=[f.test_id for f in IGNORE_BUILD_FIXTURES],
+)
+def test_ignore_build_artifacts(
+    pytester: _pytest.pytester.Pytester,
+    test_id: str,
+    artifact_path: str,
+) -> None:
+    """Sphinx build artifacts under ``_build/`` are skipped during collection.
+
+    Sphinx copies sources into ``docs/_build/`` verbatim, keeping relative
+    ``{include}`` directives that no longer resolve from the build tree. Those
+    copies must not be collected, otherwise the broken include aborts the whole
+    session with a docutils ``SystemMessage`` during collection.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(
+        ".ini",
+        pytest=textwrap.dedent(
+            """
+[pytest]
+addopts=-p no:doctest -vv
+
+        """.strip(),
+        ),
+    )
+    docs_path = pytester.path / "docs"
+    docs_path.mkdir()
+
+    # A genuine source doctest that should still be collected.
+    (docs_path / "example.md").write_text(
+        textwrap.dedent(
+            """
+```
+>>> 4 + 4
+8
+```
+        """,
+        ),
+        encoding="utf-8",
+    )
+
+    # A build artifact whose relative include cannot resolve.
+    artifact = docs_path / artifact_path
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(
+        textwrap.dedent(
+            """
+```{include} ../CHANGES
+
+```
+        """,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(str(docs_path), "--doctest-docutils-modules")
+    result.assert_outcomes(passed=1)
