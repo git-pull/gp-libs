@@ -16,7 +16,7 @@ Development setup, running tests, submitting PRs.
 :::{grid-item-card} Code Style
 :link: code-style
 :link-type: doc
-Ruff, mypy, NumPy docstrings, import conventions.
+Formatting, type checking, docstrings, import conventions.
 :::
 
 :::{grid-item-card} Releasing

@@ -13,16 +13,16 @@ Test and documentation utilities for [git-pull](https://github.com/git-pull) pro
 Install and get started in minutes.
 :::
 
-:::{grid-item-card} doctest_docutils
+:::{grid-item-card} Documentation Doctests
 :link: doctest/index
 :link-type: doc
 Run doctests in reStructuredText and Markdown files.
 :::
 
-:::{grid-item-card} linkify_issues
+:::{grid-item-card} Autolink GitHub Issues
 :link: linkify_issues/index
 :link-type: doc
-Automatically link `#123` to GitHub issues in Sphinx docs.
+Turn `#123` into rendered issue links.
 :::
 
 :::{grid-item-card} Contributing
@@ -51,7 +51,7 @@ Run doctests in Markdown and reStructuredText files:
 $ python -m doctest_docutils README.md -v
 ```
 
-Auto-link issue references in Sphinx documentation:
+Auto-link issue references in [Sphinx] documentation:
 
 ```python
 # conf.py
@@ -69,3 +69,5 @@ project/index
 history
 GitHub <https://github.com/git-pull/gp-libs>
 ```
+
+[Sphinx]: https://www.sphinx-doc.org/

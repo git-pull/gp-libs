@@ -11,10 +11,10 @@ reader sees them in the page.
 ::::{grid} 1 1 2 2
 :gutter: 2 2 3 3
 
-:::{grid-item-card} pytest plugin
+:::{grid-item-card} Test Runner Integration
 :link: pytest
 :link-type: doc
-Run doctests in `.rst` and `.md` files via pytest.
+Collect `.rst` and `.md` doctests from the test suite.
 :::
 
 ::::

@@ -1,9 +1,9 @@
 (pytest_plugin)=
 (pytest_doctest_docutils)=
 
-# pytest plugin
+# Documentation Doctest Plugin
 
-{mod}`pytest_doctest_docutils` lets pytest collect doctests from `.rst` and
+{mod}`pytest_doctest_docutils` lets [pytest] collect doctests from `.rst` and
 `.md` files. Point [pytest] at a documentation file or directory, and the
 plugin parses the page through {ref}`doctest_docutils` before pytest runs the
 examples.
