@@ -31,6 +31,7 @@ conf = merge_sphinx_config(
     dark_logo="img/icons/logo-dark.svg",
     extra_extensions=["sphinx_autodoc_api_style"],
     intersphinx_mapping={
+        "gp_sphinx": ("https://gp-sphinx.git-pull.com/", None),
         "py": ("https://docs.python.org/", None),
         "pytest": ("https://docs.pytest.org/en/stable/", None),
         "sphinx": ("https://www.sphinx-doc.org/en/master/", None),

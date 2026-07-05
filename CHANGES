@@ -34,7 +34,7 @@ _Notes on upcoming releases will be added here_
 
 ## gp-libs 0.0.18 (2026-06-27)
 
-gp-libs 0.0.18 refreshes the project documentation and maintainer workflow around the shared git-pull docs stack. The docs now use the Library Skeleton page shape, the gp-sphinx theme and API presentation packages, and a just-based command surface that matches the rest of the workspace. Readers get a more navigable site; maintainers get reusable commands and fewer repo-local Sphinx assets to keep in sync.
+gp-libs 0.0.18 refreshes the project documentation and maintainer workflow around the shared git-pull docs stack. The docs now use the Library Skeleton page shape, the [gp-sphinx](https://gp-sphinx.git-pull.com/) theme and API presentation packages, and a [just](https://just.systems/)-based command surface that matches the rest of the workspace. Readers get a more navigable site; maintainers get reusable commands and fewer repo-local Sphinx assets to keep in sync.
 
 ### What's new
 
@@ -52,7 +52,7 @@ The history page still includes this file directly, so release notes continue to
 
 #### Shared gp-sphinx docs platform (#66)
 
-The docs site moved from repo-local Sphinx theme glue, templates, CSS, and JavaScript to the published gp-sphinx package stack. `docs/conf.py` now delegates common configuration to `gp_sphinx.config.merge_sphinx_config()`, while gp-libs keeps only the project-specific values such as intersphinx mappings, logos, linkcode, and redirects.
+The docs site moved from repo-local Sphinx theme glue, templates, CSS, and JavaScript to the published gp-sphinx package stack. `docs/conf.py` now delegates common configuration to {func}`~gp_sphinx.config.merge_sphinx_config`, while gp-libs keeps only the project-specific values such as intersphinx mappings, logos, linkcode, and redirects.
 
 This removes bundled docs support files that are now owned by shared packages and keeps gp-libs aligned with the broader git-pull documentation platform.
 
