@@ -1,6 +1,6 @@
 # Contributing
 
-Install [git] and [uv].
+Install [git], [uv], and [just].
 
 Clone:
 
@@ -21,40 +21,77 @@ $ uv sync --all-extras --dev
 ## Tests
 
 ```console
-$ uv run py.test
+$ just test
 ```
 
 ### Automatically run tests on file save
 
-1. `make start` (via [pytest-watcher])
-2. `make watch_test` (requires installing [entr(1)])
+Use [pytest-watcher]:
+
+```console
+$ just start
+```
+
+Use [entr(1)] when you want a shell-only watcher:
+
+```console
+$ just watch-test
+```
 
 [pytest-watcher]: https://github.com/olzhasar/pytest-watcher
 
 ## Documentation
 
-Default preview server: http://localhost:8034
+Build the docs:
 
-[sphinx-autobuild] will automatically build the docs, watch for file changes and launch a server.
+```console
+$ just build-docs
+```
 
-From home directory: `make start_docs`
-From inside `docs/`: `make start`
+Start the default preview server:
+
+```console
+$ just start-docs
+```
+
+[sphinx-autobuild] builds the docs, watches for file changes, and launches the
+preview server.
+
+From inside `docs/`, run the local docs justfile directly:
+
+```console
+$ just start
+```
 
 [sphinx-autobuild]: https://github.com/executablebooks/sphinx-autobuild
 
-### Manual documentation (the hard way)
+### Manual documentation
 
-`cd docs/` and `make html` to build. `make serve` to start http server.
+Build from inside `docs/`:
 
-Helpers:
-`make build_docs`, `make serve_docs`
+```console
+$ just html
+```
 
-Rebuild docs on file change: `make watch_docs` (requires [entr(1)])
+Serve the built HTML:
 
-Rebuild docs and run server via one terminal: `make dev_docs` (requires above, and a
-`make(1)` with `-J` support, e.g. GNU Make)
+```console
+$ just serve
+```
+
+Watch and rebuild on file changes:
+
+```console
+$ just watch
+```
+
+Watch and serve in one terminal:
+
+```console
+$ just dev
+```
 
 [git]: https://git-scm.com/
 [uv]: https://github.com/astral-sh/uv
+[just]: https://just.systems/
 [entr(1)]: http://eradman.com/entrproject/
-[`entr(1)`]: http://eradman.com/entrproject/

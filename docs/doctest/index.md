@@ -1,9 +1,12 @@
 (doctest_docutils)=
 (doctest_docutils_module)=
 
-# Doctest w/ docutils
+# Documentation Doctests
 
-Built on {mod}`doctest`.
+{mod}`doctest_docutils` runs Python {mod}`doctest` examples from
+documentation files. It parses reStructuredText through [docutils] and
+Markdown through [myst-parser], then collects the examples the same way a
+reader sees them in the page.
 
 ::::{grid} 1 1 2 2
 :gutter: 2 2 3 3
@@ -16,39 +19,25 @@ Run doctests in `.rst` and `.md` files via pytest.
 
 ::::
 
-:::{note}
-
-Before you begin, acquaint yourself with:
-
-- {mod}`doctest`
-
-  - normal usage via:
-
-    ```console
-    $ python -m doctest [file]
-    ```
-
-- Know what [docutils] does: parses reStructuredText (.rst). With the helper of [myst-parser], it also parses markdown (.md)
-
-:::
-
 ## reStructuredText
+
+Run the command against a reStructuredText file:
 
 ```console
 $ python -m doctest_docutils README.rst
 ```
 
-That's what `doctest` does by design. Pass `-v` for verbose output.
+No output means the examples passed. Pass `-v` for verbose output.
 
 ## Markdown
 
-If you install [myst-parser], doctest will run on .md files.
+Install [myst-parser] when you want the same collection behavior for Markdown:
 
 ```console
 $ python -m doctest_docutils README.md
 ```
 
-As with the reST example above, no output.
+No output means the Markdown examples passed too.
 
 ```{toctree}
 :hidden:
@@ -57,30 +46,26 @@ pytest
 ```
 
 [docutils]: https://www.docutils.org/
+[myst-parser]: https://myst-parser.readthedocs.io/en/latest/
 
 ## Internals
 
 :::{note}
 
-To get a deeper understanding, dig into:
+For the rarer cases where you need the lower layers, start with:
 
 - {mod}`doctest`
 
-  - All console arguments by seeing the help command:
+  - Command-line options:
 
     ```console
     $ python -m doctest --help
     ```
 
-  - data structures, e.g. {class}`doctest.DocTest`
+  - Data structures such as {class}`doctest.DocTest`
 
-    - source code: https://github.com/python/cpython/blob/3.11/Lib/doctest.py
-    - documentation: https://docs.python.org/3/library/doctest.html
-
-  - typings: https://github.com/python/typeshed/blob/master/stdlib/doctest.pyi
-
-- [docutils]: which parses reStructuredText (.rst) and markdown (.md, with the
-  help of [myst-parser])
+- [docutils], which parses reStructuredText
+- [myst-parser], which lets docutils parse Markdown
 
 :::
 

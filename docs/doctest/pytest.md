@@ -3,88 +3,25 @@
 
 # pytest plugin
 
-:::{note}
+{mod}`pytest_doctest_docutils` lets pytest collect doctests from `.rst` and
+`.md` files. Point [pytest] at a documentation file or directory, and the
+plugin parses the page through {ref}`doctest_docutils` before pytest runs the
+examples.
 
-This plugin disables {ref}`pytest's standard doctest plugin <pytest:doctest>`.
-
-:::
-
-The pytest plugin is built on top of the {ref}`doctest_docutils` module, which is in
-turn compatible with {mod}`doctest`.
-
-## Using fixtures
-
-Normal pytest convention apply, {ref}`a visible conftest.py must be available <pytest:about-fixtures>`
-for the file being tested.
-
-This requires a understanding of `confest.py` - in the same way {ref}`pytest's vanilla doctest plugin <pytest:doctest>` does.
-
-You know your project's package structure best, the follow just serve as examples of new places conftest.py will be needed:
-
-### Example: Root-level `README`
-
-In other words, if you want to test a project's `README.md` in the project root, a `conftest.py` would be needed at the root-level. This also has the benefit of reducing duplication:
-
-    conftest.py
-        # content of conftest.py
-        import pytest
-
-        @pytest.fixture
-        def username():
-            return 'username'
-
-    README.rst
-        Our project
-        -----------
-
-        .. doctest::
-
-            # content of tests/test_something.py
-            def test_username(username):
-                assert username == 'username'
-
-Now you can do:
-
-```console
-$ pytest README.rst
-```
-
-### Examples: `docs/`
-
-Let's assume `.md` and `.rst` files in `docs/`, this means you need to import `conftest.py`
-
-    docs/
-    	conftest.py
-    		# import conftest of project
-    		import pytest
-
-    		@pytest.fixture
-    		def username():
-    			return 'username'
-
-    	usage.rst
-    		Our project
-    		-----------
-
-    		.. doctest::
-
-    			# content of tests/test_something.py
-    			def test_username(username):
-    				assert username == 'username'
-
-Now you can do:
-
-```console
-$ pytest docs/
-```
+The plugin disables {ref}`pytest's standard doctest plugin <pytest:doctest>` by
+default so the same examples are not collected twice.
 
 ## File support
 
 ### reStructuredText (`.rst`)
 
+Run a single reStructuredText file:
+
 ```console
 $ pytest README.rst
 ```
+
+Run a documentation directory:
 
 ```console
 $ pytest docs/
@@ -92,11 +29,13 @@ $ pytest docs/
 
 ### Markdown (`.md`)
 
-If you install [myst-parser], doctest will run on .md files.
+Install [myst-parser] when you want pytest to collect doctests from Markdown:
 
 ```console
 $ pytest README.md
 ```
+
+Run Markdown and reStructuredText files together from `docs/`:
 
 ```console
 $ pytest docs/
@@ -104,16 +43,55 @@ $ pytest docs/
 
 [myst-parser]: https://myst-parser.readthedocs.io/en/latest/
 
-## Scanning python files
+## Using fixtures
 
-You can retain {ref}`pytest's standard doctest plugin <pytest:doctest>` of
-running doctests in `.py` by passing `--doctest-docutils-modules`:
+Normal pytest fixture visibility applies: {ref}`a visible conftest.py must be
+available <pytest:about-fixtures>` for the documentation file being tested. If
+`README.md` lives in the project root, put the fixture in a root-level
+`conftest.py`:
+
+```python
+import pytest
+
+
+@pytest.fixture
+def username():
+    return "username"
+```
+
+Then a root-level `README.rst` can use the fixture in its doctest examples.
+
+Run the file directly:
+
+```console
+$ pytest README.rst
+```
+
+For doctests under `docs/`, put the fixtures in `docs/conftest.py` or another
+`conftest.py` that pytest can see from that directory:
+
+```text
+docs/
+    conftest.py
+    usage.rst
+```
+
+Run the directory:
+
+```console
+$ pytest docs/
+```
+
+## Python module doctests
+
+Use `--doctest-docutils-modules` when you also want this plugin to collect
+Python-module doctests:
 
 ```console
 $ py.test src/ --doctest-docutils-modules
 ```
 
-You can disable it via `--no-doctest-docutils-modules`:
+Disable Python-module collection explicitly with `--no-doctest-docutils-modules`:
 
 ```console
 $ py.test src/ --no-doctest-docutils-modules
@@ -123,7 +101,7 @@ $ py.test src/ --no-doctest-docutils-modules
 
 - [libtmux] ([source](https://github.com/tmux-python/libtmux/tree/v0.15.0post0)):
 
-  - Documentation w/ docutils:
+  - Documentation doctests:
 
     - [README.md](https://github.com/tmux-python/libtmux/blob/v0.15.0post0/README.md) ([raw](https://github.com/tmux-python/libtmux/raw/v0.15.0post0/README.md))
 
@@ -133,11 +111,12 @@ $ py.test src/ --no-doctest-docutils-modules
 
   - Configuration:
 
-    - Doctests support pytest fixtures through [`doctest_namespace`](https://docs.pytest.org/en/7.1.x/how-to/doctest.html#doctest-namespace-fixture)
+    - Doctests support pytest fixtures through {ref}`doctest_namespace <pytest:doctest_namespace>`
 
       See [`add_doctest_fixtures()`](https://github.com/tmux-python/libtmux/blob/v0.15.0post0/src/libtmux/conftest.py#L15-L26) in [`src/libtmux/conftest.py`](https://github.com/tmux-python/libtmux/blob/v0.15.0post0/src/libtmux/conftest.py)
 
 [libtmux]: https://libtmux.git-pull.com/
+[pytest]: https://docs.pytest.org/en/stable/
 
 ## API
 
