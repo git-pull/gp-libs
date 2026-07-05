@@ -29,7 +29,7 @@ conf = merge_sphinx_config(
     source_branch="master",
     light_logo="img/icons/logo.svg",
     dark_logo="img/icons/logo-dark.svg",
-    extra_extensions=["sphinx_autodoc_api_style"],
+    extra_extensions=["sphinx.ext.doctest", "sphinx_autodoc_api_style"],
     intersphinx_mapping={
         "gp_sphinx": ("https://gp-sphinx.git-pull.com/", None),
         "py": ("https://docs.python.org/", None),
@@ -45,3 +45,10 @@ conf = merge_sphinx_config(
     exclude_patterns=["_build", "AGENTS.md", "CLAUDE.md"],
 )
 globals().update(conf)
+
+doctest_global_setup = """
+import pathlib
+
+from doctest_docutils import is_allowed_version
+from pytest_doctest_docutils import pytest_ignore_collect
+"""

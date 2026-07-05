@@ -46,7 +46,7 @@ The CI docs workflow, `.tmuxp.yaml`, and agent instructions were updated to call
 
 #### Documentation now follows the Library Skeleton pattern (#65)
 
-The documentation was reorganized around a landing page, topic cards, and a dedicated project section. The new structure keeps the user-facing extensions visible first: {doc}`doctest/index`, {doc}`doctest/pytest`, and {doc}`linkify_issues/index`.
+The documentation was reorganized around a landing page, topic cards, and a dedicated project section. The new structure keeps the user-facing modules visible first: {doc}`modules/doctest_docutils/index`, {doc}`modules/pytest_doctest_docutils/index`, and {doc}`modules/linkify_issues/index`.
 
 The history page still includes this file directly, so release notes continue to render as part of the docs site rather than living only in the repository.
 
@@ -393,7 +393,7 @@ $ python -m doctest_docutils README.md -v
 
 ### Documentation
 
-Initial documentation, README examples, Sphinx configuration, and package metadata shipped with the stable release. See {doc}`doctest/index`, {doc}`doctest/pytest`, and {doc}`linkify_issues/index` for the current guides.
+Initial documentation, README examples, Sphinx configuration, and package metadata shipped with the stable release. See {doc}`modules/doctest_docutils/index`, {doc}`modules/pytest_doctest_docutils/index`, and {doc}`modules/linkify_issues/index` for the current guides.
 
 ### Development
 

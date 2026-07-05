@@ -1,1 +1,4 @@
 "developing.md" "project/contributing.md"
+"doctest/index.md" "modules/doctest_docutils/index.md"
+"doctest/pytest.md" "modules/pytest_doctest_docutils/index.md"
+"linkify_issues/index.md" "modules/linkify_issues/index.md"
