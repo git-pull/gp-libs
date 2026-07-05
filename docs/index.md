@@ -16,7 +16,7 @@ Install and get started in minutes.
 :::{grid-item-card} Documentation Doctests
 :link: doctest/index
 :link-type: doc
-Run doctests in reStructuredText and Markdown files.
+Run examples from documentation files.
 :::
 
 :::{grid-item-card} Autolink GitHub Issues
@@ -45,7 +45,7 @@ $ uv add gp-libs
 
 ## At a glance
 
-Run doctests in Markdown and reStructuredText files:
+Run doctests in [Markdown] and [reStructuredText] files:
 
 ```console
 $ python -m doctest_docutils README.md -v
@@ -71,3 +71,5 @@ GitHub <https://github.com/git-pull/gp-libs>
 ```
 
 [Sphinx]: https://www.sphinx-doc.org/
+[Markdown]: https://commonmark.org/
+[reStructuredText]: https://docutils.sourceforge.io/rst.html

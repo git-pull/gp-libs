@@ -20,7 +20,8 @@ $ pip install --user --upgrade gp-libs
 
 ### Developmental releases
 
-New versions of gp-libs are published to PyPI as alpha, beta, or release candidates.
+New versions of gp-libs are published to [PyPI] as alpha, beta, or release
+candidates.
 Their versions include markers such as `a1`, `b1`, and `rc1`, respectively.
 `1.10.0b4` means the fourth beta release of `1.10.0` before general
 availability.
@@ -71,5 +72,6 @@ Install from trunk when you need unreleased work. These installs can break:
 
 [pip]: https://pip.pypa.io/en/stable/
 [pipx]: https://pypa.github.io/pipx/docs/
+[PyPI]: https://pypi.org/
 [uv]: https://docs.astral.sh/uv/
 [uvx]: https://docs.astral.sh/uv/guides/tools/
