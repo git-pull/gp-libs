@@ -50,8 +50,8 @@ a comprehension tax for the advanced one.
   toolkit hangs on; reinforce that chain when you explain why Markdown
   needs myst-parser or why a fixture needs a visible `conftest.py`.
 - **Name the trade-off.** If a choice costs something — the plugin
-  disables pytest's standard doctest plugin, Markdown support needs
-  myst-parser installed, fixtures reach only files a `conftest.py` can
+  disables pytest's standard doctest plugin, Markdown support goes
+  through myst-parser, fixtures reach only files a `conftest.py` can
   see — say so, and say what it buys. State it; don't sell it.
 - **Frame by concept, not by mechanism.** Don't headline a feature by
   its `conf.py` key or pytest flag in prose; that names the
@@ -76,6 +76,11 @@ dogfood the tool they describe; a broken example is a failing test.
 - No `doctest_namespace` fixtures are registered for `docs/` — no
   `conftest.py` is visible to it — so keep examples self-contained:
   import what you use inside the block.
+- Console fences are checked by
+  `tests/test_docs_console_examples.py`. Keep one `$` prompt command per
+  block; safe `python -m doctest_docutils ...` examples with existing
+  local targets run in a temp-home sandbox, while install, watch,
+  server, git, and full-suite commands are policy-validated only.
 
 ## What stays precise
 
@@ -119,7 +124,7 @@ surrounding prose instead.
 
 ## A page that does this
 
-`docs/linkify_issues/index.md` is the worked example: a concept-first
+`docs/modules/linkify_issues/index.md` is the worked example: a concept-first
 intro that says what the extension does (plain-text `#123` becomes a
 link) before any `conf.py` key, a two-step default configuration most
 readers can stop after, `issue_re` marked as optional tuning for the

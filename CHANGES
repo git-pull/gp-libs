@@ -34,7 +34,7 @@ _Notes on upcoming releases will be added here_
 
 ## gp-libs 0.0.18 (2026-06-27)
 
-gp-libs 0.0.18 refreshes the project documentation and maintainer workflow around the shared git-pull docs stack. The docs now use the Library Skeleton page shape, the gp-sphinx theme and API presentation packages, and a just-based command surface that matches the rest of the workspace. Readers get a more navigable site; maintainers get reusable commands and fewer repo-local Sphinx assets to keep in sync.
+gp-libs 0.0.18 refreshes the project documentation and maintainer workflow around the shared git-pull docs stack. The docs now use the Library Skeleton page shape, the [gp-sphinx](https://gp-sphinx.git-pull.com/) theme and API presentation packages, and a [just](https://just.systems/)-based command surface that matches the rest of the workspace. Readers get a more navigable site; maintainers get reusable commands and fewer repo-local Sphinx assets to keep in sync.
 
 ### What's new
 
@@ -46,13 +46,13 @@ The CI docs workflow, `.tmuxp.yaml`, and agent instructions were updated to call
 
 #### Documentation now follows the Library Skeleton pattern (#65)
 
-The documentation was reorganized around a landing page, topic cards, and a dedicated project section. The new structure keeps the user-facing extensions visible first: {doc}`doctest/index`, {doc}`doctest/pytest`, and {doc}`linkify_issues/index`.
+The documentation was reorganized around a landing page, topic cards, and a dedicated project section. The new structure keeps the user-facing modules visible first: {doc}`modules/doctest_docutils/index`, {doc}`modules/pytest_doctest_docutils/index`, and {doc}`modules/linkify_issues/index`.
 
 The history page still includes this file directly, so release notes continue to render as part of the docs site rather than living only in the repository.
 
 #### Shared gp-sphinx docs platform (#66)
 
-The docs site moved from repo-local Sphinx theme glue, templates, CSS, and JavaScript to the published gp-sphinx package stack. `docs/conf.py` now delegates common configuration to `gp_sphinx.config.merge_sphinx_config()`, while gp-libs keeps only the project-specific values such as intersphinx mappings, logos, linkcode, and redirects.
+The docs site moved from repo-local Sphinx theme glue, templates, CSS, and JavaScript to the published gp-sphinx package stack. `docs/conf.py` now delegates common configuration to {func}`~gp_sphinx.config.merge_sphinx_config`, while gp-libs keeps only the project-specific values such as intersphinx mappings, logos, linkcode, and redirects.
 
 This removes bundled docs support files that are now owned by shared packages and keeps gp-libs aligned with the broader git-pull documentation platform.
 
@@ -393,7 +393,7 @@ $ python -m doctest_docutils README.md -v
 
 ### Documentation
 
-Initial documentation, README examples, Sphinx configuration, and package metadata shipped with the stable release. See {doc}`doctest/index`, {doc}`doctest/pytest`, and {doc}`linkify_issues/index` for the current guides.
+Initial documentation, README examples, Sphinx configuration, and package metadata shipped with the stable release. See {doc}`modules/doctest_docutils/index`, {doc}`modules/pytest_doctest_docutils/index`, and {doc}`modules/linkify_issues/index` for the current guides.
 
 ### Development
 

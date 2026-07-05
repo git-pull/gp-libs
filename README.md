@@ -27,7 +27,7 @@ Two components:
 This extends standard library `doctest` to support anything docutils can parse.
 It can parse reStructuredText (.rst) and markdown (.md).
 
-See more: <https://gp-libs.git-pull.com/doctest/>
+See more: <https://gp-libs.git-pull.com/modules/doctest_docutils/>
 
 #### Supported styles
 
@@ -51,7 +51,7 @@ It supports two barebones directives:
      4
   ```
 
-  Markdown (requires [myst-parser]):
+  Markdown:
 
   ````markdown
   ```{doctest}
@@ -76,7 +76,7 @@ That's what `doctest` does by design.
 
 ##### Markdown
 
-If you install [myst-parser], doctest will run on .md files.
+Markdown files run through [myst-parser], which is installed with gp-libs.
 
 ```console
 $ python -m doctest_docutils README.md -v
@@ -86,7 +86,8 @@ $ python -m doctest_docutils README.md -v
 
 _This plugin disables [pytest's standard `doctest` plugin]._
 
-This plugin integrates with the `doctest_docutils` module with pytest to enable seamless testing of docs, `conftest.py` fixtures and all.
+This plugin integrates `doctest_docutils` with pytest so documentation examples
+run with the surrounding `conftest.py` setup.
 
 ```console
 $ pytest docs/
@@ -95,7 +96,7 @@ $ pytest docs/
 Like the above module, it supports docutils' own `doctest_block` and a basic
 `.. doctest::` directive.
 
-See more: <https://gp-libs.git-pull.com/doctest/pytest.html>
+See more: <https://gp-libs.git-pull.com/modules/pytest_doctest_docutils/>
 
 [pytest's standard `doctest` plugin]: https://docs.pytest.org/en/stable/how-to/doctest.html#doctest
 
@@ -127,10 +128,10 @@ In your _conf.py_:
    issue_url_tpl = 'https://github.com/git-pull/gp-libs/issues/{issue_id}'
    ```
 
-   The config variable is formatted via {meth}`str.format` where `issue_id` is
+   The config variable is formatted via `str.format()` where `issue_id` is
    `42` if the text is \#42.
 
-See more: <https://gp-libs.git-pull.com/linkify_issues/>
+See more: <https://gp-libs.git-pull.com/modules/linkify_issues/>
 
 ## Install
 

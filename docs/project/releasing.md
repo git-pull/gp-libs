@@ -1,36 +1,31 @@
 # Releasing
 
-## Version Policy
+## Version policy
 
 gp-libs is pre-1.0. Minor version bumps may include breaking changes.
 
-## Release Process
+## Release process
 
 [uv] handles virtualenv creation, package requirements, versioning,
-building, and publishing. There is no setup.py or requirements files.
+building, and publishing. There is no `setup.py` or requirements file.
 
-1. Update `CHANGES` with release notes
+1. Update `CHANGES` with release notes.
 
-2. Bump version in `src/gp_libs.py` and `pyproject.toml`
+2. Bump version in `src/gp_libs.py` and `pyproject.toml`.
 
-3. Commit and tag:
-
-   ```console
-   $ git commit -m 'build(gp_libs): Tag v0.1.1'
-   ```
+3. Create the release commit:
 
    ```console
-   $ git tag v0.1.1
+   $ git commit -m 'Tag v0.1.1'
    ```
 
-4. Push:
+4. Push the branch for review:
 
    ```console
    $ git push
    ```
 
-   ```console
-   $ git push --tags
-   ```
+5. After review, the release owner creates and pushes the `v0.1.1` tag. Tags
+   trigger the publish workflow.
 
 [uv]: https://github.com/astral-sh/uv
