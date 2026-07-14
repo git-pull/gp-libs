@@ -26,11 +26,21 @@ $ uv add gp-libs --prerelease allow
 $ uvx --from 'gp-libs' --prerelease allow gp-libs
 ```
 
-## gp-libs 0.0.19 (unreleased)
+## gp-libs 0.0.20 (unreleased)
 
 <!-- KEEP THIS PLACEHOLDER - DO NOT REMOVE OR MODIFY THIS LINE -->
 _Notes on upcoming releases will be added here_
 <!-- END PLACEHOLDER - ADD NEW CHANGELOG ENTRIES BELOW THIS LINE -->
+
+## gp-libs 0.0.19 (2026-07-13)
+
+gp-libs 0.0.19 adds the `+HIDE` doctest option flag, so a documentation
+example can carry setup lines that run and are checked but stay out of
+the rendered page. The flag is a no-op for the test runner — it only
+marks lines that render-side tooling strips — so a shown example stays
+focused while the full example still executes as a test. See
+{ref}`the plugin how-to <pytest_doctest_docutils-how-to>` for the
+workflow.
 
 ### What's new
 
