@@ -32,6 +32,16 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 _Notes on upcoming releases will be added here_
 <!-- END PLACEHOLDER - ADD NEW CHANGELOG ENTRIES BELOW THIS LINE -->
 
+### What's new
+
+#### New doctest flag: `+HIDE` (#79)
+
+Doctest examples can now be marked `# doctest: +HIDE`. The flag is a
+no-op for the test runner — the example still executes and its output is
+still checked — and exists so documentation tooling can drop the marked
+lines from *rendered* output while the runner keeps executing them from
+source.
+
 ## gp-libs 0.0.18 (2026-06-27)
 
 gp-libs 0.0.18 refreshes the project documentation and maintainer workflow around the shared git-pull docs stack. The docs now use the Library Skeleton page shape, the [gp-sphinx](https://gp-sphinx.git-pull.com/) theme and API presentation packages, and a [just](https://just.systems/)-based command surface that matches the rest of the workspace. Readers get a more navigable site; maintainers get reusable commands and fewer repo-local Sphinx assets to keep in sync.
