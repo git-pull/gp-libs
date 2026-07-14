@@ -480,3 +480,43 @@ addopts=-p no:doctest -vv
 
     result = pytester.runpytest(str(docs_path), "--doctest-docutils-modules")
     result.assert_outcomes(passed=1)
+
+
+def test_hide_optionflag_py_docstring(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """``# doctest: +HIDE`` parses and runs as a no-op in a .py docstring.
+
+    ``HIDE`` is registered so documentation tooling can mark a setup example to
+    drop from rendered output. Without the registration, collection would raise
+    ``ValueError: ... invalid option: '+HIDE'``. Here it must simply run.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(
+        ".ini",
+        pytest=textwrap.dedent(
+            """
+[pytest]
+addopts=-p no:doctest
+        """.strip(),
+        ),
+    )
+    example = pytester.path / "example.py"
+    example.write_text(
+        textwrap.dedent(
+            '''
+def demo() -> int:
+    """Return a computed value.
+
+    >>> base = 40  # doctest: +HIDE
+    >>> base + 2
+    42
+    """
+    return 42
+        ''',
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(str(example), "--doctest-docutils-modules")
+    result.assert_outcomes(passed=1)
