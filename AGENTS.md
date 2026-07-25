@@ -226,6 +226,25 @@ type
 """
 ```
 
+**Classes with fields** — `NamedTuple`, dataclasses — document every field in
+an `Attributes` section:
+
+```python
+class ConsoleExample(t.NamedTuple):
+    """Console example collected from a Markdown page.
+
+    Attributes
+    ----------
+    path : pathlib.Path
+        Markdown file the example was collected from.
+    """
+```
+
+Autodoc renders every field whether or not you describe it, so an
+undocumented `NamedTuple` field ships to the API docs as "Alias for field
+number 0" and a dataclass field ships bare. Document all of them — a class
+with three fields and two documented still ships a stub for the third.
+
 ### Doctests
 
 **All functions and methods MUST have working doctests.** Doctests serve as both documentation and tests.
