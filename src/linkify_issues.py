@@ -68,7 +68,20 @@ class LinkifyIssues(SphinxTransform):
 
 
 class SetupDict(t.TypedDict):
-    """Setup mapping for Sphinx app."""
+    """Setup mapping for Sphinx app.
+
+    Attributes
+    ----------
+    version : str
+        Version of this extension, returned to Sphinx so it can invalidate
+        its build environment when the extension changes.
+    parallel_read_safe : bool
+        Whether Sphinx may read source files in parallel while this
+        extension is loaded.
+    parallel_write_safe : bool
+        Whether Sphinx may write output in parallel while this extension is
+        loaded.
+    """
 
     version: str
     parallel_read_safe: bool
