@@ -197,7 +197,7 @@ class FilePathModeNotImplemented(Exception):
     """Raised if file_path_mode not supported."""
 
     def __init__(self, file_path_mode: str) -> None:
-        return super().__init__(f"No file_path_mode supported for {file_path_mode}")
+        super().__init__(f"No file_path_mode supported for {file_path_mode}")
 
 
 @pytest.mark.parametrize(
