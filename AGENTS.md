@@ -525,7 +525,7 @@ When stuck in debugging loops:
 In your Sphinx `conf.py`:
 ```python
 extensions = ["linkify_issues"]
-issue_url_tpl = 'https://github.com/git-pull/gp-libs/issues/{issue_id}'
+issue_url_tpl = "https://github.com/git-pull/gp-libs/issues/{issue_id}"
 ```
 
 ## References

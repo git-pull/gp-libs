@@ -125,7 +125,7 @@ In your _conf.py_:
 
    ```python
    # linkify_issues
-   issue_url_tpl = 'https://github.com/git-pull/gp-libs/issues/{issue_id}'
+   issue_url_tpl = "https://github.com/git-pull/gp-libs/issues/{issue_id}"
    ```
 
    The config variable is formatted via `str.format()` where `issue_id` is
