@@ -49,6 +49,14 @@ blocks inside Markdown, so `ruff format` now reaches documentation snippets
 alongside the Python sources. Without a floor, a contributor on an older ruff
 would see `ruff format --check` disagree with CI.
 
+#### ruff's default rule set is enabled (#82)
+
+Linting runs ruff's curated default rule set, with this project's own linters
+layered on top of it via `extend-select`. The config previously used `select`,
+which _replaces_ the default set rather than extending it, so every rule the
+list did not name was silently switched off. Expect findings from rules the
+project never deliberately opted out of.
+
 #### CI actions updated to current majors
 
 Workflow actions moved to their current major releases: `actions/checkout` v7,
