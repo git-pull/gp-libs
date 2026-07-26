@@ -42,6 +42,13 @@ what each key holds. They previously reached the rendered API reference as
 
 ### Development
 
+#### Minimum ruff 0.16 (#82)
+
+Minimum `ruff>=0.16.0` (was unpinned). ruff 0.16 formats Python and pycon code
+blocks inside Markdown, so `ruff format` now reaches documentation snippets
+alongside the Python sources. Without a floor, a contributor on an older ruff
+would see `ruff format --check` disagree with CI.
+
 #### CI actions updated to current majors
 
 Workflow actions moved to their current major releases: `actions/checkout` v7,
