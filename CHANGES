@@ -32,6 +32,14 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 _Notes on upcoming releases will be added here_
 <!-- END PLACEHOLDER - ADD NEW CHANGELOG ENTRIES BELOW THIS LINE -->
 
+### Documentation
+
+#### Extension metadata fields are described (#81)
+
+The `TypedDict` returned from `linkify_issues`'s Sphinx `setup()` now says
+what each key holds. They previously reached the rendered API reference as
+"Alias for field number 0" or as a bare name carrying only its type.
+
 ### Development
 
 #### CI actions updated to current majors
