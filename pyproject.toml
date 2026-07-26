@@ -63,7 +63,7 @@ dev = [
   "coverage",
   "pytest-cov",
   # Lint
-  "ruff",
+  "ruff>=0.16.0",
   "mypy",
   "typing-extensions",
   "types-docutils",
@@ -88,7 +88,7 @@ coverage =[
   "pytest-cov",
 ]
 lint = [
-  "ruff",
+  "ruff>=0.16.0",
   "mypy",
   "typing-extensions",
   "types-docutils",
@@ -151,7 +151,10 @@ files = [
 target-version = "py310"
 
 [tool.ruff.lint]
-select = [
+# `select` is deliberately unset: ruff 0.16 enables a curated default rule
+# set, and an explicit `select` would replace it rather than extend it.
+# `extend-select` layers this project's additional linters on top.
+extend-select = [
   "E", # pycodestyle
   "F", # pyflakes
   "I", # isort
@@ -168,7 +171,7 @@ select = [
   "PERF", # Perflint
   "RUF", # Ruff-specific rules
   "D", # pydocstyle
-  "FA100",  # future annotations
+  "FA100", # future annotations
 ]
 ignore = [
   "COM812", # missing trailing comma, ruff format conflict
@@ -198,6 +201,9 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 "*/__init__.py" = ["F401"]
+# Sphinx conf.py reads the package's metadata by exec'ing its source, so
+# building the docs never imports gp_libs or its dependencies.
+"docs/conf.py" = ["S102"] # flake8-bandit: exec-builtin
 
 [tool.pytest.ini_options]
 addopts = "--tb=short --no-header --showlocals --doctest-modules"

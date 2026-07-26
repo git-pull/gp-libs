@@ -197,7 +197,7 @@ class FilePathModeNotImplemented(Exception):
     """Raised if file_path_mode not supported."""
 
     def __init__(self, file_path_mode: str) -> None:
-        return super().__init__(f"No file_path_mode supported for {file_path_mode}")
+        super().__init__(f"No file_path_mode supported for {file_path_mode}")
 
 
 @pytest.mark.parametrize(
@@ -321,3 +321,18 @@ def test_doctestopt_re_whitespace_trimming(
     """
     result = doctest_docutils.doctestopt_re.sub("", input_code)
     assert result == expected_output
+
+
+def test_doctest_finder_name_does_not_exist_message() -> None:
+    """DocTestFinderNameDoesNotExist reports the offending object's type."""
+    exc = doctest_docutils.DocTestFinderNameDoesNotExist("not-a-module")
+
+    assert "DocTestFinder.find: name must be given" in str(exc)
+    assert repr(str) in str(exc)
+
+
+def test_docutils_package_relative_error_message() -> None:
+    """TestDocutilsPackageRelativeError states the module-relative constraint."""
+    exc = doctest_docutils.TestDocutilsPackageRelativeError()
+
+    assert str(exc) == "Package may only be specified for module-relative paths."

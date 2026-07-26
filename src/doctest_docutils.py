@@ -220,7 +220,7 @@ class DocTestFinderNameDoesNotExist(ValueError):
     """Raised with doctest lookup name not provided."""
 
     def __init__(self, string: str) -> None:
-        return super().__init__(
+        super().__init__(
             "DocTestFinder.find: name must be given "
             f"when string.__name__ doesn't exist: {type(string)!r}",
         )
@@ -420,7 +420,7 @@ class TestDocutilsPackageRelativeError(Exception):
     """Raise when doctest_docutils is called for package not relative to module."""
 
     def __init__(self) -> None:
-        return super().__init__(
+        super().__init__(
             "Package may only be specified for module-relative paths.",
         )
 
