@@ -201,6 +201,9 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 "*/__init__.py" = ["F401"]
+# Sphinx conf.py reads the package's metadata by exec'ing its source, so
+# building the docs never imports gp_libs or its dependencies.
+"docs/conf.py" = ["S102"] # flake8-bandit: exec-builtin
 
 [tool.pytest.ini_options]
 addopts = "--tb=short --no-header --showlocals --doctest-modules"
