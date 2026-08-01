@@ -1155,3 +1155,50 @@ def test_namespace_scope_rejects_an_unknown_name() -> None:
     assert str(excinfo.value) == (
         "Unknown namespace scope: 'per-file'. Expected one of: block, document"
     )
+
+
+class PyversionFixture(t.NamedTuple):
+    """Directive whose ``:pyversion:`` decides whether its block runs.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    spec : str
+        PEP-440 specifier written on the ``:pyversion:`` option.
+    skipped : bool
+        Whether the block is expected to carry ``SKIP``.
+    """
+
+    test_id: str
+    spec: str
+    skipped: bool
+
+
+PYVERSION_FIXTURES = [
+    PyversionFixture(test_id="satisfied-runs", spec=">=3.10", skipped=False),
+    PyversionFixture(test_id="unsatisfied-skips", spec=">=99.0", skipped=True),
+    PyversionFixture(test_id="upper-bound-skips", spec="<3.0", skipped=True),
+]
+
+
+@pytest.mark.parametrize(
+    PyversionFixture._fields,
+    PYVERSION_FIXTURES,
+    ids=[f.test_id for f in PYVERSION_FIXTURES],
+)
+def test_pyversion_skips_the_block_it_excludes(
+    test_id: str,
+    spec: str,
+    skipped: bool,
+) -> None:
+    """``:pyversion:`` compares the running interpreter against the specifier.
+
+    The arguments were reversed, so every specifier was parsed as a version and
+    the page died on ``InvalidVersion`` before the option could decide anything.
+    """
+    page = f".. doctest::\n    :pyversion: {spec}\n\n    >>> 2 + 2\n    4\n"
+
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert test.examples[0].options.get(doctest.SKIP, False) is skipped
