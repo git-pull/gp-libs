@@ -48,6 +48,22 @@ earlier binding fails when it is read, or run, by itself. See
 choice under pytest, spelled `--doctest-docutils-namespace-scope` there, and for
 what sharing costs a test run.
 
+A shared page is reported as one item by default. Ask for one item per block,
+each named for where the block sits, when you want to read the run block by
+block:
+
+```console
+$ python -m doctest_docutils README.md --namespace-scope document --namespace-items per-block -v
+```
+
+A passing page prints nothing without `-v`. What changes without it is a
+failure's heading, which names the block — `in README.md[1]` rather than
+`in README.md`.
+
+Nothing here schedules the blocks apart, so they share the namespace either way.
+Under pytest they can be scheduled apart, which is what
+{ref}`the plugin's how-to <pytest_doctest_docutils-how-to>` covers.
+
 ## Compare with stdlib doctest
 
 Use the stdlib command when you are checking Python modules or plain text that
