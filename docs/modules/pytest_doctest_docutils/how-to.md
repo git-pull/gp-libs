@@ -113,7 +113,7 @@ A namespace is one item. That is what keeps a shared page correct under
   is what keeps a half-built namespace out of the blocks below: they never run.
   With `--doctest-continue-on-failure` they do run, against a namespace missing
   whatever the failed example would have bound, so one broken line can report
-  as a first failure followed by a run of `NameError`s that are not
+  as a first failure followed by a run of {exc}`NameError`s that are not
   independent.
 - A function-scoped fixture sets up once per namespace instead of once per
   block. A page whose blocks each expect a fresh fixture belongs at `block`.
@@ -136,6 +136,114 @@ block written close underneath one is pushed past it, by as many lines as the
 two overlap. The gutter still ends on the failing prompt. Write those blocks as
 `.. doctest::` directives when the exact line matters — a directive is numbered
 by the line it opens on.
+
+### Keep a node id for every block
+
+The item a namespace collects as is the thing you can point pytest at. When a
+namespace is one item, that reach stops at the page: `--lf` re-runs the whole
+page rather than the block that failed, `-k` and `--deselect` cannot single a
+block out, a JUnit report names the page, and there is no id to paste back
+while you iterate on one block.
+
+Those reaches are worth most where each block has a namespace of its own, the
+default scope. A block that reads what an earlier one bound is a fragment of a
+session, so selecting it alone — by id, by `-k`, or by `--lf` after it failed —
+runs it without the block it depends on. See
+{ref}`what per-block items cost <pytest_doctest_docutils-per-block-costs>`.
+
+Take the other trade when you want those, and a fixture per block, more than
+you want the single line:
+
+```console
+$ pytest docs/ --doctest-docutils-namespace-items=per-block
+```
+
+Or settle it for the project:
+
+```ini
+[pytest]
+doctest_docutils_namespace_items = per-block
+```
+
+Every block is an item again, under the id it carries when nothing is shared —
+`page.md::page.md[1]`, or `page.rst::intro[1]` inside a group — and the blocks
+of one namespace are handed the *same* globals rather than a copy each. A
+function-scoped fixture is back to setting up once per block, which is what a
+project promising a fresh fixture for every example needs.
+
+The two settings answer different questions, and both still apply: the scope
+says what shares a namespace, this one says whether sharing costs the blocks
+their ids. At the default scope no page state is shared either way — but
+selecting `per-block` is still the opt-in to a live shared mapping, because a
+page that declares a group shares one whatever the scope, and the refusal below
+reads the setting rather than the page.
+
+A run that keeps a node id for every block says so in its header, so you can
+tell from the report which one you got. The scope rides along on the same line:
+
+```text
+doctest-docutils: namespace items: per-block, namespace scope: document
+```
+
+A run that only widens the scope is not announced; the default layout reports
+nothing, so the header of a project that never touched this setting reads as it
+always has.
+
+(pytest_doctest_docutils-per-block-costs)=
+
+### What per-block items cost
+
+A live namespace is a Python object, so it neither crosses a process boundary
+nor outlives the fixtures that filled it. The cost shows up in four places.
+
+Under `pytest-xdist`, `-n` alone selects `--dist load`, which distributes by
+item, as does `--dist worksteal`. Two blocks of one namespace can then land on
+different workers and the second reads a namespace the first never built.
+pytest stops the session rather than report a page that is only wrong because
+of how it was scheduled:
+
+```text
+ERROR: doctest_docutils_namespace_items = per-block can hand a namespace's
+blocks one globals mapping between them — a page declaring a group does,
+whatever the scope — and a mapping cannot cross processes. --dist load hands a
+file's items to whichever worker is free, so it can send them to different
+workers. Run with --dist loadgroup or --dist loadfile, or set
+doctest_docutils_namespace_items = merged. -n without --dist selects --dist
+load.
+```
+
+Run with a scheduler that keeps a namespace whole instead:
+
+```console
+$ pytest docs/ -n auto --dist loadfile
+```
+
+`--dist loadgroup` works too, driven by an `xdist_group` marker the plugin
+emits per namespace, and is finer grained: `loadfile` pins a whole file to one
+worker, while the group is the file plus the namespace, so a page holding
+several namespaces still spreads. `loadscope` and `each` are safe as well.
+Whichever you pick is a project-wide decision, which is why merged stays the
+default. A run xdist would not distribute anyway — one worker, or
+`--collect-only` — is never refused.
+
+Running one block by its id has the same shape: `pytest page.md::page.md[1]`
+runs that block and nothing else, so a block reading a name an earlier one
+bound reports the `NameError` it earns. `-k`, `--deselect` and `--lf`
+reach a block the same way and cost the same thing — a `--lf` re-run of a
+failure in a shared page reports the missing binding rather than the diff you
+were chasing. That is inherent to running a fragment of a session, not
+something the setting can hide.
+
+A namespace shares the mapping, not the lifetime of what a fixture put in it.
+Each block is its own item, so a function-scoped fixture tears down between
+blocks: an object one block bound out of that fixture is finalized before the
+next block reads it. Widen the fixture's scope when a page carries one across
+its blocks.
+
+And because the blocks share one mapping, they share whatever lives in it —
+including `__future__` flags, which {mod}`doctest` derives from the namespace at
+run time. A `from __future__ import ...` in one block is in force for the rest
+of its namespace.
 
 ## Set options for a whole block
 
