@@ -473,3 +473,67 @@ def test_directive_options_apply_per_example(
     (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
 
     assert test.examples[0].options[flag] is enabled
+
+
+OUT_OF_ORDER_LINES_REST = [
+    (
+        "nested-in-a-directive",
+        textwrap.dedent(
+            """
+Title
+=====
+
+>>> outer = 1
+
+.. note::
+
+   >>> outer + 1
+   2
+            """,
+        ),
+    ),
+    (
+        "nested-in-list-items",
+        textwrap.dedent(
+            """
+Title
+=====
+
+- First item:
+
+  >>> counted = 1
+
+- Second item:
+
+  >>> counted + 1
+  2
+            """,
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("test_id", "page"),
+    OUT_OF_ORDER_LINES_REST,
+    ids=[test_id for test_id, _ in OUT_OF_ORDER_LINES_REST],
+)
+def test_a_nested_block_collects(
+    tmp_path: pathlib.Path,
+    test_id: str,
+    page: str,
+) -> None:
+    """A doctest block nested in another node is collected, not fatal.
+
+    docutils leaves ``line`` unset on a block inside a directive, a list item,
+    or a block quote, and reading it as a number took the whole page down.
+    """
+    page_path = tmp_path / "page.rst"
+    page_path.write_text(page, encoding="utf-8")
+
+    tests = doctest_docutils.DocutilsDocTestFinder().find(page, str(page_path))
+
+    linenos = [test.lineno or 0 for test in tests]
+
+    assert linenos == sorted(linenos)
+    assert all(lineno > 0 for lineno in linenos)
