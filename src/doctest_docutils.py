@@ -798,8 +798,11 @@ class DocutilsDocTestFinder:
 
         document_name = pathlib.Path(name).name
         # Namespaces keep insertion order, so the merged tests come back in the
-        # order the reader meets each namespace's first block.
-        namespaces: dict[str, list[doctest.DocTest]] = {}
+        # order the reader meets each namespace's first block. Each holds its
+        # setup, test, and cleanup blocks apart: sphinx.ext.doctest runs a
+        # group's setup before its tests and its cleanup after, whatever order
+        # the page wrote them in, and a testsetup exists to be movable.
+        namespaces: dict[str, dict[str, list[doctest.DocTest]]] = {}
 
         for idx, node in enumerate(findall(doc)(condition)):
             assert isinstance(node, nodes.Element)
@@ -859,11 +862,20 @@ class DocutilsDocTestFinder:
                     merged = dict(options)
                     merged.update(example.options)
                     example.options = merged
-            namespaces.setdefault(namespace, []).append(test)
+            phases = namespaces.setdefault(
+                namespace,
+                {"testsetup": [], "test": [], "testcleanup": []},
+            )
+            phases[block_type if block_type in phases else "test"].append(test)
 
         tests.extend(
-            _merge_blocks(blocks, namespace, name, globs)
-            for namespace, blocks in namespaces.items()
+            _merge_blocks(
+                [*phases["testsetup"], *phases["test"], *phases["testcleanup"]],
+                namespace,
+                name,
+                globs,
+            )
+            for namespace, phases in namespaces.items()
         )
 
     def _get_test(
