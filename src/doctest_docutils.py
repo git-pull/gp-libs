@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import doctest
 import logging
 import os
@@ -669,13 +670,20 @@ def _merge_blocks(
     for block in blocks:
         # A dropped block still pads and still shows its source, so the blocks
         # after it keep the lines they reported before and a failure's gutter
-        # still shows what was passed over. Its examples are left untouched:
+        # still shows what was passed over. Its examples are left out entirely:
         # whoever takes them next positions them itself.
         if keep is not None and not any(block is kept for kept in keep):
             continue
         for example in block.examples:
-            example.lineno += offsets[id(block)]
-            examples.append(example)
+            # Positioned on a copy, so merging reads its blocks rather than
+            # consuming them: a block may be merged again — into a second group
+            # it named, or on its own once lifted — and still report the line it
+            # sits on. ``options`` is copied too, since a shallow copy would
+            # hand both merges the same mutable mapping.
+            shifted = copy.copy(example)
+            shifted.options = dict(example.options)
+            shifted.lineno += offsets[id(block)]
+            examples.append(shifted)
     return doctest.DocTest(
         examples,
         globs,
