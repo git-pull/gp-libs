@@ -167,8 +167,11 @@ SKIPPED [1] ...: all tests skipped by +SKIP option
 1 skipped
 ```
 
-An example writing its own `# doctest: -SKIP` still wins, as it does over
-`:options:`. The expression sees `sys` and the globals the document starts
+Where `:options:` sets defaults an example can override, a condition is a gate
+it cannot: an example writing `# doctest: -SKIP` inside a gated block stays
+skipped. Sphinx drops such a block before reading it at all, and an example that
+could reopen it would run on exactly the interpreter or platform the condition
+named. The expression sees `sys` and the globals the document starts
 with, not anything the page's own examples bound — it is answered while the
 page is being read, before any of them run. Naming anything else stops the page
 with {exc}`~doctest_docutils.SkipifExpressionError`, which reports the file,
