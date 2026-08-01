@@ -297,10 +297,13 @@ def _worker_count(specs: Iterable[str]) -> int:
     two. pytest-xdist expands the multiplier in ``parse_tx_spec_config`` and
     sizes every scheduler on the result, so counting the specifications
     themselves would undercount a run that used the shorthand and read a
-    two-worker session as a one-worker one. Reproduced rather than imported
-    because the upstream helper raises when a run names no environment at
-    all, which is a question for pytest-xdist to answer and not for a hook
-    that only wants a number.
+    two-worker session as a one-worker one.
+
+    Reproduced rather than imported because the upstream helper raises when
+    a run names no environment at all, which is pytest-xdist's question to
+    answer. Reproduced exactly, quirks included: counting a specification
+    differently than the run does would size this guard against a session
+    pytest-xdist laid out another way.
 
     Parameters
     ----------
@@ -327,21 +330,37 @@ def _worker_count(specs: Iterable[str]) -> int:
     >>> _worker_count(["2*popen", "3*popen"])
     5
 
-    Anything that is not a count is the specification itself, ``*`` and all:
+    A specification whose ``*`` is not a count keeps the whole of itself:
 
     >>> _worker_count(["popen//python=python3.13"])
     1
+
+    >>> _worker_count(["popen//chdir=a*b"])
+    1
+
+    A count asking for no environment takes none away from the run:
+
+    >>> _worker_count(["0*popen"])
+    0
+
+    >>> _worker_count(["-1*popen", "2*popen"])
+    2
 
     >>> _worker_count([])
     0
     """
     total = 0
     for spec in specs:
-        count, star, _ = spec.partition("*")
+        # ``find``, not ``partition``: no ``*`` answers -1, and upstream
+        # reads the count from ``spec[:-1]``.
+        marker = spec.find("*")
         try:
-            total += int(count) if star else 1
+            count = int(spec[:marker])
         except ValueError:
             total += 1
+        else:
+            # ``[spec] * count`` is empty at or below zero.
+            total += max(count, 0)
     return total
 
 
