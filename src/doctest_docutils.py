@@ -34,6 +34,15 @@ blankline_re = re.compile(r"^\s*<BLANKLINE>", re.MULTILINE)
 doctestopt_re = re.compile(r"[ \t]*#\s*doctest:.+$", re.MULTILINE)
 
 
+#: ``HIDE`` marks a prompt that rendered documentation drops and a test run
+#: keeps. It changes no output check, but a page carrying it fails to parse
+#: wherever the name is unregistered, so registration happens on import rather
+#: than at any one entry point's setup: ``python -m doctest_docutils`` reaches
+#: no further than this module, and pytest's own ``DoctestModule`` parses .py
+#: docstrings without ever consulting the plugin's flag lookup.
+_HIDE_FLAG = doctest.register_optionflag("HIDE")
+
+
 class SkipifExpressionError(ValueError):
     """Raised when a block's ``:skipif:`` expression cannot be evaluated.
 
