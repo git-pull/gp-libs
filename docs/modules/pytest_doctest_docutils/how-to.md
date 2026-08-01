@@ -109,7 +109,12 @@ A namespace is one item. That is what keeps a shared page correct under
 `pytest -n auto`: no worker is ever handed half of a session. It also means:
 
 - The namespace passes or fails as a single line, and a failure stops the
-  examples after it unless you pass `--doctest-continue-on-failure`.
+  examples after it unless you pass `--doctest-continue-on-failure`. Stopping
+  is what keeps a half-built namespace out of the blocks below: they never run.
+  With `--doctest-continue-on-failure` they do run, against a namespace missing
+  whatever the failed example would have bound, so one broken line can report
+  as a first failure followed by a run of `NameError`s that are not
+  independent.
 - A function-scoped fixture sets up once per namespace instead of once per
   block. A page whose blocks each expect a fresh fixture belongs at `block`.
   A block gated end to end is the exception: it is its own item, and it is
