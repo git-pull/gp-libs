@@ -870,3 +870,66 @@ def test_document_scope_survives_xdist(
     result = pytester.runpytest(str(pytester.path), "-n", "2")
 
     result.assert_outcomes(passed=2)
+
+
+GATED_STATE_MD = textwrap.dedent(
+    """
+# Title
+
+```python
+>>> greeting = "hello"
+```
+
+```python
+>>> greeting = "nope"  # doctest: +SKIP
+```
+
+```python
+>>> greeting.upper()
+'HELLO'
+```
+    """,
+)
+
+
+def test_a_shared_page_still_reports_its_gated_block(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A page merged end to end still says which of its blocks did not run.
+
+    Under ``document`` a page with no groups is one namespace, which is where
+    a gated block would otherwise disappear: the item passes on the strength
+    of the blocks that ran and nothing names the one that did not.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester, "doctest_docutils_namespace_scope = document")
+    (pytester.path / "page.md").write_text(GATED_STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest("page.md", "-rs", "-v")
+
+    result.assert_outcomes(passed=1, skipped=1)
+    result.stdout.fnmatch_lines(
+        ["page.md::page.md PASSED*", "page.md::page.md[[]1[]] SKIPPED*"],
+        consecutive=True,
+    )
+    result.stdout.fnmatch_lines(
+        ["SKIPPED [[]1[]] *: page.md:*: every example skipped"],
+    )
+
+
+def test_a_gated_block_survives_xdist(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """The item a gated block collects as distributes like any other.
+
+    It is an ordinary item holding one block's examples, so a worker gets all
+    of it or none of it, the same property the merged namespace has.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester, "doctest_docutils_namespace_scope = document")
+    (pytester.path / "page.md").write_text(GATED_STATE_MD, encoding="utf-8")
+    (pytester.path / "other.md").write_text(GATED_STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest(str(pytester.path), "-n", "2")
+
+    result.assert_outcomes(passed=2, skipped=2)

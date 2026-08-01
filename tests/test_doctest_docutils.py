@@ -636,6 +636,172 @@ def test_skipif_skips_only_its_own_block_of_a_group() -> None:
     assert [example.options[doctest.SKIP] for example in gated.examples] == [True]
 
 
+def test_lifting_a_gated_block_moves_no_reported_line() -> None:
+    """Every example reports the line it reports with the gate turned off.
+
+    The lifted block is positioned where docutils put it, so a reader told it
+    was skipped is pointed at the same place the group would have pointed.
+    """
+    finder = doctest_docutils.DocutilsDocTestFinder()
+
+    def reported(page: str) -> list[int]:
+        return sorted(
+            (test.lineno or 0) + example.lineno + 1
+            for test in finder.find(page, "page.rst")
+            for example in test.examples
+        )
+
+    assert reported(GATED_MIDDLE_BLOCK_REST) == reported(
+        GATED_MIDDLE_BLOCK_REST.replace(":skipif: True", ":skipif: False"),
+    )
+
+
+class GateSpellingFixture(t.NamedTuple):
+    """One way of writing "do not run this block", and the block it writes.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    block : str
+        Middle block of a three-block group, gated its own way.
+    """
+
+    test_id: str
+    block: str
+
+
+GATE_SPELLING_FIXTURES = [
+    GateSpellingFixture(
+        test_id="skipif-condition",
+        block=".. doctest:: intro\n    :skipif: True\n\n    >>> 1 / 0\n",
+    ),
+    GateSpellingFixture(
+        test_id="directive-options-flag",
+        block=".. doctest:: intro\n    :options: +SKIP\n\n    >>> 1 / 0\n",
+    ),
+    GateSpellingFixture(
+        test_id="inline-flag",
+        block=".. doctest:: intro\n\n    >>> 1 / 0  # doctest: +SKIP\n",
+    ),
+    GateSpellingFixture(
+        test_id="every-example-inline",
+        block=(
+            ".. doctest:: intro\n\n    >>> 1 / 0  # doctest: +SKIP\n"
+            "    >>> 2 / 0  # doctest: +SKIP\n"
+        ),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    GateSpellingFixture._fields,
+    GATE_SPELLING_FIXTURES,
+    ids=[f.test_id for f in GATE_SPELLING_FIXTURES],
+)
+def test_every_spelling_of_a_gate_lifts_its_block_out(
+    test_id: str,
+    block: str,
+) -> None:
+    """A block is lifted out for what its examples carry, not how it says it.
+
+    A condition, a directive flag, and an inline comment all land on
+    :data:`doctest.SKIP`, so a reader who knows one can predict the others.
+    """
+    page = (
+        ".. doctest:: intro\n\n    >>> greeting = 'hello'\n\n"
+        f"{block}\n"
+        ".. doctest:: intro\n\n    >>> greeting.upper()\n    'HELLO'\n"
+    )
+
+    group, gated = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in (group, gated):
+        runner.run(test, out=lambda _: None)
+
+    assert [test.name for test in (group, gated)] == ["intro", "intro[1]"]
+    assert runner.failures == 0
+
+
+def test_a_half_gated_block_stays_in_its_namespace() -> None:
+    """A block with one example left to run is not a skipped block.
+
+    Its silence is the silence pytest keeps for any partly skipped item, and
+    the example that runs may bind a name the rest of the group reads.
+    """
+    page = (
+        ".. doctest:: intro\n\n"
+        "    >>> greeting = 'hello'  # doctest: +SKIP\n"
+        "    >>> greeting = 'hi'\n\n"
+        ".. doctest:: intro\n\n    >>> greeting\n    'hi'\n"
+    )
+
+    tests = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in tests:
+        runner.run(test, out=lambda _: None)
+
+    assert [test.name for test in tests] == ["intro"]
+    assert runner.failures == 0
+
+
+def test_a_namespace_gated_end_to_end_stays_whole() -> None:
+    """A namespace with nothing left to run keeps every block it holds.
+
+    One test reports the skip once. Lifting each block out would report the
+    same page N times, which is noise, not information.
+    """
+    page = (
+        ".. doctest:: solo\n    :skipif: True\n\n    >>> 1 / 0\n\n"
+        ".. doctest:: solo\n    :options: +SKIP\n\n    >>> 2 / 0\n"
+    )
+
+    tests = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert [test.name for test in tests] == ["solo"]
+    assert all(
+        example.options[doctest.SKIP] for test in tests for example in test.examples
+    )
+
+
+def test_a_shared_page_names_a_gated_block_as_block_scope_does() -> None:
+    """The node id that selects a gated block does not move with the scope.
+
+    Under ``document`` the page is one namespace named for the page, so a
+    block lifted back out of it lands on the name it carries when every block
+    keeps its own namespace.
+    """
+    page = textwrap.dedent(
+        """
+        ```python
+        >>> value = 1
+        ```
+
+        ```python
+        >>> value = 999  # doctest: +SKIP
+        ```
+
+        ```python
+        >>> value
+        1
+        ```
+        """,
+    )
+
+    shared = doctest_docutils.DocutilsDocTestFinder(namespace_scope="document")
+    apart = doctest_docutils.DocutilsDocTestFinder(namespace_scope="block")
+
+    assert [test.name for test in shared.find(page, "page.md")] == [
+        "page.md",
+        "page.md[1]",
+    ]
+    assert [test.name for test in apart.find(page, "page.md")] == [
+        "page.md[0]",
+        "page.md[1]",
+        "page.md[2]",
+    ]
+
+
 def test_an_inline_flag_cannot_reopen_a_true_skipif() -> None:
     """An example's own ``-SKIP`` loses to a condition, unlike to ``:options:``.
 
