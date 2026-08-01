@@ -1857,3 +1857,27 @@ def test_a_shared_block_reports_one_line_in_every_group() -> None:
         return (test.lineno or 0) + test.examples[index].lineno + 1
 
     assert reported(alpha, 0) == reported(beta, 0)
+
+
+def test_out_of_order_phases_report_their_own_lines() -> None:
+    """A phase written away from its group still reports where it sits.
+
+    A namespace hands its blocks over as setup, tests, cleanup, which is
+    rarely page order. Anchoring the merged text on that sequence reported
+    every example against whichever block came first in it, and could point
+    past the end of the file.
+    """
+    finder = doctest_docutils.DocutilsDocTestFinder()
+
+    def reported(page: str) -> dict[str, int]:
+        return {
+            example.source.strip(): (test.lineno or 0) + example.lineno + 1
+            for test in finder.find(page, "page.rst")
+            for example in test.examples
+        }
+
+    merged = reported(OUT_OF_ORDER_PHASES_REST)
+    alone = reported(OUT_OF_ORDER_PHASES_REST.replace(":: demo", "::"))
+
+    assert merged == alone
+    assert max(merged.values()) <= len(OUT_OF_ORDER_PHASES_REST.splitlines())
