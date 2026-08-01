@@ -1588,3 +1588,91 @@ def test_two_setups_keep_their_page_order() -> None:
     runner.run(test, out=lambda _: None)
 
     assert runner.failures == 0
+
+
+COMMA_GROUPS_REST = textwrap.dedent(
+    """
+Title
+=====
+
+.. doctest:: alpha, beta
+
+   >>> shared = 1
+
+.. doctest:: beta
+
+   >>> shared
+   1
+    """,
+)
+
+WILDCARD_GROUP_REST = textwrap.dedent(
+    """
+Title
+=====
+
+.. testsetup:: *
+
+   >>> import math
+
+.. doctest:: alpha
+
+   >>> math.floor(2.5)
+   2
+
+.. doctest:: beta
+
+   >>> math.ceil(2.5)
+   3
+    """,
+)
+
+
+def test_a_block_joins_every_group_it_names() -> None:
+    """A comma list is every group the block belongs to, not just the first."""
+    tests = doctest_docutils.DocutilsDocTestFinder().find(
+        COMMA_GROUPS_REST,
+        "page.rst",
+    )
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in tests:
+        runner.run(test, out=lambda _: None)
+
+    assert [(test.name, len(test.examples)) for test in tests] == [
+        ("alpha", 1),
+        ("beta", 2),
+    ]
+    assert runner.failures == 0
+
+
+def test_a_wildcard_joins_every_group_the_page_declares() -> None:
+    """``*`` is how a page writes one setup block for all of its groups."""
+    tests = doctest_docutils.DocutilsDocTestFinder().find(
+        WILDCARD_GROUP_REST,
+        "page.rst",
+    )
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in tests:
+        runner.run(test, out=lambda _: None)
+
+    assert [test.name for test in tests] == ["alpha", "beta"]
+    assert all(len(test.examples) == 2 for test in tests)
+    assert runner.failures == 0
+
+
+def test_a_shared_block_reports_one_line_in_every_group() -> None:
+    """Merging shifts example line numbers in place, so each copy is its own.
+
+    A block joining two namespaces that shared its examples would have them
+    shifted twice, and the second group would report failures against a line
+    the block does not sit on.
+    """
+    alpha, beta = doctest_docutils.DocutilsDocTestFinder().find(
+        COMMA_GROUPS_REST,
+        "page.rst",
+    )
+
+    def reported(test: doctest.DocTest, index: int) -> int:
+        return (test.lineno or 0) + test.examples[index].lineno + 1
+
+    assert reported(alpha, 0) == reported(beta, 0)
