@@ -1539,6 +1539,105 @@ def test_namespace_scope_rejects_an_unknown_name() -> None:
     )
 
 
+TAKEN_DOCUMENT_NAME_REST = """
+Page
+====
+
+.. doctest:: page.rst
+
+   >>> declared = "in the group the author named"
+
+A block declaring nothing, which document scope names for the page:
+
+   >>> declared
+   Traceback (most recent call last):
+   NameError: name 'declared' is not defined
+"""
+
+TAKEN_BLOCK_NAME_REST = """
+Page
+====
+
+   >>> ungrouped = "in the block that declared nothing"
+
+.. doctest:: page.rst[0]
+
+   >>> ungrouped
+   Traceback (most recent call last):
+   NameError: name 'ungrouped' is not defined
+"""
+
+ALL_BLOCKS_GROUPED_REST = """
+Page
+====
+
+.. doctest:: page.rst
+
+   >>> value = 1
+
+.. doctest:: page.rst
+
+   >>> value
+   1
+"""
+
+
+def test_a_group_may_not_take_the_name_a_page_generates() -> None:
+    """A page generating a name a group declared cannot say which it meant.
+
+    At ``"document"`` scope a block declaring no group is named for the page,
+    so a group of the same name asks for a namespace already given away. The
+    two would share state and collect under one node id, which is a wrong
+    answer either way — so the page says so instead of picking one.
+    """
+    with pytest.raises(doctest_docutils.NamespaceNameCollisionError) as excinfo:
+        doctest_docutils.DocutilsDocTestFinder(namespace_scope="document").find(
+            TAKEN_DOCUMENT_NAME_REST,
+            "page.rst",
+        )
+
+    assert "group 'page.rst' takes the namespace name" in str(excinfo.value)
+    assert "Rename the group" in str(excinfo.value)
+
+
+def test_a_group_may_not_take_a_generated_block_name() -> None:
+    """``block`` scope generates ``page[n]``, which a group can spell too.
+
+    The default scope names an ungrouped block for its position, so the
+    collision reaches a page that configured nothing.
+    """
+    with pytest.raises(doctest_docutils.NamespaceNameCollisionError) as excinfo:
+        doctest_docutils.DocutilsDocTestFinder().find(
+            TAKEN_BLOCK_NAME_REST,
+            "page.rst",
+        )
+
+    assert "group 'page.rst[0]' takes the namespace name" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("scope", ["block", "document"])
+def test_a_group_named_for_its_page_is_left_alone(
+    scope: doctest_docutils.NamespaceScope,
+) -> None:
+    """Only a name the page actually generates is taken.
+
+    A page whose every block declares a group generates no name at all, so
+    naming a group after the file it sits in is a style choice and not a
+    collision. Checking the generated names rather than their shape is what
+    keeps this page collecting.
+    """
+    tests = doctest_docutils.DocutilsDocTestFinder(namespace_scope=scope).find(
+        ALL_BLOCKS_GROUPED_REST,
+        "page.rst",
+    )
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in tests:
+        runner.run(test, out=lambda _: None)
+
+    assert [test.name for test in tests] == ["page.rst"]
+    assert runner.failures == 0
+
+
 class PyversionFixture(t.NamedTuple):
     """Directive whose ``:pyversion:`` decides whether its block runs.
 
