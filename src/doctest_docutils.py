@@ -419,6 +419,14 @@ class DocutilsDocTestFinder:
                 globs=globs,
                 source_lines=[str(node.line)],
             )
+            options = node.get("options")
+            if options:
+                for example in test.examples:
+                    # A directive's ``:options:`` set the block's defaults; an
+                    # example's own inline flags win, as in sphinx.ext.doctest.
+                    merged = dict(options)
+                    merged.update(example.options)
+                    example.options = merged
             if test is not None:
                 tests.append(test)
 
