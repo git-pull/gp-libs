@@ -407,8 +407,13 @@ class DocutilsDocTestFinder:
             if test_name is None or test_name == "default":
                 test_name = f"{document_name}[{idx}]"
             logger.debug(f"() node: {test_name}")
+            # ``node["test"]`` is the source before the directive trimmed
+            # ``# doctest:`` flags out of the code a reader sees. Both
+            # spellings have the same line count, so either positions the
+            # block the same way.
+            source = str(node.get("test") or node.astext())
             test = self._get_test(
-                string=node.astext(),
+                string=source,
                 name=test_name,
                 filename=name,
                 globs=globs,
