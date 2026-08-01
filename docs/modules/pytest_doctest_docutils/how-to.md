@@ -48,10 +48,9 @@ The marker changes nothing about the run: the line still executes and its
 output is still checked. It only tags the line so a documentation renderer can
 drop it from the rendered page while pytest keeps testing it from source.
 
-The plugin registers the marker as pytest configures, so `# doctest: +HIDE`
-parses in `.rst`, `.md`, and Python-module doctests. The standalone
-`python -m doctest_docutils` command does not register it, so use the marker
-when you run examples through pytest.
+Importing {mod}`doctest_docutils` registers the marker, so `# doctest: +HIDE`
+parses in `.rst`, `.md`, and Python-module doctests under pytest and under the
+standalone `python -m doctest_docutils` command alike.
 
 ## Keep pytest's built-in doctest plugin disabled
 

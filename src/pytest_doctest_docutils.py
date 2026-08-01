@@ -23,7 +23,11 @@ import pytest
 from _pytest import outcomes
 from _pytest.outcomes import OutcomeException
 
-from doctest_docutils import DocutilsDocTestFinder, _ensure_directives_registered
+from doctest_docutils import (
+    _HIDE_FLAG,
+    DocutilsDocTestFinder,
+    _ensure_directives_registered,
+)
 
 if t.TYPE_CHECKING:
     import pathlib
@@ -67,11 +71,6 @@ def pytest_configure(config: pytest.Config) -> None:
 
     Todo: Find a way to make these plugins cooperate without collecting twice.
     """
-    # Register HIDE eagerly, before collection parses any docstring. The .py
-    # path delegates to pytest's own DoctestModule (which never calls our
-    # _get_flag_lookup), so registering it here is what lets a docstring carry
-    # ``# doctest: +HIDE`` without raising ``invalid option`` at parse time.
-    _get_hide_flag()
     if config.pluginmanager.has_plugin("doctest"):
         config.pluginmanager.set_blocked("doctest")
 
@@ -238,17 +237,13 @@ def _get_number_flag() -> int:
 
 
 def _get_hide_flag() -> int:
-    """Register and return the HIDE flag.
+    """Return the HIDE flag, registered by importing :mod:`doctest_docutils`.
 
     ``HIDE`` is a no-op for execution: the output checker never consults it.
     It marks a doctest example that documentation tooling should drop from the
-    rendered output while still running it as a test. Registering it here means
-    ``# doctest: +HIDE`` parses instead of raising ``ValueError: invalid
-    option`` at collection time.
+    rendered output while still running it as a test.
     """
-    import doctest
-
-    return doctest.register_optionflag("HIDE")
+    return _HIDE_FLAG
 
 
 def _get_flag_lookup() -> dict[str, int]:
