@@ -194,7 +194,7 @@ always has.
 ### What per-block items cost
 
 A live namespace is a Python object, so it neither crosses a process boundary
-nor outlives the fixtures that filled it. The cost shows up in four places.
+nor outlives the fixtures that filled it. The cost shows up in five places.
 
 Under `pytest-xdist`, `-n` alone selects `--dist load`, which distributes by
 item, as does `--dist worksteal`. Two blocks of one namespace can then land on
@@ -225,6 +225,15 @@ several namespaces still spreads. `loadscope` and `each` are safe as well.
 Whichever you pick is a project-wide decision, which is why merged stays the
 default. A run xdist would not distribute anyway — one worker, or
 `--collect-only` — is never refused.
+
+A test-retry plugin repeats a single item, which a live namespace cannot
+survive. Under `merged` a retry re-runs the namespace from its first block, so
+the run rebuilds what it needs and a real failure stays a failure. Under
+`per-block` the retry re-runs only the block that failed, against the mapping
+that block already changed — so an example whose expectation happens to come
+true on the second attempt is reported as a pass. Do not combine `per-block`
+with `--reruns`; there is no way for the plugin to rebuild the namespace for a
+single retried block.
 
 Running one block by its id has the same shape: `pytest page.md::page.md[1]`
 runs that block and nothing else, so a block reading a name an earlier one
