@@ -272,6 +272,11 @@ class DocutilsDocTestFinder:
         >>> page = "\n".join(f"```python\n>>> {n}\n{n}\n```\n" for n in range(11))
         >>> [test.name for test in DocutilsDocTestFinder().find(page, "page.md")][-2:]
         ['page.md[9]', 'page.md[10]']
+
+        A test is named for its page, not for the path the report resolves.
+
+        >>> [test.name for test in DocutilsDocTestFinder().find(page, "a/b.md")][:2]
+        ['b.md[0]', 'b.md[1]']
         """
         # If name was not specified, then extract it from the string.
         if name is None:
@@ -388,6 +393,11 @@ class DocutilsDocTestFinder:
                 or isinstance(node, nodes.doctest_block)
             )
 
+        # ``name`` is the path a failure report has to resolve, but a test's
+        # own name becomes a pytest node id, where a machine-specific absolute
+        # path is unusable. pytest's own DoctestTextfile names by base name.
+        document_name = pathlib.Path(name).name
+
         for idx, node in enumerate(findall(doc)(condition)):
             logger.debug(f"() node: {node.astext()}")
             assert isinstance(node, nodes.Element)
@@ -395,7 +405,7 @@ class DocutilsDocTestFinder:
             if isinstance(test_name, list):
                 test_name = test_name[0]
             if test_name is None or test_name == "default":
-                test_name = f"{name}[{idx}]"
+                test_name = f"{document_name}[{idx}]"
             logger.debug(f"() node: {test_name}")
             test = self._get_test(
                 string=node.astext(),
