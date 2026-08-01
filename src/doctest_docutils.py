@@ -257,13 +257,21 @@ class DocutilsDocTestFinder:
         globs: dict[str, t.Any] | None = None,
         extraglobs: dict[str, t.Any] | None = None,
     ) -> list[doctest.DocTest]:
-        """Return list of the DocTests defined by given string (its parsed directives).
+        r"""Return list of the DocTests defined by given string (its parsed directives).
 
         The globals for each DocTest is formed by combining `globs` and `extraglobs`
         (bindings in `extraglobs` override bindings in `globs`).  A new copy of the
         globals dictionary is created for each DocTest.  If `globs` is not specified,
         then it defaults to the module's `__dict__`, if specified, or {} otherwise.
         If `extraglobs` is not specified, then it defaults to {}.
+
+        Tests come back in document order, the order a reader meets the blocks.
+
+        Examples
+        --------
+        >>> page = "\n".join(f"```python\n>>> {n}\n{n}\n```\n" for n in range(11))
+        >>> [test.name for test in DocutilsDocTestFinder().find(page, "page.md")][-2:]
+        ['page.md[9]', 'page.md[10]']
         """
         # If name was not specified, then extract it from the string.
         if name is None:
@@ -289,11 +297,9 @@ class DocutilsDocTestFinder:
             pathlib.Path(name) if name is not None else None
         )
         self._find(tests, string, name, source_lines, globs, {}, source_path)
-        # Sort the tests by alpha order of names, for consistency in
-        # verbose-mode output.  This was a feature of doctest in Pythons
-        # <= 2.3 that got lost by accident in 2.4.  It was repaired in
-        # 2.4.4 and 2.5.
-        tests.sort()
+        # ``_find`` appends in document-traversal order; leave it that way.
+        # ``DocTest.__lt__`` compares names, and a name carries its block index
+        # as text, so sorting runs ``page.md[10]`` ahead of ``page.md[1]``.
         return tests
 
     def _find(
