@@ -933,3 +933,663 @@ def test_a_gated_block_survives_xdist(
     result = pytester.runpytest(str(pytester.path), "-n", "2")
 
     result.assert_outcomes(passed=2, skipped=2)
+
+
+class NamespaceItemsOptionCase(t.NamedTuple):
+    """Namespace layout driven through the plugin's configuration.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    page : str
+        Page content, written as ``page.md``.
+    ini_lines : list[str]
+        Extra lines for the generated ``pytest.ini``.
+    cli_args : list[str]
+        Extra command-line arguments for the run.
+    node_ids : list[str]
+        Node ids expected, in collection order.
+    passed : int
+        Items expected to pass.
+    failed : int
+        Items expected to fail.
+    """
+
+    test_id: str
+    page: str
+    ini_lines: list[str]
+    cli_args: list[str]
+    node_ids: list[str]
+    passed: int
+    failed: int
+
+
+NAMESPACE_ITEMS_OPTION_CASES = [
+    NamespaceItemsOptionCase(
+        test_id="unconfigured-merges-a-shared-page",
+        page=STATE_MD,
+        ini_lines=["doctest_docutils_namespace_scope = document"],
+        cli_args=[],
+        node_ids=["page.md::page.md"],
+        passed=1,
+        failed=0,
+    ),
+    NamespaceItemsOptionCase(
+        test_id="ini-per-block-keeps-both-node-ids",
+        page=STATE_MD,
+        ini_lines=[
+            "doctest_docutils_namespace_scope = document",
+            "doctest_docutils_namespace_items = per-block",
+        ],
+        cli_args=[],
+        node_ids=["page.md::page.md[0]", "page.md::page.md[1]"],
+        passed=2,
+        failed=0,
+    ),
+    NamespaceItemsOptionCase(
+        test_id="cli-per-block-keeps-both-node-ids",
+        page=STATE_MD,
+        ini_lines=["doctest_docutils_namespace_scope = document"],
+        cli_args=["--doctest-docutils-namespace-items=per-block"],
+        node_ids=["page.md::page.md[0]", "page.md::page.md[1]"],
+        passed=2,
+        failed=0,
+    ),
+    NamespaceItemsOptionCase(
+        test_id="cli-merged-overrides-ini-per-block",
+        page=STATE_MD,
+        ini_lines=[
+            "doctest_docutils_namespace_scope = document",
+            "doctest_docutils_namespace_items = per-block",
+        ],
+        cli_args=["--doctest-docutils-namespace-items=merged"],
+        node_ids=["page.md::page.md"],
+        passed=1,
+        failed=0,
+    ),
+    NamespaceItemsOptionCase(
+        test_id="per-block-alone-shares-nothing",
+        page=STATE_MD,
+        ini_lines=["doctest_docutils_namespace_items = per-block"],
+        cli_args=[],
+        node_ids=["page.md::page.md[0]", "page.md::page.md[1]"],
+        passed=1,
+        failed=1,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    NamespaceItemsOptionCase._fields,
+    NAMESPACE_ITEMS_OPTION_CASES,
+    ids=[case.test_id for case in NAMESPACE_ITEMS_OPTION_CASES],
+)
+def test_namespace_items_option(
+    pytester: _pytest.pytester.Pytester,
+    test_id: str,
+    page: str,
+    ini_lines: list[str],
+    cli_args: list[str],
+    node_ids: list[str],
+    passed: int,
+    failed: int,
+) -> None:
+    """The layout reaches the finder from the ini file or the flag, flag first.
+
+    Scope and layout are separate questions: the scope says what shares a
+    namespace, the layout says whether sharing costs the blocks their node
+    ids. Setting only the layout shares nothing, because the default scope
+    still gives each block a namespace of its own.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester, *ini_lines)
+    (pytester.path / "page.md").write_text(page, encoding="utf-8")
+
+    items, _ = pytester.inline_genitems("page.md", *cli_args)
+    assert [item.nodeid for item in items] == node_ids
+
+    result = pytester.runpytest("page.md", *cli_args)
+    result.assert_outcomes(passed=passed, failed=failed)
+
+
+def test_namespace_items_rejects_an_unknown_ini_value(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A misspelled layout stops the session once, naming the values it knows."""
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester, "doctest_docutils_namespace_items = one-each")
+    (pytester.path / "first.md").write_text(STATE_MD, encoding="utf-8")
+    (pytester.path / "second.md").write_text(STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest(str(pytester.path))
+
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(
+        ["*Unknown namespace items: 'one-each'*merged, per-block*"],
+    )
+
+
+def test_a_per_block_node_id_runs_one_block(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A node id reaches one block, and says plainly what running it alone costs.
+
+    Reaching a block is the whole point of the layout — ``--lf``, ``-k``, a
+    JUnit report and a re-run all work through the id. A block that reads what
+    the block above it bound cannot run alone, because nothing bound it: that
+    limitation is inherent to running a fragment of a session, so it reports as
+    the ``NameError`` it is.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        "doctest_docutils_namespace_items = per-block",
+    )
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+
+    first = pytester.runpytest("page.md::page.md[0]", "-v")
+    first.assert_outcomes(passed=1)
+    first.stdout.fnmatch_lines(["page.md::page.md[[]0[]] *"])
+
+    second = pytester.runpytest("page.md::page.md[1]")
+
+    second.assert_outcomes(failed=1)
+    second.stdout.fnmatch_lines(["*NameError: name 'greeting' is not defined*"])
+
+
+def test_per_block_marks_each_namespace_for_loadgroup(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """Every block carries the group its namespace distributes under.
+
+    The plugin can emit the marker but cannot pick the scheduler, so the
+    marker is what makes ``--dist loadgroup`` usable. The group is the file
+    plus the namespace, because a namespace never reaches past its page.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        "doctest_docutils_namespace_items = per-block",
+    )
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+
+    items, _ = pytester.inline_genitems("page.md")
+
+    markers = [item.get_closest_marker("xdist_group") for item in items]
+    assert [marker.args[0] for marker in markers if marker is not None] == [
+        "page.md::page.md",
+        "page.md::page.md",
+    ]
+
+
+def test_merged_marks_nothing_for_loadgroup(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A merged namespace is one item, which no scheduler can split."""
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester, "doctest_docutils_namespace_scope = document")
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+
+    items, _ = pytester.inline_genitems("page.md")
+
+    assert [item.get_closest_marker("xdist_group") for item in items] == [None]
+
+
+class SplittingSchedulerCase(t.NamedTuple):
+    """Invocation whose scheduler distributes a namespace by item.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    args : list[str]
+        Arguments naming the scheduler, appended to the run.
+    named : str
+        Scheduler the refusal is expected to name.
+    """
+
+    test_id: str
+    args: list[str]
+    named: str
+
+
+SPLITTING_SCHEDULER_CASES = [
+    SplittingSchedulerCase(
+        test_id="n-alone-promotes-dist-to-load",
+        args=["-n", "2"],
+        named="load",
+    ),
+    SplittingSchedulerCase(
+        test_id="load-distributes-by-item",
+        args=["-n", "2", "--dist", "load"],
+        named="load",
+    ),
+    SplittingSchedulerCase(
+        test_id="worksteal-distributes-then-rebalances",
+        args=["-n", "2", "--dist", "worksteal"],
+        named="worksteal",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    SplittingSchedulerCase._fields,
+    SPLITTING_SCHEDULER_CASES,
+    ids=[case.test_id for case in SPLITTING_SCHEDULER_CASES],
+)
+def test_per_block_refuses_the_splitting_scheduler(
+    pytester: _pytest.pytester.Pytester,
+    test_id: str,
+    args: list[str],
+    named: str,
+) -> None:
+    """A scheduler that distributes by item hands half a namespace to a worker.
+
+    ``--dist`` defaults to ``no`` and ``-n`` promotes it to ``load``.
+    ``worksteal`` distributes by item too, then re-balances. A shared globals
+    mapping is a Python object and does not cross processes, so the session
+    stops rather than reporting a page that is only wrong because of how it
+    was scheduled. Any scheduler outside the allowlist is refused, so one
+    added by a later pytest-xdist is checked before it is trusted.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        "doctest_docutils_namespace_items = per-block",
+    )
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest(str(pytester.path), *args)
+
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines([f"*--dist {named} hands a file's items*"])
+    result.stderr.fnmatch_lines(["*--dist loadgroup or --dist loadfile*"])
+
+
+def test_merged_survives_the_splitting_scheduler(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """The refusal reaches only the layout that needs it."""
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester, "doctest_docutils_namespace_scope = document")
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+    (pytester.path / "other.md").write_text(STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest(str(pytester.path), "-n", "2")
+
+    result.assert_outcomes(passed=2)
+
+
+class PerBlockSchedulerCase(t.NamedTuple):
+    """Distributed run a per-block page comes through whole.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    args : list[str]
+        Arguments the run is made with.
+    passed : int
+        Examples expected to pass across every worker.
+    """
+
+    test_id: str
+    args: list[str]
+    passed: int
+
+
+PER_BLOCK_SCHEDULER_CASES = [
+    PerBlockSchedulerCase(
+        test_id="loadfile-keeps-a-file-whole",
+        args=["-n", "2", "--dist", "loadfile"],
+        passed=4,
+    ),
+    PerBlockSchedulerCase(
+        test_id="loadgroup-keeps-a-namespace-whole",
+        args=["-n", "2", "--dist", "loadgroup"],
+        passed=4,
+    ),
+    PerBlockSchedulerCase(
+        test_id="loadscope-keeps-a-file-whole",
+        args=["-n", "2", "--dist", "loadscope"],
+        passed=4,
+    ),
+    PerBlockSchedulerCase(
+        test_id="each-repeats-the-suite-per-worker",
+        args=["-n", "2", "--dist", "each"],
+        passed=8,
+    ),
+    PerBlockSchedulerCase(
+        test_id="one-worker-has-nothing-to-split-against",
+        args=["-n", "1"],
+        passed=4,
+    ),
+    PerBlockSchedulerCase(
+        test_id="dist-without-workers-never-distributes",
+        args=["--dist", "load"],
+        passed=4,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    PerBlockSchedulerCase._fields,
+    PER_BLOCK_SCHEDULER_CASES,
+    ids=[case.test_id for case in PER_BLOCK_SCHEDULER_CASES],
+)
+def test_per_block_survives_a_scheduler_that_keeps_it_together(
+    pytester: _pytest.pytester.Pytester,
+    test_id: str,
+    args: list[str],
+    passed: int,
+) -> None:
+    """A state-building page passes wherever its namespace stays on one worker.
+
+    ``loadfile`` and ``loadscope`` split on the node id's path; ``loadgroup``
+    reads the ``xdist_group`` marker the plugin emits; ``each`` gives every
+    worker the whole suite. A run xdist would not distribute at all — one
+    worker, or a ``--dist`` value with no workers behind it — is not refused
+    either, because there is nothing for it to split a namespace between.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        "doctest_docutils_namespace_items = per-block",
+    )
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+    (pytester.path / "other.md").write_text(STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest(str(pytester.path), *args)
+
+    result.assert_outcomes(passed=passed)
+
+
+def test_strict_markers_passes_whether_or_not_you_opt_in(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """``xdist_group`` is registered whatever the layout, and pytest-xdist absent.
+
+    A project that never asks for the layout never meets the marker at all.
+    One that does, on a machine without pytest-xdist to register the marker
+    itself, would otherwise have every item rejected as carrying an unknown
+    marker.
+
+    Run out of process because pytest caches known marker names on the global
+    ``MarkGenerator``, so an in-process run inherits whatever this suite's own
+    session registered and could not tell the two cases apart.
+    """
+    _write_ini(pytester)
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+
+    unconfigured = pytester.runpytest_subprocess(
+        "page.md",
+        "--strict-markers",
+        "-p",
+        "no:xdist",
+    )
+    unconfigured.assert_outcomes(passed=1, failed=1)
+
+    result = pytester.runpytest_subprocess(
+        "page.md",
+        "--strict-markers",
+        "-p",
+        "no:xdist",
+        "--doctest-docutils-namespace-items=per-block",
+    )
+
+    result.assert_outcomes(passed=1, failed=1)
+
+
+def test_xdist_group_is_listed_once(pytester: _pytest.pytester.Pytester) -> None:
+    """``pytest --markers`` describes the marker once, xdist installed or not.
+
+    pytest-xdist registers ``xdist_group`` itself, so this plugin only fills
+    the gap it leaves. Registering unconditionally would list the marker twice
+    for every project that has xdist, opted in or not.
+
+    Run out of process for the same reason as the ``--strict-markers`` case:
+    marker registration is read back off configuration this suite's own
+    session has already populated.
+    """
+    _write_ini(pytester)
+
+    with_xdist = pytester.runpytest_subprocess("--markers")
+    without_xdist = pytester.runpytest_subprocess("--markers", "-p", "no:xdist")
+
+    def listed(result: _pytest.pytester.RunResult) -> list[str]:
+        return [
+            line
+            for line in result.stdout.lines
+            if line.startswith("@pytest.mark.xdist_group")
+        ]
+
+    assert len(listed(with_xdist)) == 1
+    assert listed(without_xdist) == [
+        (
+            "@pytest.mark.xdist_group(name): keep a namespace's blocks on one"
+            " pytest-xdist worker under --dist loadgroup"
+        ),
+    ]
+
+
+def test_per_block_collects_under_collect_only(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """``--collect-only`` is never refused: xdist skips itself when only collecting.
+
+    A project carrying ``-n`` in its ``addopts`` has to be able to enumerate
+    its own suite, and no example runs, so no namespace is ever shared.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        "doctest_docutils_namespace_items = per-block",
+    )
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest(str(pytester.path), "--collect-only", "-q", "-n", "2")
+
+    assert result.ret == pytest.ExitCode.OK
+    result.stdout.fnmatch_lines(["page.md::page.md[[]0[]]", "page.md::page.md[[]1[]]"])
+
+
+def test_per_block_reports_the_layout_it_resolved(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """The header says which layout ran, and says nothing when it is the usual one."""
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester, "doctest_docutils_namespace_scope = document")
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+
+    quiet = pytester.runpytest("page.md")
+    assert not [
+        line for line in quiet.stdout.lines if line.startswith("doctest-docutils:")
+    ]
+
+    result = pytester.runpytest(
+        "page.md",
+        "--doctest-docutils-namespace-items=per-block",
+    )
+
+    result.stdout.fnmatch_lines(
+        ["doctest-docutils: namespace items: per-block, namespace scope: document"],
+    )
+
+
+DOCTEST_NAMESPACE_CONFTEST = textwrap.dedent(
+    """
+from typing import Any, Dict
+import pytest
+
+@pytest.fixture(autouse=True)
+def add_doctest_fixtures(doctest_namespace: Dict[str, Any]):
+    doctest_namespace["add"] = lambda a, b: a + b
+    """,
+)
+
+FIXTURE_USING_MD = textwrap.dedent(
+    """
+# Title
+
+```python
+>>> add(1, 2)
+3
+```
+
+Prose between the blocks.
+
+```python
+>>> add(3, 4)
+7
+```
+    """,
+)
+
+
+@pytest.mark.parametrize(
+    ("test_id", "items", "passed"),
+    [
+        ("merged", "merged", 1),
+        ("per-block", "per-block", 2),
+    ],
+    ids=["merged", "per-block"],
+)
+def test_doctest_namespace_reaches_every_block(
+    pytester: _pytest.pytester.Pytester,
+    test_id: str,
+    items: str,
+    passed: int,
+) -> None:
+    """A fixture seeded into the namespace is in scope for every block of it.
+
+    pytest merges the fixture into ``dtest.globs`` at item setup. Merged, that
+    happens once for the namespace; per block it happens once per block, into
+    the one mapping they share.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        f"doctest_docutils_namespace_items = {items}",
+    )
+    pytester.makeconftest(DOCTEST_NAMESPACE_CONFTEST)
+    (pytester.path / "page.md").write_text(FIXTURE_USING_MD, encoding="utf-8")
+
+    result = pytester.runpytest("page.md")
+
+    result.assert_outcomes(passed=passed)
+
+
+TORN_DOWN_FIXTURE_CONFTEST = textwrap.dedent(
+    """
+from typing import Any, Dict
+import pytest
+
+
+class Server:
+    def __init__(self) -> None:
+        self.alive = True
+
+
+@pytest.fixture(autouse=True)
+def server(doctest_namespace: Dict[str, Any]):
+    running = Server()
+    doctest_namespace["server"] = running
+    yield running
+    running.alive = False
+    """,
+)
+
+CARRIED_FIXTURE_MD = textwrap.dedent(
+    """
+# Title
+
+```python
+>>> kept = server
+>>> kept.alive
+True
+```
+
+Prose between the blocks.
+
+```python
+>>> kept.alive
+True
+```
+    """,
+)
+
+
+@pytest.mark.parametrize(
+    ("test_id", "items", "passed", "failed"),
+    [
+        ("merged", "merged", 1, 0),
+        ("per-block", "per-block", 1, 1),
+    ],
+    ids=["merged", "per-block"],
+)
+def test_per_block_finalizes_a_fixture_between_blocks(
+    pytester: _pytest.pytester.Pytester,
+    test_id: str,
+    items: str,
+    passed: int,
+    failed: int,
+) -> None:
+    """A namespace shares the mapping, not the lifetime of what a fixture made.
+
+    Per block, each block is its own item, so a function-scoped fixture tears
+    down between them. An object one block bound out of that fixture is
+    finalized before the next block reads it, which merged is a single item
+    and so never happens.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        f"doctest_docutils_namespace_items = {items}",
+    )
+    pytester.makeconftest(TORN_DOWN_FIXTURE_CONFTEST)
+    (pytester.path / "page.md").write_text(CARRIED_FIXTURE_MD, encoding="utf-8")
+
+    result = pytester.runpytest("page.md")
+
+    result.assert_outcomes(passed=passed, failed=failed)
+
+
+def test_per_block_still_reports_a_gated_block(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A gated block reports skipped, and the block after it still runs.
+
+    Merged, a gated block has to be lifted out of its namespace to report at
+    all; per block it is already an item, and it is marked before setup either
+    way, so its fixtures never run for a block that executes nothing.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        "doctest_docutils_namespace_items = per-block",
+    )
+    (pytester.path / "page.md").write_text(GATED_STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest("page.md", "-rs", "-v")
+
+    result.assert_outcomes(passed=2, skipped=1)
+    result.stdout.fnmatch_lines(
+        [
+            "page.md::page.md[[]0[]] PASSED*",
+            "page.md::page.md[[]1[]] SKIPPED*",
+            "page.md::page.md[[]2[]] PASSED*",
+        ],
+        consecutive=True,
+    )
+    result.stdout.fnmatch_lines(
+        ["SKIPPED [[]1[]] *: page.md:*: every example skipped"],
+    )
