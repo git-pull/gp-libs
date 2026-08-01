@@ -468,6 +468,7 @@ def _init_runner_class() -> type[doctest.DocTestRunner]:
             super().__init__(checker=checker, verbose=verbose, optionflags=optionflags)
             self.continue_on_failure = continue_on_failure
             self.share_globs = share_globs
+            self._already_run: set[int] = set()
 
         def run(
             self,
@@ -482,7 +483,29 @@ def _init_runner_class() -> type[doctest.DocTestRunner]:
             is what stops one item's bindings reaching the next. A namespace
             laid out per block wants exactly that reach: its items hold one
             mapping between them, so the block below reads what this one bound.
+
+            That reach is also why a block cannot be run twice. Anything that
+            repeats one item — a retry plugin, ``--count`` — would run it again
+            against the mapping it already changed, and an expectation that
+            comes true the second time would be reported as a pass. There is no
+            way to rebuild the namespace for one block alone, so the repeat is
+            refused instead.
             """
+            if self.share_globs:
+                if id(test) in self._already_run:
+                    import pytest
+
+                    pytest.fail(
+                        f"{test.name} was run twice against a namespace laid "
+                        "out per block. A repeated block runs against the "
+                        "globals it already changed, so its result cannot be "
+                        "trusted. Drop --reruns (and anything else that "
+                        "repeats an item), or set "
+                        "doctest_docutils_namespace_items = merged, which "
+                        "re-runs a namespace from its first block.",
+                        pytrace=False,
+                    )
+                self._already_run.add(id(test))
             return super().run(
                 test,
                 compileflags,
