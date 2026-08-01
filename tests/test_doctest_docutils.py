@@ -1202,3 +1202,96 @@ def test_pyversion_skips_the_block_it_excludes(
     (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
 
     assert test.examples[0].options.get(doctest.SKIP, False) is skipped
+
+
+BLANKLINE_REST = textwrap.dedent(
+    """
+Title
+=====
+
+.. doctest::
+
+   >>> print("a\\n\\nb")
+   a
+   <BLANKLINE>
+   b
+    """,
+)
+
+SETUP_GROUP_REST = textwrap.dedent(
+    """
+Title
+=====
+
+.. testsetup:: demo
+
+   >>> import math
+
+.. doctest:: demo
+
+   >>> math.floor(2.5)
+   2
+
+.. testcleanup:: demo
+
+   >>> del math
+    """,
+)
+
+
+class DirectiveSourceFixture(t.NamedTuple):
+    """Page whose blocks only run once the directive's own source is read.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    page : str
+        reStructuredText page.
+    collected : int
+        Tests expected back from the finder.
+    """
+
+    test_id: str
+    page: str
+    collected: int
+
+
+DIRECTIVE_SOURCE_FIXTURES = [
+    DirectiveSourceFixture(
+        test_id="blankline-marker-inside-a-directive",
+        page=BLANKLINE_REST,
+        collected=1,
+    ),
+    DirectiveSourceFixture(
+        test_id="testsetup-and-testcleanup-share-a-group",
+        page=SETUP_GROUP_REST,
+        collected=1,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    DirectiveSourceFixture._fields,
+    DIRECTIVE_SOURCE_FIXTURES,
+    ids=[f.test_id for f in DIRECTIVE_SOURCE_FIXTURES],
+)
+def test_directive_blocks_run_from_their_own_source(
+    test_id: str,
+    page: str,
+    collected: int,
+) -> None:
+    """Directives run the source they stored, not the code they render.
+
+    ``.. doctest::`` rewrites a ``<BLANKLINE>`` marker into a real blank line
+    for the page and keeps the marker on the node, so reading the rendered
+    text instead compared against a blank line and failed. A ``testsetup``
+    naming a group is only useful once that group is one namespace.
+    """
+    tests = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in tests:
+        runner.run(test, out=lambda _: None)
+
+    assert len(tests) == collected
+    assert runner.failures == 0
