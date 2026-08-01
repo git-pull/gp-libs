@@ -102,6 +102,39 @@ class NamespaceItemsError(ValueError):
         )
 
 
+class NamespaceNameCollisionError(ValueError):
+    """Raised when a declared group takes a name the page generates for itself.
+
+    A block that declares no group is named for the page it sits on — the page
+    itself at ``"document"`` scope, the page and the block's position at
+    ``"block"`` scope. A group declaring one of those names asks for a
+    namespace the page has already given away, and the two would run as one:
+    state crossing the partition the author drew, under a single node id.
+    Naming the clash is the only answer that keeps both meanings, so the page
+    stops here rather than merging them quietly.
+
+    Examples
+    --------
+    >>> print(NamespaceNameCollisionError("page.rst", "page.rst", "document"))
+    page.rst: group 'page.rst' takes the namespace name this page generates
+    for a block that declares none at 'document' scope, so the two would
+    share state and one node id. Rename the group.
+
+    >>> print(NamespaceNameCollisionError("page.rst[0]", "page.rst", "block"))
+    page.rst: group 'page.rst[0]' takes the namespace name this page generates
+    for a block that declares none at 'block' scope, so the two would
+    share state and one node id. Rename the group.
+    """
+
+    def __init__(self, group: str, document_name: str, scope: NamespaceScope) -> None:
+        super().__init__(
+            f"{document_name}: group {group!r} takes the namespace name this"
+            f" page generates\nfor a block that declares none at {scope!r}"
+            " scope, so the two would\nshare state and one node id. Rename the"
+            " group.",
+        )
+
+
 class SkipifExpressionError(ValueError):
     """Raised when a block's ``:skipif:`` expression cannot be evaluated.
 
@@ -1278,6 +1311,27 @@ class DocutilsDocTestFinder:
                 memberships[idx] = list(ordered) or [
                     _namespace_name(None, self._namespace_scope, document_name, idx)
                 ]
+
+        # A generated name and a declared one are the same string to everything
+        # downstream: the namespace mapping keys on it and the test is named
+        # for it. So a page that spells both has to say which it meant, and
+        # cannot. Checked against the names actually generated, not the shape
+        # they take, so a group named for a page whose blocks all declare one
+        # is left alone. A page of nothing but wildcards declares no name to
+        # collide with, which is why the fallback above needs no check.
+        generated = {
+            _namespace_name(None, self._namespace_scope, document_name, idx)
+            for idx, groups in enumerate(declared)
+            if not groups
+        }
+        for group in sorted(
+            {name for groups in declared for name in groups} & generated,
+        ):
+            raise NamespaceNameCollisionError(
+                group,
+                document_name,
+                self._namespace_scope,
+            )
 
         for idx, node in enumerate(block_nodes):
             assert isinstance(node, nodes.Element)
