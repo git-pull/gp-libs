@@ -34,6 +34,28 @@ blankline_re = re.compile(r"^\s*<BLANKLINE>", re.MULTILINE)
 doctestopt_re = re.compile(r"[ \t]*#\s*doctest:.+$", re.MULTILINE)
 
 
+class SkipifExpressionError(ValueError):
+    """Raised when a block's ``:skipif:`` expression cannot be evaluated.
+
+    Examples
+    --------
+    >>> error = NameError("name 'platform' is not defined")
+    >>> print(SkipifExpressionError("platform.system()", "page.rst", 4, error))
+    page.rst:4: :skipif: 'platform.system()' failed: name 'platform' is not defined
+    """
+
+    def __init__(
+        self,
+        expression: str,
+        filename: str,
+        line: int,
+        error: BaseException,
+    ) -> None:
+        super().__init__(
+            f"{filename}:{line}: :skipif: {expression!r} failed: {error}",
+        )
+
+
 def is_allowed_version(version: str, spec: str) -> bool:
     """Check `spec` satisfies `version` or not.
 
@@ -213,6 +235,57 @@ def _ensure_directives_registered() -> None:
         return
     setup()
     _DIRECTIVES_READY = True
+
+
+def _skipif(expression: str, globs: dict[str, t.Any]) -> bool:
+    """Return whether a block's ``:skipif:`` expression asks to drop the block.
+
+    The expression is Python source read from the document and **evaluated**,
+    the contract :mod:`sphinx.ext.doctest` documents. It sees a copy of the
+    globals the document starts with — the `globs` handed to
+    :meth:`DocutilsDocTestFinder.find` — and nothing the page's own examples
+    bound, because a block is dropped before any of them run.
+
+    Sphinx seeds that namespace from its ``doctest_global_setup`` setting;
+    gp-libs has no such setting, so it binds :mod:`sys` instead unless the
+    document bound the name itself. Without it the option could not answer the
+    two questions it is written for, the Python version and the platform.
+
+    Parameters
+    ----------
+    expression : str
+        Python expression from the directive's ``:skipif:`` option.
+    globs : dict[str, typing.Any]
+        Globals the document starts with.
+
+    Returns
+    -------
+    bool
+        Whether the block is dropped.
+
+    Examples
+    --------
+    >>> _skipif("True", {})
+    True
+    >>> _skipif("False", {})
+    False
+
+    :mod:`sys` answers for the interpreter running the page:
+
+    >>> _skipif("sys.version_info < (3, 10)", {})
+    False
+
+    The document's starting globals are in scope, and win:
+
+    >>> _skipif("greeting == 'hello'", {"greeting": "hello"})
+    True
+    """
+    # eval is the option's contract, not an oversight: sphinx.ext.doctest
+    # defines :skipif: as a Python expression. The expression comes from a
+    # document the project already runs as tests, so it grants no reach the
+    # page's own examples do not have. It is evaluated while the document is
+    # collected, which means ``--collect-only`` runs it too.
+    return bool(eval(expression, {"sys": sys, **globs}))
 
 
 def _node_line(node: nodes.Element) -> int:
@@ -438,6 +511,15 @@ class DocutilsDocTestFinder:
         for idx, node in enumerate(findall(doc)(condition)):
             logger.debug(f"() node: {node.astext()}")
             assert isinstance(node, nodes.Element)
+            lineno = _node_line(node)
+            skipif = node.get("skipif")
+            if skipif is not None:
+                try:
+                    skipped = _skipif(skipif, globs)
+                except Exception as exc:
+                    raise SkipifExpressionError(skipif, name, lineno, exc) from exc
+                if skipped:
+                    continue
             test_name = node.get("groups")
             if isinstance(test_name, list):
                 test_name = test_name[0]
@@ -454,7 +536,7 @@ class DocutilsDocTestFinder:
                 name=test_name,
                 filename=name,
                 globs=globs,
-                lineno=_node_line(node),
+                lineno=lineno,
             )
             options = node.get("options")
             if options:
