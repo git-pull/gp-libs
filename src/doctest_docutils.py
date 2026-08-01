@@ -42,6 +42,16 @@ NAMESPACE_SCOPES: tuple[NamespaceScope, ...] = ("block", "document")
 #: Scope used when a caller names none: every ungrouped block starts empty.
 DEFAULT_NAMESPACE_SCOPE: NamespaceScope = "block"
 
+#: Whether the blocks of one namespace become a single test or stay one test
+#: each, sharing the globals mapping between them.
+NamespaceItems = t.Literal["merged", "per-block"]
+
+#: Accepted :data:`NamespaceItems` names, fewest tests first.
+NAMESPACE_ITEMS: tuple[NamespaceItems, ...] = ("merged", "per-block")
+
+#: Layout used when a caller names none: a namespace is one test.
+DEFAULT_NAMESPACE_ITEMS: NamespaceItems = "merged"
+
 #: Group a ``.. doctest::`` written without an argument lands in, as in
 #: :mod:`sphinx.ext.doctest`. It means the author named no group.
 _DEFAULT_GROUP = "default"
@@ -72,6 +82,22 @@ class NamespaceScopeError(ValueError):
         super().__init__(
             f"Unknown namespace scope: {value!r}. "
             f"Expected one of: {', '.join(NAMESPACE_SCOPES)}",
+        )
+
+
+class NamespaceItemsError(ValueError):
+    """Raised when a namespace layout is not one of :data:`NAMESPACE_ITEMS`.
+
+    Examples
+    --------
+    >>> print(NamespaceItemsError("one-each"))
+    Unknown namespace items: 'one-each'. Expected one of: merged, per-block
+    """
+
+    def __init__(self, value: str) -> None:
+        super().__init__(
+            f"Unknown namespace items: {value!r}. "
+            f"Expected one of: {', '.join(NAMESPACE_ITEMS)}",
         )
 
 
@@ -128,6 +154,40 @@ def _parse_namespace_scope(value: str) -> NamespaceScope:
     """
     if value not in NAMESPACE_SCOPES:
         raise NamespaceScopeError(value)
+    return value
+
+
+def _parse_namespace_items(value: str) -> NamespaceItems:
+    """Return `value` as a :data:`NamespaceItems`, rejecting anything else.
+
+    Parameters
+    ----------
+    value : str
+        Layout name to validate.
+
+    Returns
+    -------
+    NamespaceItems
+        The layout, unchanged.
+
+    Raises
+    ------
+    NamespaceItemsError
+        If `value` names no known layout.
+
+    Examples
+    --------
+    >>> _parse_namespace_items("per-block")
+    'per-block'
+
+    >>> try:
+    ...     _parse_namespace_items("one-each")
+    ... except NamespaceItemsError as exc:
+    ...     print(exc)
+    Unknown namespace items: 'one-each'. Expected one of: merged, per-block
+    """
+    if value not in NAMESPACE_ITEMS:
+        raise NamespaceItemsError(value)
     return value
 
 
@@ -534,19 +594,6 @@ def _merge_blocks(
     ----------
     blocks : list[doctest.DocTest]
         Blocks of one namespace, each parsed on its own, in the order they run.
-    name : str
-        Namespace name, which becomes the test name.
-    filename : str
-        Path failures are reported against.
-    globs : dict[str, typing.Any]
-        Globals the namespace starts with.
-    keep : list[doctest.DocTest] or None
-        Blocks whose examples the merged test runs, compared by identity.
-        `None`, the default, keeps every block. A block left out still
-        contributes its source and its spacing, so the blocks around it report
-        the lines they reported before and a failure's gutter still shows what
-        was passed over — only its examples are dropped.
-
         Each kept block's ``example.lineno`` is shifted **in place**, so no
         block may be merged twice while `keep` holds it — which is why
         :meth:`DocutilsDocTestFinder._find` leaves a lifted block out of `keep`
@@ -811,6 +858,69 @@ def _lifted_name(namespace: str, position: int) -> str:
     return f"{namespace}[{position}]"
 
 
+def _block_name(namespace: str, document_name: str, position: int) -> str:
+    """Return the name one block collects under when its namespace keeps it apart.
+
+    A namespace laid out ``"per-block"`` is many tests, so each needs a name.
+    It is the namespace's own name with the block's document position — the
+    same ``name[n]`` shape :func:`_lifted_name` gives a gated block — so the
+    node id a reader pastes back to pytest does not move with the layout. A
+    namespace already named for this one block adds nothing.
+
+    Parameters
+    ----------
+    namespace : str
+        Namespace the block runs in.
+    document_name : str
+        Base name of the document, without its directory.
+    position : int
+        Where the block sits in the document, counted from zero.
+
+    Returns
+    -------
+    str
+        Name for the block's own test.
+
+    Examples
+    --------
+    A group numbers its blocks by where they sit on the page:
+
+    >>> _block_name("intro", "page.md", 1)
+    'intro[1]'
+
+    A page sharing one namespace numbers them the same way:
+
+    >>> _block_name("page.md", "page.md", 1)
+    'page.md[1]'
+
+    A block that has a namespace to itself already carries the number:
+
+    >>> _block_name("page.md[1]", "page.md", 1)
+    'page.md[1]'
+    """
+    if namespace == _namespace_name(None, "block", document_name, position):
+        return namespace
+    return _lifted_name(namespace, position)
+
+
+class _CollectedTest(t.NamedTuple):
+    """One test a page collected, and the namespace it was collected into.
+
+    Attributes
+    ----------
+    namespace : str
+        Namespace the test's examples run against. Under
+        :data:`NAMESPACE_ITEMS` ``"per-block"`` a namespace's tests hold one
+        globals mapping between them, which makes the namespace the unit a
+        caller distributing tests across processes cannot split.
+    test : doctest.DocTest
+        Examples, ready to run.
+    """
+
+    namespace: str
+    test: doctest.DocTest
+
+
 class DocTestFinderNameDoesNotExist(ValueError):
     """Raised with doctest lookup name not provided."""
 
@@ -868,6 +978,17 @@ class DocutilsDocTestFinder:
     >>> [(test.name, len(test.examples)) for test in
     ...  DocutilsDocTestFinder().find(gated, "page.md")]
     [('intro', 2), ('intro[1]', 1)]
+
+    `namespace_items` decides whether that sharing costs the blocks their own
+    tests. Under ``"per-block"`` the group is two tests again, holding one
+    globals mapping between them:
+
+    >>> per_block = DocutilsDocTestFinder(namespace_items="per-block")
+    >>> tests = per_block.find(page, "page.md")
+    >>> [(test.name, len(test.examples)) for test in tests]
+    [('intro[0]', 1), ('intro[1]', 1)]
+    >>> tests[0].globs is tests[1].globs
+    True
     """
 
     def __init__(
@@ -875,6 +996,7 @@ class DocutilsDocTestFinder:
         verbose: bool = False,
         parser: doctest.DocTestParser = parser,
         namespace_scope: NamespaceScope = DEFAULT_NAMESPACE_SCOPE,
+        namespace_items: NamespaceItems = DEFAULT_NAMESPACE_ITEMS,
     ) -> None:
         """Create a new doctest finder.
 
@@ -892,16 +1014,23 @@ class DocutilsDocTestFinder:
         namespace_scope : NamespaceScope
             Namespace a block that names no group runs in: ``"block"`` gives it
             one of its own, ``"document"`` shares one across the page.
+        namespace_items : NamespaceItems
+            What a namespace comes back as: ``"merged"`` gives one test holding
+            every block's examples, ``"per-block"`` gives one test per block,
+            each handed the namespace's globals mapping rather than a copy.
 
         Raises
         ------
         NamespaceScopeError
             If `namespace_scope` names no known scope.
+        NamespaceItemsError
+            If `namespace_items` names no known layout.
         """
         _ensure_directives_registered()
         self._parser = parser
         self._verbose = verbose
         self._namespace_scope = _parse_namespace_scope(namespace_scope)
+        self._namespace_items = _parse_namespace_items(namespace_items)
 
     def find(
         self,
@@ -920,6 +1049,11 @@ class DocutilsDocTestFinder:
         dictionary is created for each DocTest.  If `globs` is not specified,
         then it defaults to the module's `__dict__`, if specified, or {} otherwise.
         If `extraglobs` is not specified, then it defaults to {}.
+
+        A finder built with `namespace_items` ``"per-block"`` merges nothing:
+        one DocTest comes back per block, and the blocks of one namespace are
+        handed that namespace's globals rather than a copy each, so a caller
+        running them has to pass ``clear_globs=False``.
 
         Namespaces come back in the order a reader meets the first block of
         each, and a namespace's own tests in setup, test, cleanup order — which
@@ -953,6 +1087,56 @@ class DocutilsDocTestFinder:
         >>> [test.name for test in DocutilsDocTestFinder().find(page, "page.md")]
         ['page.md[0]', 'page.md[1]', 'page.md[2]']
         """
+        return [
+            collected.test
+            for collected in self._collect(string, name, globs, extraglobs)
+        ]
+
+    def _collect(
+        self,
+        string: str,
+        name: str | None = None,
+        globs: dict[str, t.Any] | None = None,
+        extraglobs: dict[str, t.Any] | None = None,
+    ) -> list[_CollectedTest]:
+        r"""Return every test a page holds, each beside the namespace it runs in.
+
+        :meth:`find` is this without the namespaces. A caller that has to keep
+        one namespace's tests together needs the name they share: under
+        :data:`NAMESPACE_ITEMS` ``"per-block"`` they hold one globals mapping
+        between them, and a mapping is a Python object, so it does not cross
+        processes.
+
+        Parameters
+        ----------
+        string : str
+            Page source.
+        name : str or None
+            Path the page was read from, whose suffix picks the parser.
+        globs : dict[str, typing.Any] or None
+            Globals every namespace starts from.
+        extraglobs : dict[str, typing.Any] or None
+            Globals overriding `globs`.
+
+        Returns
+        -------
+        list[_CollectedTest]
+            Tests, each naming its namespace, namespaces in the order a reader
+            meets the first block of each and a namespace's own tests in setup,
+            test, cleanup order.
+
+        Examples
+        --------
+        >>> page = "\n".join([
+        ...     "```{doctest} intro", ">>> greeting = 'hello'", "```", "",
+        ...     "```python", ">>> 2 + 2", "4", "```",
+        ... ])
+        >>> finder = DocutilsDocTestFinder(namespace_items="per-block")
+        >>> [(held.namespace, held.test.name) for held in finder._collect(
+        ...     page, "page.md"
+        ... )]
+        [('intro', 'intro[0]'), ('page.md[1]', 'page.md[1]')]
+        """
         # If name was not specified, then extract it from the string.
         if name is None:
             name = getattr(string, "__name__", None)
@@ -966,7 +1150,7 @@ class DocutilsDocTestFinder:
         if "__name__" not in globs:
             globs["__name__"] = "__main__"  # provide a default module name
 
-        tests: list[doctest.DocTest] = []
+        tests: list[_CollectedTest] = []
         source_path: pathlib.Path | None = (
             pathlib.Path(name) if name is not None else None
         )
@@ -978,7 +1162,7 @@ class DocutilsDocTestFinder:
 
     def _find(
         self,
-        tests: list[doctest.DocTest],
+        tests: list[_CollectedTest],
         string: str,
         name: str,
         globs: dict[str, t.Any],
@@ -1131,7 +1315,11 @@ class DocutilsDocTestFinder:
                 # block's examples would shift them twice.
                 test = self._get_test(
                     string=source,
-                    name=namespace,
+                    name=(
+                        namespace
+                        if self._namespace_items == "merged"
+                        else _block_name(namespace, document_name, idx)
+                    ),
                     filename=name,
                     globs=globs,
                     lineno=lineno,
@@ -1165,13 +1353,34 @@ class DocutilsDocTestFinder:
         # anchors where it now starts, which is where it started before if it
         # lifted nothing out. Ties — one block joining two groups — keep the
         # order the page declared them in, which a stable sort preserves.
-        anchored: list[tuple[int, int, doctest.DocTest]] = []
+        anchored: list[tuple[int, int, _CollectedTest]] = []
         for namespace, phases in namespaces.items():
             in_phase_order = [
                 *phases["testsetup"],
                 *phases["test"],
                 *phases["testcleanup"],
             ]
+            if self._namespace_items == "per-block":
+                # One mapping for the namespace, handed to every block of it.
+                # ``DocTest.__init__`` copies the globals it is given, so the
+                # mapping is assigned afterwards, as sphinx.ext.doctest does;
+                # whoever runs these tests has to leave it uncleared for the
+                # sharing to reach the block below.
+                shared = dict(globs)
+                anchor = min(held.position for held in in_phase_order)
+                for order, held in enumerate(in_phase_order):
+                    held.test.globs = shared
+                    anchored.append(
+                        (
+                            # The namespace anchors as a whole, and its blocks
+                            # keep phase order inside it: a testsetup written
+                            # at the foot of the page still runs first.
+                            anchor,
+                            order,
+                            _CollectedTest(namespace, held.test),
+                        ),
+                    )
+                continue
             kept, lifted = _split_skipped_blocks(in_phase_order)
             anchored.append(
                 (
@@ -1185,12 +1394,15 @@ class DocutilsDocTestFinder:
                     # Merged over every block, so the padding a lifted block
                     # contributed stays and the blocks after it keep the lines
                     # they reported before it was lifted.
-                    _merge_blocks(
-                        [held.test for held in in_phase_order],
+                    _CollectedTest(
                         namespace,
-                        name,
-                        globs,
-                        keep=[held.test for held in kept],
+                        _merge_blocks(
+                            [held.test for held in in_phase_order],
+                            namespace,
+                            name,
+                            globs,
+                            keep=[held.test for held in kept],
+                        ),
                     ),
                 ),
             )
@@ -1209,11 +1421,14 @@ class DocutilsDocTestFinder:
                     (
                         held.position,
                         held.position,
-                        _merge_blocks([held.test], lifted_name, name, globs),
+                        _CollectedTest(
+                            namespace,
+                            _merge_blocks([held.test], lifted_name, name, globs),
+                        ),
                     ),
                 )
         anchored.sort(key=lambda entry: (entry[0], entry[1]))
-        tests.extend(test for _, _, test in anchored)
+        tests.extend(collected for _, _, collected in anchored)
         logger.debug(
             "parsed document into %d test(s)",
             len(anchored),
@@ -1261,6 +1476,7 @@ def testdocutils(
     parser: doctest.DocTestParser = parser,
     encoding: str | None = None,
     namespace_scope: NamespaceScope = DEFAULT_NAMESPACE_SCOPE,
+    namespace_items: NamespaceItems = DEFAULT_NAMESPACE_ITEMS,
 ) -> doctest.TestResults:
     r"""Docutils-based test entrypoint.
 
@@ -1272,6 +1488,10 @@ def testdocutils(
         Namespace the blocks that name no group run in. See
         :class:`DocutilsDocTestFinder`; the other parameters follow
         :func:`doctest.testfile`.
+    namespace_items : NamespaceItems
+        Whether a namespace runs as one test or as one test per block. Running
+        a file has no scheduler to split the blocks across, so ``"per-block"``
+        shares state here as it does in a serial pytest run.
 
     Returns
     -------
@@ -1303,6 +1523,11 @@ def testdocutils(
     >>> run(namespace_scope="document")
     TestResults(failed=0, attempted=2)
 
+    Keeping each block a test of its own shares the page just the same:
+
+    >>> run(namespace_scope="document", namespace_items="per-block")
+    TestResults(failed=0, attempted=2)
+
     >>> directory.cleanup()
     """
     global master
@@ -1332,7 +1557,10 @@ def testdocutils(
         globs["__name__"] = "__main__"
 
     # Find, parse, and run all tests in the given module.
-    finder = DocutilsDocTestFinder(namespace_scope=namespace_scope)
+    finder = DocutilsDocTestFinder(
+        namespace_scope=namespace_scope,
+        namespace_items=namespace_items,
+    )
 
     runner: doctest.DebugRunner | doctest.DocTestRunner
 
@@ -1341,8 +1569,11 @@ def testdocutils(
     else:
         runner = doctest.DocTestRunner(verbose=verbose, optionflags=optionflags)
 
+    # A namespace laid out per block hands its tests one mapping between them,
+    # which the runner would otherwise empty after running the first of them.
+    clear_globs = namespace_items != "per-block"
     for test in finder.find(text, filename, globs=globs, extraglobs=extraglobs):
-        runner.run(test)
+        runner.run(test, clear_globs=clear_globs)
 
     if report:
         runner.summarize()
@@ -1417,6 +1648,17 @@ def _test() -> int:
             " group always share that group's namespace"
         ),
     )
+    p.add_argument(
+        "--namespace-items",
+        action="store",
+        choices=NAMESPACE_ITEMS,
+        default=DEFAULT_NAMESPACE_ITEMS,
+        help=(
+            "what a namespace runs as: merged (default, one item holding every"
+            " block of it) or per-block (one item per block, sharing the"
+            " namespace between them)"
+        ),
+    )
     p.add_argument("file", nargs="+", help="file containing the tests to run")
     args = p.parse_args()
 
@@ -1443,6 +1685,7 @@ def _test() -> int:
                 verbose=verbose,
                 optionflags=options,
                 namespace_scope=args.namespace_scope,
+                namespace_items=args.namespace_items,
             )
         elif filename.endswith(".py"):
             # It is a module -- insert its dir into sys.path and try to
