@@ -112,9 +112,15 @@ A namespace is one item. That is what keeps a shared page correct under
   examples after it unless you pass `--doctest-continue-on-failure`.
 - A function-scoped fixture sets up once per namespace instead of once per
   block. A page whose blocks each expect a fresh fixture belongs at `block`.
-- A skipped block — `# doctest: +SKIP`, `:options: +SKIP`, or a true
-  `:skipif:` — stops reporting as skipped once it shares a namespace with
-  blocks that run. Its examples still never execute.
+  A block gated end to end is the exception: it is its own item, and it is
+  marked skipped before setup, so it neither shares that setup nor pays for
+  one of its own.
+- A block whose every example is skipped is the one thing a namespace does not
+  hold. It binds nothing the other blocks could read, so it is lifted back out
+  and collects as an item of its own — `page.rst::intro[1]` — and still
+  reports `SKIPPED`. The page collects one item more than it has namespaces
+  for each such block, which is one more line in `--collect-only` and one more
+  entry in a JUnit report.
 - The report's numbered gutter spans the whole namespace, so the prose between
   two blocks shows up as blank numbered lines above the failing prompt.
 
@@ -163,7 +169,7 @@ $ pytest page.rst -rs
 ```
 
 ```text
-SKIPPED [1] ...: all tests skipped by +SKIP option
+SKIPPED [1] page.rst: page.rst:6: every example skipped
 1 skipped
 ```
 
@@ -177,11 +183,25 @@ page is being read, before any of them run. Naming anything else stops the page
 with {exc}`~doctest_docutils.SkipifExpressionError`, which reports the file,
 line, and expression to go fix.
 
-Two consequences worth knowing. Reading a page is all `--collect-only` does, so
-listing a page's items runs its `:skipif:` expressions; keep them free of side
-effects. And a block is not an item — skipping one block of a group leaves the
-group's other blocks running, and the item reports skipped only when the whole
-namespace is skipped.
+Reading a page is all `--collect-only` does, so listing a page's items runs its
+`:skipif:` expressions; keep them free of side effects.
+
+Skipping one block of a group leaves the group's other blocks running, and the
+skipped one still reports. Because a block with nothing left to run binds no
+name the group could read, it does not need to share the group's item: it
+collects as one of its own, named for the group and for the block's position on
+the page, counted from zero across every doctest block. The second block of
+`page.rst` in group `intro` is `page.rst::intro[1]`; on a page merged by
+`--doctest-docutils-namespace-scope=document` it is `page.rst::page.rst[1]`,
+which is the name that block already carries when every block keeps its own
+namespace. So the node id a reader pastes back to pytest does not move with the
+scope.
+
+Two cases stay where they are. A block whose examples are only *partly*
+skipped is not a skipped block — it has something left to run, and it reports
+with its namespace like any other item. And when *every* block of a namespace
+is gated, there is nothing for them to be silent beside: the namespace keeps
+them all and reports skipped once, as one item, rather than once per block.
 
 A skipped block is still parsed, so malformed doctest source in one reports
 as an error rather than passing unnoticed — the same as for `:options: +SKIP`.
