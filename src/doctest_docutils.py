@@ -525,12 +525,32 @@ def _merge_blocks(
     claim overlapping lines: an ``.. include::`` numbers its nodes against the
     included file, and a reStructuredText doctest block reports its *last*
     line, so its examples already report lines further down the page than the
-    block occupies.
+    block occupies. An included block can therefore hold the lowest line number
+    of the namespace and anchor the merged test on the included file's
+    coordinates, which pads the page's own blocks out to their distance from
+    it.
 
     Parameters
     ----------
     blocks : list[doctest.DocTest]
         Blocks of one namespace, each parsed on its own, in the order they run.
+    name : str
+        Namespace name, which becomes the test name.
+    filename : str
+        Path failures are reported against.
+    globs : dict[str, typing.Any]
+        Globals the namespace starts with.
+    keep : list[doctest.DocTest] or None
+        Blocks whose examples the merged test runs, compared by identity.
+        `None`, the default, keeps every block. A block left out still
+        contributes its source and its spacing, so the blocks around it report
+        the lines they reported before and a failure's gutter still shows what
+        was passed over — only its examples are dropped.
+
+        Each kept block's ``example.lineno`` is shifted **in place**, so no
+        block may be merged twice while `keep` holds it — which is why
+        :meth:`DocutilsDocTestFinder._find` leaves a lifted block out of `keep`
+        before merging that block on its own.
     name : str
         Namespace name, which becomes the test name.
     filename : str
@@ -901,7 +921,9 @@ class DocutilsDocTestFinder:
         then it defaults to the module's `__dict__`, if specified, or {} otherwise.
         If `extraglobs` is not specified, then it defaults to {}.
 
-        Tests come back in document order, the order a reader meets the blocks.
+        Namespaces come back in the order a reader meets the first block of
+        each, and a namespace's own tests in setup, test, cleanup order — which
+        is document order exactly when no two namespaces interleave.
 
         Examples
         --------
