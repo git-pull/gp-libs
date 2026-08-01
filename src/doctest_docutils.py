@@ -6,7 +6,6 @@ import doctest
 import logging
 import os
 import pathlib
-import pprint
 import re
 import sys
 import typing as t
@@ -106,7 +105,7 @@ class TestDirective(Directive):
         code = "\n".join(self.content)
         test = None
 
-        logger.debug(f"directive run: self.name {self.name}")
+        logger.debug("running %s directive", self.name)
         if self.name == "doctest":
             if "<BLANKLINE>" in code:
                 # convert <BLANKLINE>s to ordinary blank lines for presentation
@@ -439,29 +438,15 @@ class DocutilsDocTestFinder:
     ) -> None:
         """Find tests for the given string, and add them to `tests`."""
         if self._verbose:
-            logger.info(f"Finding tests in {name}")
+            logger.info("finding tests in %s", name)
 
         # If we've already processed this string, then ignore it.
         if id(string) in seen:
             return
         seen[id(string)] = 1
 
-        # Find a test for this string, and add it to the list of tests.
-        logger.debug(
-            "_find({})".format(
-                pprint.pformat(
-                    {
-                        "tests": tests,
-                        "string": string,
-                        "name": name,
-                        "globs": globs,
-                        "seen": seen,
-                    },
-                ),
-            ),
-        )
         ext = pathlib.Path(name).suffix
-        logger.debug(f"parse, ext: {ext}")
+        logger.debug("parsing document", extra={"doctest_source_file": name})
         if ext == ".md":
             import myst_parser.parsers.docutils_
             from myst_parser.config.main import MdParserConfig
@@ -518,8 +503,8 @@ class DocutilsDocTestFinder:
         document_name = pathlib.Path(name).name
 
         for idx, node in enumerate(findall(doc)(condition)):
-            logger.debug(f"() node: {node.astext()}")
             assert isinstance(node, nodes.Element)
+            block_type = str(node.get("testnodetype", node.tagname))
             lineno = _node_line(node)
             skipif = node.get("skipif")
             if skipif is not None:
@@ -534,7 +519,13 @@ class DocutilsDocTestFinder:
                 test_name = test_name[0]
             if test_name is None or test_name == "default":
                 test_name = f"{document_name}[{idx}]"
-            logger.debug(f"() node: {test_name}")
+            logger.debug(
+                "doctest block collected",
+                extra={
+                    "doctest_source_file": name,
+                    "doctest_block_type": block_type,
+                },
+            )
             # ``node["test"]`` is the source before the directive trimmed
             # ``# doctest:`` flags out of the code a reader sees. Both
             # spellings have the same line count, so either positions the
