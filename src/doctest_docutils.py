@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import doctest
-import linecache
 import logging
 import os
 import pathlib
@@ -216,6 +215,52 @@ def _ensure_directives_registered() -> None:
     _DIRECTIVES_READY = True
 
 
+def _node_line(node: nodes.Element) -> int:
+    """Return the file line a block reports itself against.
+
+    docutils leaves ``line`` unset on a doctest block nested inside a
+    directive, a list item, or a block quote. The node holding it still carries
+    one, which puts the block within a few lines of its prompts instead of at
+    the top of the page.
+
+    Parameters
+    ----------
+    node : docutils.nodes.Element
+        Node the block was collected from.
+
+    Returns
+    -------
+    int
+        Line to position and report the block against, ``0`` when nothing up
+        the tree carries one.
+
+    Examples
+    --------
+    >>> from docutils import nodes
+    >>> block = nodes.doctest_block("", "")
+    >>> block.line = 6
+    >>> _node_line(block)
+    6
+
+    A block the parser left unpositioned borrows the line of whatever holds it:
+
+    >>> nested = nodes.doctest_block("", "")
+    >>> admonition = nodes.note("", nested)
+    >>> admonition.line = 7
+    >>> _node_line(nested)
+    7
+
+    >>> _node_line(nodes.doctest_block("", ""))
+    0
+    """
+    current: Node | None = node
+    while current is not None:
+        if current.line:
+            return int(current.line)
+        current = current.parent
+    return 0
+
+
 class DocTestFinderNameDoesNotExist(ValueError):
     """Raised with doctest lookup name not provided."""
 
@@ -284,12 +329,6 @@ class DocutilsDocTestFinder:
             if name is None:
                 raise DocTestFinderNameDoesNotExist(string=string)
 
-        # No access to a loader, so assume it's a normal
-        # filesystem path
-        source_lines = linecache.getlines(name) or None
-        if not source_lines:
-            source_lines = None
-
         # Initialize globals, and merge in extraglobs.
         globs = {} if globs is None else globs.copy()
         if extraglobs is not None:
@@ -301,7 +340,7 @@ class DocutilsDocTestFinder:
         source_path: pathlib.Path | None = (
             pathlib.Path(name) if name is not None else None
         )
-        self._find(tests, string, name, source_lines, globs, {}, source_path)
+        self._find(tests, string, name, globs, {}, source_path)
         # ``_find`` appends in document-traversal order; leave it that way.
         # ``DocTest.__lt__`` compares names, and a name carries its block index
         # as text, so sorting runs ``page.md[10]`` ahead of ``page.md[1]``.
@@ -312,7 +351,6 @@ class DocutilsDocTestFinder:
         tests: list[doctest.DocTest],
         string: str,
         name: str,
-        source_lines: list[str] | None,
         globs: dict[str, t.Any],
         seen: dict[int, int],
         source_path: pathlib.Path | None = None,
@@ -334,7 +372,6 @@ class DocutilsDocTestFinder:
                         "tests": tests,
                         "string": string,
                         "name": name,
-                        "source_lines": source_lines,
                         "globs": globs,
                         "seen": seen,
                     },
@@ -417,7 +454,7 @@ class DocutilsDocTestFinder:
                 name=test_name,
                 filename=name,
                 globs=globs,
-                source_lines=[str(node.line)],
+                lineno=_node_line(node),
             )
             options = node.get("options")
             if options:
@@ -436,12 +473,9 @@ class DocutilsDocTestFinder:
         name: str,
         filename: str,
         globs: dict[str, t.Any],
-        source_lines: list[str],
+        lineno: int,
     ) -> doctest.DocTest:
-        """Return a DocTest for given string, or return None."""
-        lineno = int(source_lines[0])
-
-        # Return a DocTest for this string.
+        """Return a DocTest for one block's source."""
         return self._parser.get_doctest(string, globs, name, filename, lineno)
 
 
