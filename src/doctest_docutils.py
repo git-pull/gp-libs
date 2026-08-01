@@ -530,18 +530,25 @@ def _merge_blocks(
     Parameters
     ----------
     blocks : list[doctest.DocTest]
-        Blocks of one namespace, each parsed on its own, in document order.
+        Blocks of one namespace, each parsed on its own, in the order they run.
     name : str
         Namespace name, which becomes the test name.
     filename : str
         Path failures are reported against.
     globs : dict[str, typing.Any]
         Globals the namespace starts with.
+    keep : list[doctest.DocTest] or None
+        Blocks whose examples the merged test runs, compared by identity.
+        `None`, the default, keeps every block. A block left out still
+        contributes its source and its spacing, so the blocks around it report
+        the lines they reported before and a failure's gutter still shows what
+        was passed over — only its examples are dropped.
 
     Returns
     -------
     doctest.DocTest
-        One test holding every block's examples.
+        One test, holding the examples of every block in `keep`, laid out
+        across the page the blocks came from.
 
     Examples
     --------
