@@ -179,6 +179,62 @@ DOCTEST_OPTION_CASES = [
         description="Inline +ELLIPSIS directive works in .md files",
     ),
     DoctestOptionCase(
+        test_id="directive-options-normalize-whitespace-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :options: +NORMALIZE_WHITESPACE
+
+                >>> print("a  b")
+                a b
+            """,
+        ),
+        expected_outcome="passed",
+        description=":options: applies to the block's examples",
+    ),
+    DoctestOptionCase(
+        test_id="directive-options-skip-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :options: +SKIP
+
+                >>> 1 / 0
+            """,
+        ),
+        expected_outcome="skipped",
+        description=":options: +SKIP skips the block's examples",
+    ),
+    DoctestOptionCase(
+        test_id="inline-flag-beats-directive-options-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :options: +SKIP
+
+                >>> 2 + 2  # doctest: -SKIP
+                4
+            """,
+        ),
+        expected_outcome="passed",
+        description="An example's own flag overrides the directive's options",
+    ),
+    DoctestOptionCase(
         test_id="inline-flag-inside-directive-rst",
         file_ext=".rst",
         ini_options="",
