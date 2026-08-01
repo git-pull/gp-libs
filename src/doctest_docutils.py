@@ -577,13 +577,22 @@ def _merge_blocks(
     >>> merged.docstring.splitlines()
     ['>>> one = 1', '>>> two = 2', '>>> three = 3', '>>> one + two']
     """
-    origin = blocks[0].lineno or 0
+    # Laid out by where each block sits on the page, but run in the order
+    # given: a namespace hands its blocks over as setup, tests, cleanup, which
+    # is rarely the order a reader meets them. Anchoring the text on the caller
+    # ordering would report every example against whichever block happened to
+    # come first in that sequence.
+    in_page_order = sorted(blocks, key=lambda block: block.lineno or 0)
+    origin = in_page_order[0].lineno or 0
     lines: list[str] = []
-    examples: list[doctest.Example] = []
-    for block in blocks:
+    offsets: dict[int, int] = {}
+    for block in in_page_order:
         offset = max((block.lineno or 0) - origin, len(lines))
         lines.extend([""] * (offset - len(lines)))
         lines.extend((block.docstring or "").splitlines())
+        offsets[id(block)] = offset
+    examples: list[doctest.Example] = []
+    for block in blocks:
         # A dropped block still pads and still shows its source, so the blocks
         # after it keep the lines they reported before and a failure's gutter
         # still shows what was passed over. Its examples are left untouched:
@@ -591,7 +600,7 @@ def _merge_blocks(
         if keep is not None and not any(block is kept for kept in keep):
             continue
         for example in block.examples:
-            example.lineno += offset
+            example.lineno += offsets[id(block)]
             examples.append(example)
     return doctest.DocTest(
         examples,
