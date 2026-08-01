@@ -2301,3 +2301,28 @@ def test_per_block_under_testdocutils(tmp_path: pathlib.Path) -> None:
 
     assert shared == doctest.TestResults(failed=0, attempted=3)
     assert apart == doctest.TestResults(failed=1, attempted=3)
+
+
+def test_merging_reads_its_blocks_rather_than_consuming_them() -> None:
+    """Merging a block twice positions it the same way both times.
+
+    A block is merged more than once whenever it names two groups, and again
+    when a gated block is lifted out of a namespace and merged on its own.
+    Shifting the block's own examples would move them further every time.
+    """
+    parser = doctest.DocTestParser()
+    blocks = [
+        parser.get_doctest(">>> 1 + 1\n2\n", {}, "n", "page.rst", 3),
+        parser.get_doctest(">>> 2 + 2\n4\n", {}, "n", "page.rst", 9),
+    ]
+    originals = [example.lineno for block in blocks for example in block.examples]
+
+    first = doctest_docutils._merge_blocks(blocks, "n", "page.rst", {})
+    second = doctest_docutils._merge_blocks(blocks, "n", "page.rst", {})
+
+    assert [example.lineno for example in first.examples] == [
+        example.lineno for example in second.examples
+    ]
+    assert [
+        example.lineno for block in blocks for example in block.examples
+    ] == originals
