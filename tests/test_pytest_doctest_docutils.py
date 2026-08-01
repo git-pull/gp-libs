@@ -560,11 +560,21 @@ Narrative prose.
 )
 
 
-def _write_ini(pytester: _pytest.pytester.Pytester, *lines: str) -> None:
-    """Write a pytest.ini that keeps the built-in doctest plugin out."""
+def _write_ini(
+    pytester: _pytest.pytester.Pytester,
+    *lines: str,
+    addopts: str = "",
+) -> None:
+    """Write a pytest.ini that keeps the built-in doctest plugin out.
+
+    ``addopts`` appends to that, for a run whose configuration is the thing
+    under test.
+    """
     pytester.makefile(
         ".ini",
-        pytest="\n".join(["[pytest]", "addopts=-p no:doctest", *lines]),
+        pytest="\n".join(
+            ["[pytest]", f"addopts=-p no:doctest {addopts}".rstrip(), *lines],
+        ),
     )
 
 
@@ -1139,38 +1149,44 @@ def test_merged_marks_nothing_for_loadgroup(
 
 
 class SplittingSchedulerCase(t.NamedTuple):
-    """Invocation whose scheduler distributes a namespace by item.
+    """Invocation naming a scheduler that distributes a namespace by item.
 
     Attributes
     ----------
     test_id : str
         pytest parametrize id.
     args : list[str]
-        Arguments naming the scheduler, appended to the run.
+        Arguments appended to the run.
+    addopts : str
+        Arguments the ini file carries instead.
     named : str
         Scheduler the refusal is expected to name.
     """
 
     test_id: str
     args: list[str]
+    addopts: str
     named: str
 
 
 SPLITTING_SCHEDULER_CASES = [
     SplittingSchedulerCase(
-        test_id="n-alone-promotes-dist-to-load",
-        args=["-n", "2"],
-        named="load",
-    ),
-    SplittingSchedulerCase(
         test_id="load-distributes-by-item",
         args=["-n", "2", "--dist", "load"],
+        addopts="",
         named="load",
     ),
     SplittingSchedulerCase(
         test_id="worksteal-distributes-then-rebalances",
         args=["-n", "2", "--dist", "worksteal"],
+        addopts="",
         named="worksteal",
+    ),
+    SplittingSchedulerCase(
+        test_id="addopts-names-the-scheduler-too",
+        args=["-n", "2"],
+        addopts="--dist load",
+        named="load",
     ),
 ]
 
@@ -1180,26 +1196,32 @@ SPLITTING_SCHEDULER_CASES = [
     SPLITTING_SCHEDULER_CASES,
     ids=[case.test_id for case in SPLITTING_SCHEDULER_CASES],
 )
-def test_per_block_refuses_the_splitting_scheduler(
+def test_per_block_refuses_a_named_splitting_scheduler(
     pytester: _pytest.pytester.Pytester,
     test_id: str,
     args: list[str],
+    addopts: str,
     named: str,
 ) -> None:
-    """A scheduler that distributes by item hands half a namespace to a worker.
+    """Naming a scheduler that distributes by item stops the run.
 
-    ``--dist`` defaults to ``no`` and ``-n`` promotes it to ``load``.
-    ``worksteal`` distributes by item too, then re-balances. A shared globals
-    mapping is a Python object and does not cross processes, so the session
-    stops rather than reporting a page that is only wrong because of how it
-    was scheduled. Any scheduler outside the allowlist is refused, so one
-    added by a later pytest-xdist is checked before it is trusted.
+    ``load`` hands a file's items to whichever worker is free and
+    ``worksteal`` does the same, then re-balances. A shared globals mapping
+    is a Python object and does not cross processes, so the session stops
+    rather than reporting a page that is only wrong because of how it was
+    scheduled. Asking for one by name is a choice to answer, not to overrule.
+
+    A scheduler asked for through ini ``addopts`` is asked for just as much
+    as one typed on the command line — pytest folds ``addopts`` into the
+    arguments before parsing them, which is why reading the parsed value
+    finds both. It is also why ``sys.argv`` cannot be read instead.
     """
     pytester.plugins = ["pytest_doctest_docutils"]
     _write_ini(
         pytester,
         "doctest_docutils_namespace_scope = document",
         "doctest_docutils_namespace_items = per-block",
+        addopts=addopts,
     )
     (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
 
@@ -1208,6 +1230,80 @@ def test_per_block_refuses_the_splitting_scheduler(
     assert result.ret == pytest.ExitCode.USAGE_ERROR
     result.stderr.fnmatch_lines([f"*--dist {named} hands a file's items*"])
     result.stderr.fnmatch_lines(["*--dist loadgroup or --dist loadfile*"])
+
+
+def test_per_block_keeps_workers_for_a_suite_holding_no_page(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A suite with no page keeps its workers, whatever scheduler it named.
+
+    The layout is a project-wide setting, so a project can carry it in its
+    ini while a given run collects only Python tests. Nothing there holds a
+    namespace, so there is nothing a scheduler could split and no reason to
+    take ``-n`` away — which is why the refusal reads the run's collection
+    rather than the setting.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        "doctest_docutils_namespace_items = per-block",
+    )
+    pytester.makepyfile(
+        test_python="""
+        def test_one() -> None:
+            assert True
+
+
+        def test_two() -> None:
+            assert True
+        """,
+    )
+
+    left_open = pytester.runpytest(str(pytester.path), "-n", "2")
+    left_open.assert_outcomes(passed=2)
+
+    named = pytester.runpytest(str(pytester.path), "-n", "2", "--dist", "worksteal")
+
+    named.assert_outcomes(passed=2)
+
+
+def test_per_block_fills_in_a_scheduler_the_run_left_open(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """``-n`` alone asks for workers, not for a way of filling them.
+
+    pytest-xdist answers it with ``--dist load``, which splits a page. The
+    run said nothing about distribution, so file-level scheduling is filled
+    in and the page comes through whole beside the Python tests that share
+    the session.
+
+    The node ids stay the ones the layout collects. ``loadgroup`` would suit
+    the marker the plugin emits, but the group is appended to a node id by
+    the worker, from the worker's own ``--dist`` value, so a controller
+    cannot reach it — and substituting that scheduler would leave every item
+    in a scope of its own and split the page after all.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        "doctest_docutils_namespace_items = per-block",
+    )
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+    (pytester.path / "other.md").write_text(STATE_MD, encoding="utf-8")
+    pytester.makepyfile(
+        test_python="""
+        def test_one() -> None:
+            assert True
+        """,
+    )
+
+    result = pytester.runpytest(str(pytester.path), "-n", "2", "-v")
+
+    result.assert_outcomes(passed=5)
+    result.stdout.fnmatch_lines(["*scheduling tests via _PageScheduling*"])
+    assert not [line for line in result.stdout.lines if "@page.md" in line]
 
 
 def test_merged_survives_the_splitting_scheduler(
@@ -1269,6 +1365,11 @@ PER_BLOCK_SCHEDULER_CASES = [
         passed=4,
     ),
     PerBlockSchedulerCase(
+        test_id="n-alone-leaves-the-scheduler-to-fill-in",
+        args=["-n", "2"],
+        passed=4,
+    ),
+    PerBlockSchedulerCase(
         test_id="dist-without-workers-never-distributes",
         args=["--dist", "load"],
         passed=4,
@@ -1294,6 +1395,8 @@ def test_per_block_survives_a_scheduler_that_keeps_it_together(
     worker the whole suite. A run xdist would not distribute at all — one
     worker, or a ``--dist`` value with no workers behind it — is not refused
     either, because there is nothing for it to split a namespace between.
+    ``-n`` on its own names no scheduler, so one that keeps a page whole is
+    filled in.
     """
     pytester.plugins = ["pytest_doctest_docutils"]
     _write_ini(
