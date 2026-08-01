@@ -96,8 +96,9 @@ A namespace is one item. That is what keeps a shared page correct under
   examples after it unless you pass `--doctest-continue-on-failure`.
 - A function-scoped fixture sets up once per namespace instead of once per
   block. A page whose blocks each expect a fresh fixture belongs at `block`.
-- A block whose examples are all `# doctest: +SKIP` stops reporting as skipped
-  once it shares a namespace with blocks that run.
+- A skipped block — `# doctest: +SKIP`, `:options: +SKIP`, or a true
+  `:skipif:` — stops reporting as skipped once it shares a namespace with
+  blocks that run. Its examples still never execute.
 - The report's numbered gutter spans the whole namespace, so the prose between
   two blocks shows up as blank numbered lines above the failing prompt.
 
@@ -123,8 +124,10 @@ example that writes its own flag wins over the directive's:
     hello ...
 ```
 
-`:skipif:` takes a Python expression, which is **evaluated** when the page is
-collected. A true result drops the block, so it never becomes an item:
+`:skipif:` skips a block on a condition the page works out for itself, so you
+don't have to write `+SKIP` by hand for one interpreter or one platform. It
+takes a Python expression, which is **evaluated** when the page is read, and a
+true result marks the block `+SKIP`:
 
 ```rst
 .. doctest::
@@ -134,12 +137,38 @@ collected. A true result drops the block, so it never becomes an item:
     'a modern interpreter'
 ```
 
-The expression sees `sys` and the globals the document starts with, not
-anything the page's own examples bound — the block is dropped before any of
-them run. Naming anything else stops the page with
-{exc}`~doctest_docutils.SkipifExpressionError`. Collection is also all
-`--collect-only` does, so listing a page's items runs its `:skipif:`
-expressions.
+That is the same flag `:options: +SKIP` sets, so the two spellings report
+alike: the block still collects, still counts, and still answers to its own
+node id. The reason pytest prints is the one it prints for any skipped
+example, which names the flag rather than your condition:
+
+```console
+$ pytest page.rst -rs
+```
+
+```text
+SKIPPED [1] ...: all tests skipped by +SKIP option
+1 skipped
+```
+
+An example writing its own `# doctest: -SKIP` still wins, as it does over
+`:options:`. The expression sees `sys` and the globals the document starts
+with, not anything the page's own examples bound — it is answered while the
+page is being read, before any of them run. Naming anything else stops the page
+with {exc}`~doctest_docutils.SkipifExpressionError`, which reports the file,
+line, and expression to go fix.
+
+Two consequences worth knowing. Reading a page is all `--collect-only` does, so
+listing a page's items runs its `:skipif:` expressions; keep them free of side
+effects. And a block is not an item — skipping one block of a group leaves the
+group's other blocks running, and the item reports skipped only when the whole
+namespace is skipped.
+
+A skipped block is still parsed, so malformed doctest source in one reports
+as an error rather than passing unnoticed — the same as for `:options: +SKIP`.
+
+`:skipif:` works the same on `.. testsetup::` and `.. testcleanup::`, which
+declare the option too.
 
 ## Hide a setup line from rendered docs
 
