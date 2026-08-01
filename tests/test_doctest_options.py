@@ -144,6 +144,25 @@ DOCTEST_OPTION_CASES = [
         expected_outcome="skipped",
         description="Inline +SKIP directive works in .md files",
     ),
+    DoctestOptionCase(
+        test_id="skipif-false-runs-the-block-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :skipif: False
+
+                >>> 2 + 2
+                4
+            """,
+        ),
+        expected_outcome="passed",
+        description=":skipif: False leaves the block collected",
+    ),
     # Inline ELLIPSIS directive
     DoctestOptionCase(
         test_id="inline-ellipsis-directive-rst",
@@ -573,3 +592,40 @@ def test_edge_cases(
         assert "0 items" in stdout or "no tests ran" in stdout or expected_tests == 0
     elif expected_outcome == "passed":
         result.assert_outcomes(passed=expected_tests)
+
+
+def test_skipif_true_drops_the_block(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A true ``:skipif:`` expression drops its block before collection.
+
+    The expression is evaluated, so the page decides what runs. The block that
+    stays behind is the only item collected.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
+    page = pytester.path / "test_doc.rst"
+    page.write_text(
+        textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :skipif: True
+
+                >>> 1 / 0
+
+            .. doctest::
+                :skipif: 1 > 2
+
+                >>> 2 + 2
+                4
+            """,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(str(page))
+
+    result.assert_outcomes(passed=1)

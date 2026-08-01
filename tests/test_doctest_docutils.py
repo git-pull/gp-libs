@@ -537,3 +537,75 @@ def test_a_nested_block_collects(
 
     assert linenos == sorted(linenos)
     assert all(lineno > 0 for lineno in linenos)
+
+
+class SkipifFixture(t.NamedTuple):
+    """Directive whose ``:skipif:`` decides if its block is collected.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    expression : str
+        Expression written on the directive's ``:skipif:`` option.
+    collected : int
+        Tests expected back from the page.
+    """
+
+    test_id: str
+    expression: str
+    collected: int
+
+
+SKIPIF_FIXTURES = [
+    SkipifFixture(test_id="true-drops-the-block", expression="True", collected=0),
+    SkipifFixture(test_id="false-keeps-the-block", expression="False", collected=1),
+    SkipifFixture(
+        test_id="expression-sees-the-starting-globals",
+        expression="__name__ == 'nonesuch'",
+        collected=1,
+    ),
+    SkipifFixture(
+        test_id="expression-sees-sys",
+        expression="sys.version_info < (3, 10)",
+        collected=1,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    SkipifFixture._fields,
+    SKIPIF_FIXTURES,
+    ids=[f.test_id for f in SKIPIF_FIXTURES],
+)
+def test_skipif_drops_a_block_before_it_runs(
+    test_id: str,
+    expression: str,
+    collected: int,
+) -> None:
+    """A true ``:skipif:`` expression drops its block out of collection."""
+    page = f".. doctest::\n    :skipif: {expression}\n\n    >>> 2 + 2\n    4\n"
+
+    tests = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert len(tests) == collected
+
+
+def test_skipif_that_cannot_be_evaluated_names_its_block() -> None:
+    """An expression naming something out of reach reports as that block.
+
+    The namespace a ``:skipif:`` sees is small on purpose, so reaching outside
+    it is an ordinary mistake; the report has to say which block to go fix.
+    """
+    page = (
+        "Title\n=====\n\n.. doctest::\n"
+        '    :skipif: platform.system() == "Windows"\n\n    >>> 2 + 2\n    4\n'
+    )
+
+    with pytest.raises(doctest_docutils.SkipifExpressionError) as excinfo:
+        doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert str(excinfo.value) == (
+        "page.rst:4: :skipif: 'platform.system() == \"Windows\"' failed: "
+        "name 'platform' is not defined"
+    )
