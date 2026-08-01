@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import doctest
+import io
 import logging
 import textwrap
 import typing as t
@@ -1314,9 +1316,13 @@ def _reported_lines(
     page: str,
     page_path: pathlib.Path,
     scope: doctest_docutils.NamespaceScope,
+    items: doctest_docutils.NamespaceItems = "merged",
 ) -> list[int]:
     """Return the file line every example on `page` reports, at `scope`."""
-    finder = doctest_docutils.DocutilsDocTestFinder(namespace_scope=scope)
+    finder = doctest_docutils.DocutilsDocTestFinder(
+        namespace_scope=scope,
+        namespace_items=items,
+    )
     return [
         (test.lineno or 0) + example.lineno + 1
         for test in finder.find(page, str(page_path))
@@ -1502,6 +1508,25 @@ def test_collection_logs_the_namespace_each_block_joined(
     }
 
 
+def test_verbose_finder_records_what_a_page_yielded(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """``verbose=True`` reports how many tests a page produced, and from where.
+
+    ``doctest_source_file`` is the structured key, so the page is filtered on
+    rather than read out of the message.
+    """
+    page = ".. doctest::\n\n   >>> 2 + 2\n   4\n"
+
+    finder = doctest_docutils.DocutilsDocTestFinder(verbose=True)
+    with caplog.at_level(logging.INFO, logger="doctest_docutils"):
+        finder.find(page, "page.rst")
+
+    found = [record for record in caplog.records if record.msg == "found %d test(s)"]
+    assert [record.args for record in found] == [(1,)]
+    assert [record.__dict__["doctest_source_file"] for record in found] == ["page.rst"]
+
+
 def test_namespace_scope_rejects_an_unknown_name() -> None:
     """An unknown scope names the values it could have been."""
     with pytest.raises(doctest_docutils.NamespaceScopeError) as excinfo:
@@ -1559,6 +1584,23 @@ def test_pyversion_skips_the_block_it_excludes(
     (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
 
     assert test.examples[0].options.get(doctest.SKIP, False) is skipped
+
+
+def test_pyversion_warns_on_a_malformed_specifier(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A ``:pyversion:`` that is no PEP-440 specifier warns and leaves the block.
+
+    The option decides whether a block is for this interpreter. A value it
+    cannot parse answers neither way, so the block is left runnable and the
+    page reports the option rather than dying on it.
+    """
+    page = ".. doctest::\n   :pyversion: not a spec\n\n   >>> 2 + 2\n   4\n"
+
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert test.examples[0].options.get(doctest.SKIP, False) is False
+    assert "'not a spec' is not a valid pyversion option" in capsys.readouterr().err
 
 
 BLANKLINE_REST = textwrap.dedent(
@@ -1892,37 +1934,370 @@ def test_out_of_order_phases_report_their_own_lines() -> None:
     )
 
 
-def test_pyversion_warns_on_a_malformed_specifier(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A ``:pyversion:`` that is no PEP-440 specifier warns and leaves the block.
+class NamespaceItemsFixture(t.NamedTuple):
+    """Page whose namespaces keep one test per block.
 
-    The option decides whether a block is for this interpreter. A value it
-    cannot parse answers neither way, so the block is left runnable and the
-    page reports the option rather than dying on it.
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    file_name : str
+        Page name, whose suffix picks the parser.
+    page : str
+        Page content.
+    namespace_scope : doctest_docutils.NamespaceScope
+        Scope the finder is built with.
+    test_names : list[str]
+        Test names ``find`` returns, in order.
+    namespaces : list[str]
+        Namespace each returned test runs in, in the same order.
     """
-    page = ".. doctest::\n   :pyversion: not a spec\n\n   >>> 2 + 2\n   4\n"
 
-    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+    test_id: str
+    file_name: str
+    page: str
+    namespace_scope: doctest_docutils.NamespaceScope
+    test_names: list[str]
+    namespaces: list[str]
 
-    assert test.examples[0].options.get(doctest.SKIP, False) is False
-    assert "'not a spec' is not a valid pyversion option" in capsys.readouterr().err
+
+NAMESPACE_ITEMS_FIXTURES = [
+    NamespaceItemsFixture(
+        test_id="ungrouped-fences-keep-the-names-block-scope-gives-them",
+        file_name="page.md",
+        page=STATE_MD,
+        namespace_scope="block",
+        test_names=["page.md[0]", "page.md[1]"],
+        namespaces=["page.md[0]", "page.md[1]"],
+    ),
+    NamespaceItemsFixture(
+        test_id="a-shared-page-keeps-those-names-too",
+        file_name="page.md",
+        page=STATE_MD,
+        namespace_scope="document",
+        test_names=["page.md[0]", "page.md[1]"],
+        namespaces=["page.md", "page.md"],
+    ),
+    NamespaceItemsFixture(
+        test_id="a-group-numbers-its-blocks-by-page-position",
+        file_name="page.rst",
+        page=SHARED_GROUP_REST,
+        namespace_scope="block",
+        test_names=["intro[0]", "intro[1]"],
+        namespaces=["intro", "intro"],
+    ),
+    NamespaceItemsFixture(
+        test_id="distinct-groups-stay-distinct",
+        file_name="page.rst",
+        page=DISTINCT_GROUPS_REST,
+        namespace_scope="document",
+        test_names=["alpha[0]", "beta[1]"],
+        namespaces=["alpha", "beta"],
+    ),
+]
 
 
-def test_verbose_finder_records_what_a_page_yielded(
-    caplog: pytest.LogCaptureFixture,
+@pytest.mark.parametrize(
+    NamespaceItemsFixture._fields,
+    NAMESPACE_ITEMS_FIXTURES,
+    ids=[f.test_id for f in NAMESPACE_ITEMS_FIXTURES],
+)
+def test_per_block_keeps_a_test_per_block(
+    tmp_path: pathlib.Path,
+    test_id: str,
+    file_name: str,
+    page: str,
+    namespace_scope: doctest_docutils.NamespaceScope,
+    test_names: list[str],
+    namespaces: list[str],
 ) -> None:
-    """``verbose=True`` reports how many tests a page produced, and from where.
+    """Every block comes back as its own test, named for where it sits.
 
-    ``doctest_source_file`` is the structured key, so the page is filtered on
-    rather than read out of the message.
+    The name is the one a block already answers to at ``block`` scope, so a
+    node id does not move with the layout, and the tests of one namespace hold
+    one globals mapping rather than a copy each.
     """
-    page = ".. doctest::\n\n   >>> 2 + 2\n   4\n"
+    page_path = tmp_path / file_name
+    page_path.write_text(page, encoding="utf-8")
 
-    finder = doctest_docutils.DocutilsDocTestFinder(verbose=True)
-    with caplog.at_level(logging.INFO, logger="doctest_docutils"):
-        finder.find(page, "page.rst")
+    finder = doctest_docutils.DocutilsDocTestFinder(
+        namespace_scope=namespace_scope,
+        namespace_items="per-block",
+    )
+    collected = finder._collect(page, str(page_path))
 
-    found = [record for record in caplog.records if record.msg == "found %d test(s)"]
-    assert [record.args for record in found] == [(1,)]
-    assert [record.__dict__["doctest_source_file"] for record in found] == ["page.rst"]
+    assert [held.test.name for held in collected] == test_names
+    assert [held.namespace for held in collected] == namespaces
+    by_namespace: dict[str, list[int]] = {}
+    for held in collected:
+        by_namespace.setdefault(held.namespace, []).append(id(held.test.globs))
+    assert all(len(set(ids)) == 1 for ids in by_namespace.values())
+
+
+class NamespaceItemsStateFixture(t.NamedTuple):
+    """Page run block by block, counting the examples that fail.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    page : str
+        Page content.
+    namespace_scope : doctest_docutils.NamespaceScope
+        Scope the finder is built with.
+    failures : int
+        Examples expected to fail once every test has run.
+    """
+
+    test_id: str
+    page: str
+    namespace_scope: doctest_docutils.NamespaceScope
+    failures: int
+
+
+NAMESPACE_ITEMS_STATE_FIXTURES = [
+    NamespaceItemsStateFixture(
+        test_id="a-block-still-reads-nothing-by-default",
+        page=STATE_MD,
+        namespace_scope="block",
+        failures=1,
+    ),
+    NamespaceItemsStateFixture(
+        test_id="a-shared-page-reaches-the-block-below",
+        page=STATE_MD,
+        namespace_scope="document",
+        failures=0,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    NamespaceItemsStateFixture._fields,
+    NAMESPACE_ITEMS_STATE_FIXTURES,
+    ids=[f.test_id for f in NAMESPACE_ITEMS_STATE_FIXTURES],
+)
+def test_per_block_state_reaches_as_far_as_its_namespace(
+    tmp_path: pathlib.Path,
+    test_id: str,
+    page: str,
+    namespace_scope: doctest_docutils.NamespaceScope,
+    failures: int,
+) -> None:
+    """A shared mapping carries names between tests; a scope still bounds it.
+
+    ``DocTestRunner.run`` empties ``test.globs`` when it is done, so a caller
+    running these tests has to pass ``clear_globs=False`` for the sharing to
+    outlive the first block. That is the contract the pytest plugin's runner
+    holds up for it.
+    """
+    page_path = tmp_path / "page.md"
+    page_path.write_text(page, encoding="utf-8")
+
+    finder = doctest_docutils.DocutilsDocTestFinder(
+        namespace_scope=namespace_scope,
+        namespace_items="per-block",
+    )
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in finder.find(page, str(page_path)):
+        runner.run(test, out=lambda _: None, clear_globs=False)
+
+    assert runner.failures == failures
+
+
+def test_a_cleared_namespace_forgets_between_blocks(tmp_path: pathlib.Path) -> None:
+    """Sharing needs the runner's cooperation, and the shape says so.
+
+    The mapping is handed over whole, but the stdlib empties it after each
+    test unless told otherwise, so a caller that forgets gets isolated blocks
+    back rather than a silently half-shared page.
+    """
+    page_path = tmp_path / "page.md"
+    page_path.write_text(STATE_MD, encoding="utf-8")
+
+    finder = doctest_docutils.DocutilsDocTestFinder(
+        namespace_scope="document",
+        namespace_items="per-block",
+    )
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in finder.find(STATE_MD, str(page_path)):
+        runner.run(test, out=lambda _: None)
+
+    assert runner.failures == 1
+
+
+def test_per_block_reports_the_lines_block_scope_reports(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A block never merges, so it reports where docutils put it.
+
+    Merging pads a namespace's text so its examples keep the lines they report
+    alone; keeping the blocks apart has nothing to pad, which is the same
+    answer by a shorter route.
+    """
+    page_path = tmp_path / "page.rst"
+    page_path.write_text(CROWDED_REST, encoding="utf-8")
+
+    assert _reported_lines(
+        CROWDED_REST,
+        page_path,
+        "document",
+        items="per-block",
+    ) == _reported_lines(CROWDED_REST, page_path, "block")
+
+
+def test_per_block_runs_setup_first_and_cleanup_last() -> None:
+    """Phase still beats page order when a namespace is many tests.
+
+    Collection order is run order for a caller that walks the list, so the
+    tests of one namespace come back setup first and cleanup last however the
+    page arranged them.
+    """
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_items="per-block")
+    tests = finder.find(OUT_OF_ORDER_PHASES_REST, "page.rst")
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in tests:
+        runner.run(test, out=lambda _: None, clear_globs=False)
+
+    assert [test.name for test in tests] == ["demo[2]", "demo[1]", "demo[0]"]
+    assert [example.source.strip() for test in tests for example in test.examples] == [
+        "value = 1",
+        "value",
+        "del value",
+    ]
+    assert runner.failures == 0
+
+
+def test_per_block_gates_a_block_and_leaves_the_rest_running() -> None:
+    """A gate is read the same way whatever a namespace collects as.
+
+    Merged, a gated block is lifted into a test of its own so it still
+    reports; per block it already is one, and the blocks either side of it run
+    and can still fail.
+    """
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_items="per-block")
+    tests = finder.find(GATED_MIDDLE_BLOCK_REST, "page.rst")
+
+    gated = [test for test in tests if doctest_docutils._all_examples_skipped(test)]
+    assert [test.name for test in gated] == ["intro[1]"]
+
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in tests:
+        runner.run(test, out=lambda _: None, clear_globs=False)
+
+    assert runner.failures == 0
+
+
+PER_BLOCK_MEMBERSHIP_FIXTURES = [
+    (
+        "comma-groups",
+        COMMA_GROUPS_REST,
+        [("alpha", "alpha[0]"), ("beta", "beta[0]"), ("beta", "beta[1]")],
+    ),
+    (
+        "wildcard-group",
+        WILDCARD_GROUP_REST,
+        [
+            ("alpha", "alpha[0]"),
+            ("beta", "beta[0]"),
+            ("alpha", "alpha[1]"),
+            ("beta", "beta[2]"),
+        ],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("test_id", "page", "collected"),
+    PER_BLOCK_MEMBERSHIP_FIXTURES,
+    ids=[test_id for test_id, _, _ in PER_BLOCK_MEMBERSHIP_FIXTURES],
+)
+def test_per_block_gives_a_shared_block_a_test_in_each_group(
+    test_id: str,
+    page: str,
+    collected: list[tuple[str, str]],
+) -> None:
+    """A block joining two groups runs once per group, against that namespace.
+
+    Its test is named for the group it is running in, so two groups holding
+    one block do not collide, and each group still gets its setup before its
+    tests.
+    """
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_items="per-block")
+    held = finder._collect(page, "page.rst")
+    runner = doctest.DocTestRunner(verbose=False)
+    for one in held:
+        runner.run(one.test, out=lambda _: None, clear_globs=False)
+
+    assert [(one.namespace, one.test.name) for one in held] == collected
+    assert runner.failures == 0
+
+
+def test_per_block_keeps_a_directive_option() -> None:
+    """``:options:`` reach a block's examples whatever it collects as."""
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_items="per-block")
+    (test,) = finder.find(
+        ".. doctest::\n    :options: +ELLIPSIS\n\n"
+        '    >>> print("hello world")\n    hello ...\n',
+        "page.rst",
+    )
+    runner = doctest.DocTestRunner(verbose=False)
+    runner.run(test, out=lambda _: None, clear_globs=False)
+
+    assert test.examples[0].options[doctest.ELLIPSIS] is True
+    assert runner.failures == 0
+
+
+def test_namespace_items_rejects_an_unknown_name() -> None:
+    """An unknown layout names the values it could have been."""
+    with pytest.raises(doctest_docutils.NamespaceItemsError) as excinfo:
+        doctest_docutils.DocutilsDocTestFinder(
+            namespace_items=t.cast("doctest_docutils.NamespaceItems", "one-each"),
+        )
+
+    assert str(excinfo.value) == (
+        "Unknown namespace items: 'one-each'. Expected one of: merged, per-block"
+    )
+
+
+def test_merged_collection_names_the_namespace_of_every_test() -> None:
+    """A merged page names its namespaces too, lifted blocks included.
+
+    The namespace is what a caller distributing tests has to keep together,
+    and a block lifted out of one belongs to it as much as the merged test
+    does.
+    """
+    finder = doctest_docutils.DocutilsDocTestFinder()
+    collected = finder._collect(GATED_MIDDLE_BLOCK_REST, "page.rst")
+
+    assert [(held.namespace, held.test.name) for held in collected] == [
+        ("intro", "intro"),
+        ("intro", "intro[1]"),
+    ]
+
+
+def test_per_block_under_testdocutils(tmp_path: pathlib.Path) -> None:
+    """Running a file has no scheduler, so per block simply shares.
+
+    ``testdocutils`` owns its runner, so it is the one that has to leave the
+    namespace uncleared between blocks.
+    """
+    page = tmp_path / "page.md"
+    page.write_text(STATE_MD, encoding="utf-8")
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        shared = doctest_docutils.testdocutils(
+            str(page),
+            module_relative=False,
+            report=False,
+            namespace_scope="document",
+            namespace_items="per-block",
+        )
+        apart = doctest_docutils.testdocutils(
+            str(page),
+            module_relative=False,
+            report=False,
+            namespace_items="per-block",
+        )
+
+    assert shared == doctest.TestResults(failed=0, attempted=3)
+    assert apart == doctest.TestResults(failed=1, attempted=3)
