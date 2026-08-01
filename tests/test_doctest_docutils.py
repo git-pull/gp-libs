@@ -1513,3 +1513,78 @@ def test_a_skipped_block_must_still_parse() -> None:
 
     with pytest.raises(ValueError, match="lacks blank after >>>"):
         doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+
+OUT_OF_ORDER_PHASES_REST = textwrap.dedent(
+    """
+Title
+=====
+
+.. testcleanup:: demo
+
+   >>> del value
+
+.. doctest:: demo
+
+   >>> value
+   1
+
+.. testsetup:: demo
+
+   >>> value = 1
+    """,
+)
+
+TWO_SETUPS_REST = textwrap.dedent(
+    """
+Title
+=====
+
+.. testsetup:: demo
+
+   >>> order = ["first"]
+
+.. testsetup:: demo
+
+   >>> order.append("second")
+
+.. doctest:: demo
+
+   >>> order
+   ['first', 'second']
+    """,
+)
+
+
+def test_a_group_runs_setup_first_and_cleanup_last() -> None:
+    """Phase beats page order, so a hidden block can sit anywhere.
+
+    ``testsetup`` and ``testcleanup`` render as comments, so an author moves
+    them out of the reader's way; running them where they sit bound names too
+    late and tore them down too early.
+    """
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(
+        OUT_OF_ORDER_PHASES_REST,
+        "page.rst",
+    )
+    runner = doctest.DocTestRunner(verbose=False)
+    runner.run(test, out=lambda _: None)
+
+    assert [example.source.strip() for example in test.examples] == [
+        "value = 1",
+        "value",
+        "del value",
+    ]
+    assert runner.failures == 0
+
+
+def test_two_setups_keep_their_page_order() -> None:
+    """Blocks of one phase run in the order the page wrote them."""
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(
+        TWO_SETUPS_REST,
+        "page.rst",
+    )
+    runner = doctest.DocTestRunner(verbose=False)
+    runner.run(test, out=lambda _: None)
+
+    assert runner.failures == 0
