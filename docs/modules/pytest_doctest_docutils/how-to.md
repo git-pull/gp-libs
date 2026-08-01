@@ -175,8 +175,7 @@ The two settings answer different questions, and both still apply: the scope
 says what shares a namespace, this one says whether sharing costs the blocks
 their ids. At the default scope no page state is shared either way — but
 selecting `per-block` is still the opt-in to a live shared mapping, because a
-page that declares a group shares one whatever the scope, and the refusal below
-reads the setting rather than the page.
+page that declares a group shares one whatever the scope.
 
 A run that keeps a node id for every block says so in its header, so you can
 tell from the report which one you got. The scope rides along on the same line:
@@ -196,35 +195,56 @@ always has.
 A live namespace is a Python object, so it neither crosses a process boundary
 nor outlives the fixtures that filled it. The cost shows up in five places.
 
-Under `pytest-xdist`, `-n` alone selects `--dist load`, which distributes by
-item, as does `--dist worksteal`. Two blocks of one namespace can then land on
-different workers and the second reads a namespace the first never built.
-pytest stops the session rather than report a page that is only wrong because
-of how it was scheduled:
+Under `pytest-xdist`, two blocks of one namespace landing on different workers
+would leave the second reading a namespace the first never built. Which
+scheduler you get decides whether that can happen, and `-n` on its own does not
+choose one: `pytest-xdist` fills it in with `--dist load`, which distributes by
+item.
+
+So the plugin fills it in first, with file-level scheduling. `pytest docs/ -n
+auto` keeps every page on one worker and your shared pages pass:
+
+```console
+$ pytest docs/ -n auto
+```
+
+Nothing about the run changes otherwise — the node ids stay the ones the layout
+collects, and `-v` names the scheduler that ran if you want to see it. File
+level is as fine-grained as this can go. `loadgroup` would suit the
+`xdist_group` marker the plugin emits per namespace, but that group reaches a
+scheduler through a node-id suffix the *worker* writes, from the worker's own
+`--dist` value, so no substitute made on the controller can use it.
+
+Name a scheduler yourself and it is yours. `--dist loadfile`, `--dist
+loadgroup`, `--dist loadscope` and `--dist each` all keep a namespace whole,
+and `loadgroup` is the finer grained of the two obvious ones: `loadfile` pins a
+whole file to one worker, while the group is the file plus the namespace, so a
+page holding several namespaces still spreads.
+
+```console
+$ pytest docs/ -n auto --dist loadgroup
+```
+
+Ask for `--dist load` or `--dist worksteal` — by flag or through `addopts` —
+and the session stops instead, naming the page it would have split. Overruling
+a scheduler you asked for by name would be the plugin deciding it knows better;
+reporting a page that is only wrong because of how it was scheduled would be
+worse:
 
 ```text
 ERROR: doctest_docutils_namespace_items = per-block can hand a namespace's
 blocks one globals mapping between them — a page declaring a group does,
-whatever the scope — and a mapping cannot cross processes. --dist load hands a
-file's items to whichever worker is free, so it can send them to different
-workers. Run with --dist loadgroup or --dist loadfile, or set
-doctest_docutils_namespace_items = merged. -n without --dist selects --dist
-load.
+whatever the scope — and a mapping cannot cross processes. --dist worksteal
+hands a file's items to whichever worker is free, so it can send docs/page.md's
+blocks to different workers. Run with --dist loadgroup or --dist loadfile, or
+set doctest_docutils_namespace_items = merged. Dropping --dist leaves -n free
+to keep each page on one worker.
 ```
 
-Run with a scheduler that keeps a namespace whole instead:
-
-```console
-$ pytest docs/ -n auto --dist loadfile
-```
-
-`--dist loadgroup` works too, driven by an `xdist_group` marker the plugin
-emits per namespace, and is finer grained: `loadfile` pins a whole file to one
-worker, while the group is the file plus the namespace, so a page holding
-several namespaces still spreads. `loadscope` and `each` are safe as well.
-Whichever you pick is a project-wide decision, which is why merged stays the
-default. A run xdist would not distribute anyway — one worker, or
-`--collect-only` — is never refused.
+That reads the run, not the setting. A run holding no page whose blocks split —
+a suite of Python tests, a single-block page, `--collect-only`, one worker —
+keeps its workers whatever it asked for, so carrying the layout in your ini
+never costs `-n` to a session that has no namespace to protect.
 
 A test-retry plugin repeats a single item, which a live namespace cannot
 survive. Under `merged` a retry re-runs the namespace from its first block, so
