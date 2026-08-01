@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import doctest
+import logging
 import textwrap
 import typing as t
 
@@ -626,3 +627,531 @@ def test_hide_optionflag_parses_without_pytest() -> None:
     (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
 
     assert test.examples[0].options[doctest_docutils._HIDE_FLAG] is True
+
+
+STATE_MD = textwrap.dedent(
+    """
+# Title
+
+```python
+>>> greeting = "hello"
+>>> greeting
+'hello'
+```
+
+Narrative prose between the two blocks.
+
+```python
+>>> greeting.upper()
+'HELLO'
+```
+    """,
+)
+
+SHARED_GROUP_REST = textwrap.dedent(
+    """
+Title
+=====
+
+.. doctest:: intro
+
+    >>> greeting = "hello"
+
+Narrative prose.
+
+.. doctest:: intro
+
+    >>> greeting.upper()
+    'HELLO'
+    """,
+)
+
+DISTINCT_GROUPS_REST = textwrap.dedent(
+    """
+Title
+=====
+
+.. doctest:: alpha
+
+    >>> alpha_only = 1
+
+.. doctest:: beta
+
+    >>> alpha_only
+    Traceback (most recent call last):
+    NameError: name 'alpha_only' is not defined
+    """,
+)
+
+
+class NamespaceFixture(t.NamedTuple):
+    """Page whose blocks land in one namespace or in several.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    file_name : str
+        Page name, whose suffix picks the parser.
+    page : str
+        Page content.
+    namespace_scope : doctest_docutils.NamespaceScope
+        Scope the finder is built with.
+    test_names : list[str]
+        Test names ``find`` returns, in order.
+    example_sources : list[list[str]]
+        Example sources per returned test, in document order.
+    """
+
+    test_id: str
+    file_name: str
+    page: str
+    namespace_scope: doctest_docutils.NamespaceScope
+    test_names: list[str]
+    example_sources: list[list[str]]
+
+
+NAMESPACE_FIXTURES = [
+    NamespaceFixture(
+        test_id="ungrouped-fences-stay-apart-by-default",
+        file_name="page.md",
+        page=STATE_MD,
+        namespace_scope="block",
+        test_names=["page.md[0]", "page.md[1]"],
+        example_sources=[['greeting = "hello"', "greeting"], ["greeting.upper()"]],
+    ),
+    NamespaceFixture(
+        test_id="ungrouped-fences-share-the-page-under-document",
+        file_name="page.md",
+        page=STATE_MD,
+        namespace_scope="document",
+        test_names=["page.md"],
+        example_sources=[
+            ['greeting = "hello"', "greeting", "greeting.upper()"],
+        ],
+    ),
+    NamespaceFixture(
+        test_id="group-shares-by-default",
+        file_name="page.rst",
+        page=SHARED_GROUP_REST,
+        namespace_scope="block",
+        test_names=["intro"],
+        example_sources=[['greeting = "hello"', "greeting.upper()"]],
+    ),
+    NamespaceFixture(
+        test_id="group-shares-under-document",
+        file_name="page.rst",
+        page=SHARED_GROUP_REST,
+        namespace_scope="document",
+        test_names=["intro"],
+        example_sources=[['greeting = "hello"', "greeting.upper()"]],
+    ),
+    NamespaceFixture(
+        test_id="distinct-groups-partition-the-page",
+        file_name="page.rst",
+        page=DISTINCT_GROUPS_REST,
+        namespace_scope="document",
+        test_names=["alpha", "beta"],
+        example_sources=[["alpha_only = 1"], ["alpha_only"]],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    NamespaceFixture._fields,
+    NAMESPACE_FIXTURES,
+    ids=[f.test_id for f in NAMESPACE_FIXTURES],
+)
+def test_finder_merges_a_namespace_into_one_test(
+    tmp_path: pathlib.Path,
+    test_id: str,
+    file_name: str,
+    page: str,
+    namespace_scope: doctest_docutils.NamespaceScope,
+    test_names: list[str],
+    example_sources: list[list[str]],
+) -> None:
+    """A namespace is one test holding its blocks' examples in document order.
+
+    Naming a group is the author asking two blocks to share, so a group shares
+    at every scope; blocks that name none follow the scope.
+    """
+    page_path = tmp_path / file_name
+    page_path.write_text(page, encoding="utf-8")
+
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_scope=namespace_scope)
+    tests = finder.find(page, str(page_path))
+
+    assert [test.name for test in tests] == test_names
+    assert [
+        [example.source.strip() for example in test.examples] for test in tests
+    ] == example_sources
+
+
+class NamespaceStateFixture(t.NamedTuple):
+    """Page run end to end, counting the examples that fail.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    file_name : str
+        Page name, whose suffix picks the parser.
+    page : str
+        Page content.
+    namespace_scope : doctest_docutils.NamespaceScope
+        Scope the finder is built with.
+    failures : int
+        Examples expected to fail once every test has run.
+    """
+
+    test_id: str
+    file_name: str
+    page: str
+    namespace_scope: doctest_docutils.NamespaceScope
+    failures: int
+
+
+NAMESPACE_STATE_FIXTURES = [
+    NamespaceStateFixture(
+        test_id="second-fence-cannot-read-the-first-by-default",
+        file_name="page.md",
+        page=STATE_MD,
+        namespace_scope="block",
+        failures=1,
+    ),
+    NamespaceStateFixture(
+        test_id="second-fence-reads-the-first-under-document",
+        file_name="page.md",
+        page=STATE_MD,
+        namespace_scope="document",
+        failures=0,
+    ),
+    NamespaceStateFixture(
+        test_id="group-reads-what-its-first-block-bound",
+        file_name="page.rst",
+        page=SHARED_GROUP_REST,
+        namespace_scope="block",
+        failures=0,
+    ),
+    NamespaceStateFixture(
+        test_id="groups-stay-isolated-from-each-other",
+        file_name="page.rst",
+        page=DISTINCT_GROUPS_REST,
+        namespace_scope="document",
+        failures=0,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    NamespaceStateFixture._fields,
+    NAMESPACE_STATE_FIXTURES,
+    ids=[f.test_id for f in NAMESPACE_STATE_FIXTURES],
+)
+def test_namespace_scope_decides_what_a_block_can_read(
+    tmp_path: pathlib.Path,
+    test_id: str,
+    file_name: str,
+    page: str,
+    namespace_scope: doctest_docutils.NamespaceScope,
+    failures: int,
+) -> None:
+    """State reaches exactly as far as the namespace it was bound in.
+
+    The isolated page proves it by expecting the ``NameError`` its own examples
+    document.
+    """
+    page_path = tmp_path / file_name
+    page_path.write_text(page, encoding="utf-8")
+
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_scope=namespace_scope)
+    runner = doctest.DocTestRunner(verbose=False)
+    for test in finder.find(page, str(page_path)):
+        runner.run(test, out=lambda _: None)
+
+    assert runner.failures == failures
+
+
+class MergedLineNumberFixture(t.NamedTuple):
+    """Page a namespace merges, in each block form docutils positions apart.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    file_name : str
+        Page name, whose suffix picks the parser.
+    page : str
+        Page content.
+    """
+
+    test_id: str
+    file_name: str
+    page: str
+
+
+LONG_THEN_SHORT_REST = textwrap.dedent(
+    """
+Title
+=====
+
+>>> first = 1
+>>> second = 2
+>>> third = 3
+>>> fourth = 4
+
+Prose short enough that placing by ``node.line`` would overlap the blocks.
+
+>>> first + fourth
+5
+    """,
+)
+
+MERGED_LINE_NUMBER_FIXTURES = [
+    MergedLineNumberFixture(
+        test_id="MyST-fences",
+        file_name="page.md",
+        page=STATE_MD,
+    ),
+    MergedLineNumberFixture(
+        test_id="reST-doctest_directives",
+        file_name="page.rst",
+        page=SHARED_GROUP_REST,
+    ),
+    MergedLineNumberFixture(
+        test_id="reST-doctest_blocks",
+        file_name="page.rst",
+        page=LONG_THEN_SHORT_REST,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    MergedLineNumberFixture._fields,
+    MERGED_LINE_NUMBER_FIXTURES,
+    ids=[f.test_id for f in MERGED_LINE_NUMBER_FIXTURES],
+)
+def test_merged_examples_keep_their_gutter(
+    tmp_path: pathlib.Path,
+    test_id: str,
+    file_name: str,
+    page: str,
+) -> None:
+    """The line a failure prints is the line the failing prompt sits on.
+
+    pytest counts the ``%03d`` gutter from ``test.lineno + 1`` through the
+    merged source, so the blank lines standing in for prose have to match the
+    prose they replace, block after block.
+    """
+    page_path = tmp_path / file_name
+    page_path.write_text(page, encoding="utf-8")
+
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_scope="document")
+    (merged,) = finder.find(page, str(page_path))
+
+    gutter = (merged.docstring or "").splitlines()
+    assert [gutter[example.lineno] for example in merged.examples] == [
+        f">>> {example.source.splitlines()[0]}" for example in merged.examples
+    ]
+
+
+def _reported_lines(
+    page: str,
+    page_path: pathlib.Path,
+    scope: doctest_docutils.NamespaceScope,
+) -> list[int]:
+    """Return the file line every example on `page` reports, at `scope`."""
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_scope=scope)
+    return [
+        (test.lineno or 0) + example.lineno + 1
+        for test in finder.find(page, str(page_path))
+        for example in test.examples
+    ]
+
+
+@pytest.mark.parametrize(
+    ("test_id", "file_name", "page"),
+    [
+        ("MyST-fences", "page.md", STATE_MD),
+        ("reST-doctest_directives", "page.rst", SHARED_GROUP_REST),
+        ("reST-doctest_blocks", "page.rst", LONG_THEN_SHORT_REST),
+    ],
+    ids=["MyST-fences", "reST-doctest_directives", "reST-doctest_blocks"],
+)
+def test_merging_moves_no_reported_line(
+    tmp_path: pathlib.Path,
+    test_id: str,
+    file_name: str,
+    page: str,
+) -> None:
+    """A merged example reports the line it reports on its own.
+
+    Every block form is placed at the line docutils gave it, so a page whose
+    blocks stand clear of each other reads the same merged as it does apart.
+    """
+    page_path = tmp_path / file_name
+    page_path.write_text(page, encoding="utf-8")
+
+    assert _reported_lines(page, page_path, "document") == _reported_lines(
+        page,
+        page_path,
+        "block",
+    )
+
+
+CROWDED_REST = textwrap.dedent(
+    """
+Title
+=====
+
+>>> one = 1
+>>> two = 2
+>>> three = 3
+>>> four = 4
+>>> five = 5
+>>> six = 6
+
+Prose.
+
+.. doctest::
+
+    >>> one + six
+    7
+    """,
+)
+
+
+def test_a_crowded_block_follows_the_one_above_it(tmp_path: pathlib.Path) -> None:
+    """A block the lines above already reach reports further down the page.
+
+    docutils reports a reStructuredText doctest block's *last* line, so its own
+    examples already report lines below the block: a six-line block starting on
+    line 5 reports lines 10 to 15. A directive two lines further down has to
+    follow those, and moves by the overlap. The gutter still shows the failing
+    prompt, which is what a reader reads the report for.
+    """
+    page_path = tmp_path / "page.rst"
+    page_path.write_text(CROWDED_REST, encoding="utf-8")
+
+    apart = _reported_lines(CROWDED_REST, page_path, "block")
+    merged = _reported_lines(CROWDED_REST, page_path, "document")
+
+    assert merged[:-1] == apart[:-1]
+    assert merged[-1] - apart[-1] == 2
+
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_scope="document")
+    (test,) = finder.find(CROWDED_REST, str(page_path))
+    gutter = (test.docstring or "").splitlines()
+    assert gutter[test.examples[-1].lineno] == ">>> one + six"
+
+
+@pytest.mark.parametrize(
+    ("test_id", "page"),
+    OUT_OF_ORDER_LINES_REST,
+    ids=[test_id for test_id, _ in OUT_OF_ORDER_LINES_REST],
+)
+def test_merging_survives_a_block_docutils_left_unpositioned(
+    tmp_path: pathlib.Path,
+    test_id: str,
+    page: str,
+) -> None:
+    """A doctest block nested in another node still merges and runs.
+
+    docutils leaves ``line`` unset on a block inside a directive, a list item,
+    or a block quote, so placing every block by that value alone would stack
+    them all at the top of the page.
+    """
+    page_path = tmp_path / "page.rst"
+    page_path.write_text(page, encoding="utf-8")
+
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_scope="document")
+    (merged,) = finder.find(page, str(page_path))
+    runner = doctest.DocTestRunner(verbose=False)
+    runner.run(merged, out=lambda _: None)
+
+    linenos = [example.lineno for example in merged.examples]
+    assert linenos == sorted(set(linenos))
+    assert runner.failures == 0
+
+
+def test_a_group_survives_an_include(tmp_path: pathlib.Path) -> None:
+    """A group split across an ``.. include::`` merges and runs.
+
+    docutils numbers the included page's nodes against that page, so the second
+    block claims a line the first one already covers.
+    """
+    (tmp_path / "part.rst").write_text(
+        "Part\n----\n\nProse.\n\n.. doctest:: intro\n\n"
+        "    >>> greeting.upper()\n    'HELLO'\n",
+        encoding="utf-8",
+    )
+    page = (
+        "Title\n=====\n\n.. doctest:: intro\n\n"
+        "    >>> greeting = 'hello'\n\n.. include:: part.rst\n"
+    )
+    page_path = tmp_path / "main.rst"
+    page_path.write_text(page, encoding="utf-8")
+
+    finder = doctest_docutils.DocutilsDocTestFinder()
+    (merged,) = finder.find(page, str(page_path))
+    runner = doctest.DocTestRunner(verbose=False)
+    runner.run(merged, out=lambda _: None)
+
+    assert [example.source.strip() for example in merged.examples] == [
+        "greeting = 'hello'",
+        "greeting.upper()",
+    ]
+    assert runner.failures == 0
+
+
+def test_markdown_failures_point_at_the_prompt(tmp_path: pathlib.Path) -> None:
+    """A merged Markdown page reports the file line each ``>>>`` sits on."""
+    page_path = tmp_path / "page.md"
+    page_path.write_text(STATE_MD, encoding="utf-8")
+
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_scope="document")
+    (test,) = finder.find(STATE_MD, str(page_path))
+
+    lines = STATE_MD.splitlines()
+    reported = [(test.lineno or 0) + example.lineno + 1 for example in test.examples]
+    assert [lines[lineno - 1] for lineno in reported] == [
+        '>>> greeting = "hello"',
+        ">>> greeting",
+        ">>> greeting.upper()",
+    ]
+
+
+def test_collection_logs_the_namespace_each_block_joined(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Collection records the namespace, source file, and block type.
+
+    ``doctest_source_file`` and ``doctest_block_type`` are the structured keys
+    a log processor filters on, so assert the schema, not the message.
+    """
+    finder = doctest_docutils.DocutilsDocTestFinder()
+    with caplog.at_level(logging.DEBUG, logger="doctest_docutils"):
+        finder.find(SHARED_GROUP_REST, "page.rst")
+
+    collected = [
+        record
+        for record in caplog.records
+        if getattr(record, "doctest_block_type", None) == "doctest"
+    ]
+    assert [record.args for record in collected] == [("intro",), ("intro",)]
+    assert {record.__dict__["doctest_source_file"] for record in collected} == {
+        "page.rst",
+    }
+
+
+def test_namespace_scope_rejects_an_unknown_name() -> None:
+    """An unknown scope names the values it could have been."""
+    with pytest.raises(doctest_docutils.NamespaceScopeError) as excinfo:
+        doctest_docutils.DocutilsDocTestFinder(
+            namespace_scope=t.cast("doctest_docutils.NamespaceScope", "per-file"),
+        )
+
+    assert str(excinfo.value) == (
+        "Unknown namespace scope: 'per-file'. Expected one of: block, document"
+    )
