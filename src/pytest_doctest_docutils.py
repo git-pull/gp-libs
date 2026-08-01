@@ -478,6 +478,13 @@ def _wholly_skipped_reason(test: doctest.DocTest) -> str | None:
     ... )
     >>> _wholly_skipped_reason(nested)
     'page.rst:4: every example skipped'
+
+    A block holding no example at all skips nothing, which is not the same
+    answer as every example being skipped — ``all([])`` is `True`:
+
+    >>> empty = parser.get_doctest("prose only\n", {}, "page", "page.rst", 3)
+    >>> _wholly_skipped_reason(empty) is None
+    True
     """
     if not test.examples:
         return None
