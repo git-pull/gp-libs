@@ -1593,3 +1593,41 @@ def test_per_block_still_reports_a_gated_block(
     result.stdout.fnmatch_lines(
         ["SKIPPED [[]1[]] *: page.md:*: every example skipped"],
     )
+
+
+def test_merged_keeps_a_failure_through_a_retry(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A retry re-runs a merged namespace whole, so a real failure stands.
+
+    The retry rebuilds the namespace from its first block, which is what makes
+    the default layout safe to combine with a test-retry plugin. Under
+    ``per-block`` a retry re-runs only the block that failed, against the
+    mapping that block already changed.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester)
+    (pytester.path / "page.rst").write_text(
+        textwrap.dedent(
+            """
+            Title
+            =====
+
+            .. doctest:: demo
+
+                >>> seen = []
+
+            .. doctest:: demo
+
+                >>> seen.append(1)
+                >>> len(seen)
+                2
+            """,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest("page.rst", "--reruns", "2")
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(["*1 failed*2 rerun*"])
