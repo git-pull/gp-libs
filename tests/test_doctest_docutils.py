@@ -609,3 +609,20 @@ def test_skipif_that_cannot_be_evaluated_names_its_block() -> None:
         "page.rst:4: :skipif: 'platform.system() == \"Windows\"' failed: "
         "name 'platform' is not defined"
     )
+
+
+def test_hide_optionflag_parses_without_pytest() -> None:
+    """``+HIDE`` parses wherever :mod:`doctest_docutils` is imported.
+
+    The flag is gp-libs' own, and a page carrying an unregistered name fails to
+    parse, so registering it only as pytest configures left the standalone
+    ``python -m doctest_docutils`` command unable to read the repo's own pages.
+    """
+    page = (
+        ".. doctest::\n\n    >>> base = 40  # doctest: +HIDE\n"
+        "    >>> base + 2\n    42\n"
+    )
+
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert test.examples[0].options[doctest_docutils._HIDE_FLAG] is True
