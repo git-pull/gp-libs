@@ -418,3 +418,58 @@ def test_inline_flags_survive_a_directive(tmp_path: pathlib.Path) -> None:
 
     assert test.examples[0].options[doctest.NORMALIZE_WHITESPACE] is True
     assert runner.failures == 0
+
+
+class DirectiveOptionFixture(t.NamedTuple):
+    """Directive whose options reach the examples it holds.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    page : str
+        reStructuredText page holding one ``.. doctest::`` directive.
+    flag : int
+        Option flag to read off the collected example.
+    enabled : bool
+        Whether the flag is expected on.
+    """
+
+    test_id: str
+    page: str
+    flag: int
+    enabled: bool
+
+
+DIRECTIVE_OPTION_FIXTURES = [
+    DirectiveOptionFixture(
+        test_id="directive-options-reach-the-example",
+        page=".. doctest::\n    :options: +ELLIPSIS\n\n    >>> 2 + 2\n    4\n",
+        flag=doctest.ELLIPSIS,
+        enabled=True,
+    ),
+    DirectiveOptionFixture(
+        test_id="an-inline-flag-beats-the-directive",
+        page=".. doctest::\n    :options: +ELLIPSIS\n\n"
+        "    >>> 2 + 2  # doctest: -ELLIPSIS\n    4\n",
+        flag=doctest.ELLIPSIS,
+        enabled=False,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    DirectiveOptionFixture._fields,
+    DIRECTIVE_OPTION_FIXTURES,
+    ids=[f.test_id for f in DIRECTIVE_OPTION_FIXTURES],
+)
+def test_directive_options_apply_per_example(
+    test_id: str,
+    page: str,
+    flag: int,
+    enabled: bool,
+) -> None:
+    """``:options:`` sets a block's defaults; an example's own flags win."""
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert test.examples[0].options[flag] is enabled
