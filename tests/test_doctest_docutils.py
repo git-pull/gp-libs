@@ -1890,3 +1890,39 @@ def test_out_of_order_phases_report_their_own_lines() -> None:
     assert max(line for _, line in merged) <= len(
         OUT_OF_ORDER_PHASES_REST.splitlines(),
     )
+
+
+def test_pyversion_warns_on_a_malformed_specifier(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A ``:pyversion:`` that is no PEP-440 specifier warns and leaves the block.
+
+    The option decides whether a block is for this interpreter. A value it
+    cannot parse answers neither way, so the block is left runnable and the
+    page reports the option rather than dying on it.
+    """
+    page = ".. doctest::\n   :pyversion: not a spec\n\n   >>> 2 + 2\n   4\n"
+
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert test.examples[0].options.get(doctest.SKIP, False) is False
+    assert "'not a spec' is not a valid pyversion option" in capsys.readouterr().err
+
+
+def test_verbose_finder_records_what_a_page_yielded(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """``verbose=True`` reports how many tests a page produced, and from where.
+
+    ``doctest_source_file`` is the structured key, so the page is filtered on
+    rather than read out of the message.
+    """
+    page = ".. doctest::\n\n   >>> 2 + 2\n   4\n"
+
+    finder = doctest_docutils.DocutilsDocTestFinder(verbose=True)
+    with caplog.at_level(logging.INFO, logger="doctest_docutils"):
+        finder.find(page, "page.rst")
+
+    found = [record for record in caplog.records if record.msg == "found %d test(s)"]
+    assert [record.args for record in found] == [(1,)]
+    assert [record.__dict__["doctest_source_file"] for record in found] == ["page.rst"]
