@@ -23,7 +23,8 @@ Run documentation doctests through pytest.
 :::{grid-item-card} How-to
 :link: how-to
 :link-type: doc
-Collect docs, Python modules, and option-flagged examples.
+Collect docs, Python modules, and option-flagged examples, and let a page
+build one session across several blocks.
 :::
 
 :::{grid-item-card} Fixtures

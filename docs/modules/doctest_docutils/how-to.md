@@ -26,6 +26,28 @@ Pass `-v` for verbose standard-library doctest output:
 $ python -m doctest_docutils README.md -v
 ```
 
+## Let a page build one example across several blocks
+
+Every block runs against a namespace of its own, so a name bound in one block is
+gone by the next and any block can be run on its own. When a page is one session
+told in pieces, widen the namespace to the whole page:
+
+```console
+$ python -m doctest_docutils README.md --namespace-scope document
+```
+
+Blocks that name a group share that group's namespace at either setting, because
+naming a group is the author asking for it. A group is named as the directive's
+argument, `.. doctest:: intro` in reStructuredText and its `{doctest} intro`
+fence in Markdown. `--namespace-scope document` also pools the blocks that name
+none.
+
+Sharing costs you the guarantee that a block stands alone: a block that reads an
+earlier binding fails when it is read, or run, by itself. See
+{ref}`the pytest plugin's how-to <pytest_doctest_docutils-how-to>` for the same
+choice under pytest, spelled `--doctest-docutils-namespace-scope` there, and for
+what sharing costs a test run.
+
 ## Compare with stdlib doctest
 
 Use the stdlib command when you are checking Python modules or plain text that
