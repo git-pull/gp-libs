@@ -26,12 +26,17 @@ from _pytest.outcomes import OutcomeException
 
 from doctest_docutils import (
     _HIDE_FLAG,
+    DEFAULT_NAMESPACE_ITEMS,
     DEFAULT_NAMESPACE_SCOPE,
+    NAMESPACE_ITEMS,
     NAMESPACE_SCOPES,
     DocutilsDocTestFinder,
+    NamespaceItems,
+    NamespaceItemsError,
     NamespaceScope,
     NamespaceScopeError,
     _ensure_directives_registered,
+    _parse_namespace_items,
     _parse_namespace_scope,
 )
 
@@ -55,10 +60,30 @@ RUNNER_CLASS = None
 #: Namespace scope resolved once at configure time, read back during collection.
 _NAMESPACE_SCOPE_KEY = pytest.StashKey[NamespaceScope]()
 
+#: Namespace layout resolved once at configure time, read back during collection.
+_NAMESPACE_ITEMS_KEY = pytest.StashKey[NamespaceItems]()
+
 _NAMESPACE_HELP = (
     "namespace the doctest blocks of one .rst/.md file run in when they name"
     " no group: block (default, one each) or document (one for the page);"
     " blocks naming a group always share that group's namespace"
+)
+
+_ITEMS_HELP = (
+    "what a namespace collects as: merged (default, one item holding every"
+    " block of it) or per-block (one item per block, keeping their node ids"
+    " and sharing the namespace between them)"
+)
+
+#: The ``--dist`` values that keep every item of one file on one worker, which
+#: is what a shared namespace needs: a globals mapping is a Python object, so
+#: it does not cross processes. Named as an allowlist rather than a list of
+#: splitting schedulers so that a scheduler pytest-xdist adds later is refused
+#: until it has been checked, instead of silently splitting a namespace.
+#: ``load`` and ``worksteal`` hand a file's items to whichever worker is free;
+#: ``-n`` without ``--dist`` resolves to ``load``.
+_WHOLE_NAMESPACE_SCHEDULERS = frozenset(
+    {"no", "each", "loadfile", "loadgroup", "loadscope"},
 )
 
 
@@ -93,6 +118,21 @@ def pytest_addoption(parser: Parser) -> None:
         "doctest_docutils_namespace_scope",
         _NAMESPACE_HELP,
         default=DEFAULT_NAMESPACE_SCOPE,
+    )
+    group.addoption(
+        "--doctest-docutils-namespace-items",
+        action="store",
+        choices=NAMESPACE_ITEMS,
+        default=None,
+        help=(
+            f"{_ITEMS_HELP}; overrides the doctest_docutils_namespace_items ini option"
+        ),
+        dest="doctest_docutils_namespace_items",
+    )
+    parser.addini(
+        "doctest_docutils_namespace_items",
+        _ITEMS_HELP,
+        default=DEFAULT_NAMESPACE_ITEMS,
     )
 
 
@@ -154,6 +194,63 @@ def _resolve_namespace_scope(
         raise pytest.UsageError(message) from exc
 
 
+def _resolve_namespace_items(
+    cli_value: str | None,
+    ini_value: str | None,
+) -> NamespaceItems:
+    """Resolve the namespace layout: command line first, then ini, then default.
+
+    Parameters
+    ----------
+    cli_value : str | None
+        Value of ``--doctest-docutils-namespace-items``, `None` when unset.
+    ini_value : str | None
+        Value of the ``doctest_docutils_namespace_items`` ini option.
+
+    Returns
+    -------
+    doctest_docutils.NamespaceItems
+        Layout to build the finder with.
+
+    Raises
+    ------
+    pytest.UsageError
+        If either value names a layout that does not exist.
+
+    Examples
+    --------
+    >>> _resolve_namespace_items(None, None)
+    'merged'
+
+    >>> _resolve_namespace_items(None, "per-block")
+    'per-block'
+
+    One run can merge a project that keeps its blocks apart, without editing
+    the configuration everyone else reads:
+
+    >>> _resolve_namespace_items("merged", "per-block")
+    'merged'
+
+    A name that no layout answers to stops the session once, and says where
+    the name was written:
+
+    >>> try:
+    ...     _resolve_namespace_items(None, "one-each")
+    ... except pytest.UsageError as exc:
+    ...     print(exc)
+    Unknown namespace items: 'one-each'. Expected one of: merged, per-block
+    Set by the doctest_docutils_namespace_items ini option.
+    """
+    value = cli_value or ini_value or DEFAULT_NAMESPACE_ITEMS
+    try:
+        return _parse_namespace_items(value)
+    except NamespaceItemsError as exc:
+        message = str(exc)
+        if value == ini_value:
+            message += "\nSet by the doctest_docutils_namespace_items ini option."
+        raise pytest.UsageError(message) from exc
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Disable pytest.doctest to prevent running tests twice.
 
@@ -165,8 +262,108 @@ def pytest_configure(config: pytest.Config) -> None:
         config.getoption("doctest_docutils_namespace_scope", None),
         config.getini("doctest_docutils_namespace_scope"),
     )
+    config.stash[_NAMESPACE_ITEMS_KEY] = _resolve_namespace_items(
+        config.getoption("doctest_docutils_namespace_items", None),
+        config.getini("doctest_docutils_namespace_items"),
+    )
+    # Registered whether or not anything will carry it, so that a project
+    # running --strict-markers passes without opting into the layout that
+    # emits the marker. Only when pytest-xdist is absent, though: xdist
+    # registers the same name itself, and registering it twice lists it twice
+    # in ``pytest --markers`` for every project, opted in or not.
+    if not config.pluginmanager.hasplugin("xdist"):
+        config.addinivalue_line(
+            "markers",
+            "xdist_group(name): keep a namespace's blocks on one pytest-xdist"
+            " worker under --dist loadgroup",
+        )
     if config.pluginmanager.has_plugin("doctest"):
         config.pluginmanager.set_blocked("doctest")
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    """Stop a run whose scheduler would split a shared namespace across workers.
+
+    Blocks laid out ``per-block`` can hold one globals mapping between them —
+    any page declaring a group does, whatever the scope — and a mapping does
+    not cross processes. ``--dist load`` and ``--dist worksteal`` hand a file's
+    items to whichever worker is free, so half a namespace can land on a worker
+    that never ran the block binding the names it reads, which reports as a
+    ``NameError`` in the page rather than as the configuration problem it is.
+
+    Refused only for a run that would really distribute, matching xdist's own
+    condition: it declines to distribute under ``--collect-only``, and with
+    fewer than two workers there is nothing to split a namespace between.
+
+    The scheduler is only knowable on the controller: a worker is told
+    ``dist`` is ``no`` whatever the controller was given, which is why the
+    check is gated on ``is_xdist_controller``. The controller never collects,
+    so which pages a run holds cannot be known here — selecting ``per-block``
+    is what the refusal reads as the opt-in.
+
+    Parameters
+    ----------
+    session : pytest.Session
+        Session about to run, which carries the resolved ``--dist`` value.
+
+    Raises
+    ------
+    pytest.UsageError
+        If the namespace layout and the scheduler cannot both hold.
+    """
+    config = session.config
+    if config.stash[_NAMESPACE_ITEMS_KEY] != "per-block":
+        return
+    if not config.pluginmanager.hasplugin("xdist"):
+        return
+    from xdist import (  # type: ignore[import-untyped,unused-ignore]
+        is_xdist_controller,
+    )
+
+    if not is_xdist_controller(session):
+        return
+    if config.getoption("collectonly", False):
+        return
+    if len(config.getoption("tx", None) or []) < 2:
+        return
+    scheduler = config.getoption("dist", "no")
+    if scheduler in _WHOLE_NAMESPACE_SCHEDULERS:
+        return
+    message = (
+        "doctest_docutils_namespace_items = per-block can hand a namespace's"
+        " blocks one globals mapping between them — a page declaring a group"
+        " does, whatever the scope — and a mapping cannot cross processes."
+        f" --dist {scheduler} hands a file's items to whichever worker is"
+        " free, so it can send them to different workers. Run with --dist"
+        " loadgroup or --dist loadfile, or set"
+        " doctest_docutils_namespace_items = merged. -n without --dist"
+        " selects --dist load."
+    )
+    raise pytest.UsageError(message)
+
+
+def pytest_report_header(config: pytest.Config) -> str | None:
+    """Say how namespaces are laid out, when they are not laid out as usual.
+
+    A run that changed nothing reports nothing, so the header of an
+    unconfigured project reads as it always has.
+
+    Parameters
+    ----------
+    config : pytest.Config
+        Configuration holding the resolved settings.
+
+    Returns
+    -------
+    str or None
+        One line naming the layout and the scope, or `None` under the default
+        layout.
+    """
+    items = config.stash[_NAMESPACE_ITEMS_KEY]
+    if items == DEFAULT_NAMESPACE_ITEMS:
+        return None
+    scope = config.stash[_NAMESPACE_SCOPE_KEY]
+    return f"doctest-docutils: namespace items: {items}, namespace scope: {scope}"
 
 
 def _unblock_doctest(config: pytest.Config) -> bool:
@@ -266,9 +463,32 @@ def _init_runner_class() -> type[doctest.DocTestRunner]:
             verbose: bool | None = None,
             optionflags: int = 0,
             continue_on_failure: bool = True,
+            share_globs: bool = False,
         ) -> None:
             super().__init__(checker=checker, verbose=verbose, optionflags=optionflags)
             self.continue_on_failure = continue_on_failure
+            self.share_globs = share_globs
+
+        def run(
+            self,
+            test: doctest.DocTest,
+            compileflags: int | None = None,
+            out: _Out | None = None,
+            clear_globs: bool = True,
+        ) -> doctest.TestResults:
+            """Run one test, keeping its globals when its namespace shares them.
+
+            ``clear_globs`` empties ``test.globs`` once the test is done, which
+            is what stops one item's bindings reaching the next. A namespace
+            laid out per block wants exactly that reach: its items hold one
+            mapping between them, so the block below reads what this one bound.
+            """
+            return super().run(
+                test,
+                compileflags,
+                out,
+                clear_globs and not self.share_globs,
+            )
 
         def report_failure(
             self,
@@ -389,6 +609,7 @@ def _get_runner(
     verbose: bool | None = None,
     optionflags: int = 0,
     continue_on_failure: bool = True,
+    share_globs: bool = False,
 ) -> doctest.DocTestRunner:
     # We need this in order to do a lazy import on doctest
     global RUNNER_CLASS
@@ -401,6 +622,7 @@ def _get_runner(
         verbose=verbose,
         optionflags=optionflags,
         continue_on_failure=continue_on_failure,
+        share_globs=share_globs,
     )
 
 
@@ -507,9 +729,13 @@ class DocTestDocutilsFile(pytest.Module):
         encoding = self.config.getini("doctest_encoding")
         text = self.path.read_text(encoding)
 
+        namespace_items = self.config.stash[_NAMESPACE_ITEMS_KEY]
+        per_block = namespace_items == "per-block"
+
         # Uses internal doctest module parsing mechanism.
         finder = DocutilsDocTestFinder(
             namespace_scope=self.config.stash[_NAMESPACE_SCOPE_KEY],
+            namespace_items=namespace_items,
         )
 
         # While doctests in .rst/.md files don't support fixtures directly,
@@ -525,13 +751,15 @@ class DocTestDocutilsFile(pytest.Module):
             optionflags=optionflags,
             checker=_pytest.doctest._get_checker(),
             continue_on_failure=_pytest.doctest._get_continue_on_failure(self.config),
+            share_globs=per_block,
         )
         from _pytest.doctest import DoctestItem
 
-        for test in finder.find(
+        for collected in finder._collect(
             text,
             str(self.path),
         ):
+            test = collected.test
             if test.examples:  # skip empty doctests
                 item = DoctestItem.from_parent(
                     self,  # type: ignore
@@ -539,6 +767,16 @@ class DocTestDocutilsFile(pytest.Module):
                     runner=runner,
                     dtest=test,
                 )
+                if per_block:
+                    # pytest-xdist reads this on the worker and suffixes the
+                    # node id with the group, so --dist loadgroup keeps a
+                    # namespace whole. It cannot choose the scheduler, which is
+                    # why an unusable one is refused at session start instead.
+                    item.add_marker(
+                        pytest.mark.xdist_group(
+                            f"{self.nodeid}::{collected.namespace}",
+                        ),
+                    )
                 reason = _wholly_skipped_reason(test)
                 if reason is not None:
                     # Marked rather than left to _check_all_skipped, which only
