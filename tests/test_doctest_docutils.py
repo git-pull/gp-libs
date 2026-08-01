@@ -1872,15 +1872,21 @@ def test_out_of_order_phases_report_their_own_lines() -> None:
     """
     finder = doctest_docutils.DocutilsDocTestFinder()
 
-    def reported(page: str) -> dict[str, int]:
-        return {
-            example.source.strip(): (test.lineno or 0) + example.lineno + 1
+    def reported(page: str) -> list[tuple[str, int]]:
+        # Pairs rather than a dict keyed on the source: two examples can share
+        # a source, and one would then overwrite the other's line silently.
+        # Sorted because a merged namespace hands its blocks over in phase
+        # order and three separate ones come back in page order.
+        return sorted(
+            (example.source.strip(), (test.lineno or 0) + example.lineno + 1)
             for test in finder.find(page, "page.rst")
             for example in test.examples
-        }
+        )
 
     merged = reported(OUT_OF_ORDER_PHASES_REST)
     alone = reported(OUT_OF_ORDER_PHASES_REST.replace(":: demo", "::"))
 
     assert merged == alone
-    assert max(merged.values()) <= len(OUT_OF_ORDER_PHASES_REST.splitlines())
+    assert max(line for _, line in merged) <= len(
+        OUT_OF_ORDER_PHASES_REST.splitlines(),
+    )
