@@ -1491,9 +1491,12 @@ def test_collection_logs_the_namespace_each_block_joined(
     collected = [
         record
         for record in caplog.records
-        if getattr(record, "doctest_block_type", None) == "doctest"
+        if record.msg == "doctest block collected into namespace %s"
     ]
     assert [record.args for record in collected] == [("intro",), ("intro",)]
+    assert {record.__dict__["doctest_block_type"] for record in collected} == {
+        "doctest",
+    }
     assert {record.__dict__["doctest_source_file"] for record in collected} == {
         "page.rst",
     }
