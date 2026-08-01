@@ -105,33 +105,52 @@ class NamespaceItemsError(ValueError):
 class NamespaceNameCollisionError(ValueError):
     """Raised when a declared group takes a name the page generates for itself.
 
-    A block that declares no group is named for the page it sits on — the page
-    itself at ``"document"`` scope, the page and the block's position at
-    ``"block"`` scope. A group declaring one of those names asks for a
-    namespace the page has already given away, and the two would run as one:
-    state crossing the partition the author drew, under a single node id.
-    Naming the clash is the only answer that keeps both meanings, so the page
-    stops here rather than merging them quietly.
+    A page generates names of its own: for a block that declares no group —
+    the page itself at ``"document"`` scope, the page and the block's position
+    at ``"block"`` scope — and for a gated block lifted out of the namespace
+    it was declared in. A group spelling one of those asks for a name the page
+    has already given away, and the two would run as one: state crossing the
+    partition the author drew, under a single node id. Neither meaning can be
+    kept over the other, so the page stops rather than merging them quietly.
+
+    Parameters
+    ----------
+    group : str
+        Group the page declared.
+    document_name : str
+        Base name of the document, without its directory.
+    generated_for : str
+        What the page generates the same name for.
 
     Examples
     --------
-    >>> print(NamespaceNameCollisionError("page.rst", "page.rst", "document"))
-    page.rst: group 'page.rst' takes the namespace name this page generates
-    for a block that declares none at 'document' scope, so the two would
-    share state and one node id. Rename the group.
+    >>> print(
+    ...     NamespaceNameCollisionError(
+    ...         "page.rst", "page.rst", "a block declaring none at 'document' scope"
+    ...     )
+    ... )
+    page.rst: group 'page.rst' takes the name this page generates for a block
+    declaring none at 'document' scope, so the two would share state and one
+    node id. Rename the group.
 
-    >>> print(NamespaceNameCollisionError("page.rst[0]", "page.rst", "block"))
-    page.rst: group 'page.rst[0]' takes the namespace name this page generates
-    for a block that declares none at 'block' scope, so the two would
-    share state and one node id. Rename the group.
+    A gated block lifted out of its group is named the same way, so a group
+    can take that name too:
+
+    >>> print(
+    ...     NamespaceNameCollisionError(
+    ...         "alpha[1]", "page.rst", "a block lifted out of 'alpha'"
+    ...     )
+    ... )
+    page.rst: group 'alpha[1]' takes the name this page generates for a block
+    lifted out of 'alpha', so the two would share state and one node id.
+    Rename the group.
     """
 
-    def __init__(self, group: str, document_name: str, scope: NamespaceScope) -> None:
+    def __init__(self, group: str, document_name: str, generated_for: str) -> None:
         super().__init__(
-            f"{document_name}: group {group!r} takes the namespace name this"
-            f" page generates\nfor a block that declares none at {scope!r}"
-            " scope, so the two would\nshare state and one node id. Rename the"
-            " group.",
+            f"{document_name}: group {group!r} takes the name this page"
+            f" generates for {generated_for}, so the two would share state and"
+            " one node id. Rename the group.",
         )
 
 
@@ -1330,7 +1349,7 @@ class DocutilsDocTestFinder:
             raise NamespaceNameCollisionError(
                 group,
                 document_name,
-                self._namespace_scope,
+                f"a block declaring none at {self._namespace_scope!r} scope",
             )
 
         for idx, node in enumerate(block_nodes):
@@ -1470,6 +1489,14 @@ class DocutilsDocTestFinder:
             )
             for held in lifted:
                 lifted_name = _lifted_name(namespace, held.position)
+                # Lifting generates a name the same way declaring a group
+                # does, so it can land on one the page already declared.
+                if lifted_name in namespaces:
+                    raise NamespaceNameCollisionError(
+                        lifted_name,
+                        document_name,
+                        f"a block lifted out of {namespace!r}",
+                    )
                 logger.debug(
                     "skipped doctest block lifted out of namespace %s as %s",
                     namespace,
