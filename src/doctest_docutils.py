@@ -172,7 +172,6 @@ class TestDirective(Directive):
         code = "\n".join(self.content)
         test = None
 
-        logger.debug("running %s directive", self.name)
         if self.name == "doctest":
             if "<BLANKLINE>" in code:
                 # convert <BLANKLINE>s to ordinary blank lines for presentation
@@ -239,6 +238,7 @@ class TestDirective(Directive):
             node["trim_flags"] = True
         elif "no-trim-doctest-flags" in self.options:
             node["trim_flags"] = False
+        logger.debug("parsed %s directive", self.name)
         return [node]
 
 
@@ -964,16 +964,12 @@ class DocutilsDocTestFinder:
         source_path: pathlib.Path | None = None,
     ) -> None:
         """Find tests for the given string, and add them to `tests`."""
-        if self._verbose:
-            logger.info("finding tests in %s", name)
-
         # If we've already processed this string, then ignore it.
         if id(string) in seen:
             return
         seen[id(string)] = 1
 
         ext = pathlib.Path(name).suffix
-        logger.debug("parsing document", extra={"doctest_source_file": name})
         if ext == ".md":
             import myst_parser.parsers.docutils_
             from myst_parser.config.main import MdParserConfig
@@ -1196,6 +1192,13 @@ class DocutilsDocTestFinder:
                 )
         anchored.sort(key=lambda entry: (entry[0], entry[1]))
         tests.extend(test for _, _, test in anchored)
+        logger.debug(
+            "parsed document into %d test(s)",
+            len(anchored),
+            extra={"doctest_source_file": name},
+        )
+        if self._verbose:
+            logger.info("found %d test(s) in %s", len(anchored), name)
 
     def _get_test(
         self,
