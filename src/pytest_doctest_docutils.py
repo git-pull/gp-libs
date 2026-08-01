@@ -15,6 +15,7 @@ import bdb
 import doctest
 import io
 import logging
+import pathlib
 import sys
 import typing as t
 
@@ -35,7 +36,6 @@ from doctest_docutils import (
 )
 
 if t.TYPE_CHECKING:
-    import pathlib
     import types
     from collections.abc import Iterable
     from doctest import _Out
@@ -443,6 +443,51 @@ class DocutilsDocTestRunner(doctest.DocTestRunner):
         return self.save_linecache_getlines(filename, module_globals)  # type: ignore
 
 
+def _wholly_skipped_reason(test: doctest.DocTest) -> str | None:
+    r"""Return why a test is skipped outright, or `None` when it runs something.
+
+    Parameters
+    ----------
+    test : doctest.DocTest
+        Collected test, one namespace or one block lifted out of it.
+
+    Returns
+    -------
+    str or None
+        Reason naming the page and the first line skipped, or `None`.
+
+    Examples
+    --------
+    >>> import doctest
+    >>> parser = doctest.DocTestParser()
+    >>> running = parser.get_doctest(">>> 2 + 2\n4\n", {}, "page", "page.rst", 3)
+    >>> _wholly_skipped_reason(running) is None
+    True
+
+    >>> gated = parser.get_doctest(
+    ...     ">>> 2 + 2  # doctest: +SKIP\n4\n", {}, "page", "page.rst", 3
+    ... )
+    >>> _wholly_skipped_reason(gated)
+    'page.rst:4: every example skipped'
+
+    The page is named, not the path it resolves, which pytest prints beside the
+    reason already:
+
+    >>> nested = parser.get_doctest(
+    ...     ">>> 2 + 2  # doctest: +SKIP\n4\n", {}, "page", "docs/a/page.rst", 3
+    ... )
+    >>> _wholly_skipped_reason(nested)
+    'page.rst:4: every example skipped'
+    """
+    if not test.examples:
+        return None
+    if not all(example.options.get(doctest.SKIP, False) for example in test.examples):
+        return None
+    line = (test.lineno or 0) + test.examples[0].lineno + 1
+    page = pathlib.Path(test.filename or "").name
+    return f"{page}:{line}: every example skipped"
+
+
 class DocTestDocutilsFile(pytest.Module):
     """Pytest module for doctest_docutils."""
 
@@ -481,9 +526,17 @@ class DocTestDocutilsFile(pytest.Module):
             str(self.path),
         ):
             if test.examples:  # skip empty doctests
-                yield DoctestItem.from_parent(
+                item = DoctestItem.from_parent(
                     self,  # type: ignore
                     name=test.name,
                     runner=runner,
                     dtest=test,
                 )
+                reason = _wholly_skipped_reason(test)
+                if reason is not None:
+                    # Marked rather than left to _check_all_skipped, which only
+                    # fires once the item is running: by then its fixtures have
+                    # set up for a test that executes nothing. A marker is read
+                    # before setup, and it carries a reason naming the block.
+                    item.add_marker(pytest.mark.skip(reason=reason))
+                yield item

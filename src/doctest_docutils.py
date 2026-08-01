@@ -512,6 +512,7 @@ def _merge_blocks(
     name: str,
     filename: str,
     globs: dict[str, t.Any],
+    keep: list[doctest.DocTest] | None = None,
 ) -> doctest.DocTest:
     r"""Merge one namespace's blocks into a single test.
 
@@ -583,6 +584,12 @@ def _merge_blocks(
         offset = max((block.lineno or 0) - origin, len(lines))
         lines.extend([""] * (offset - len(lines)))
         lines.extend((block.docstring or "").splitlines())
+        # A dropped block still pads and still shows its source, so the blocks
+        # after it keep the lines they reported before and a failure's gutter
+        # still shows what was passed over. Its examples are left untouched:
+        # whoever takes them next positions them itself.
+        if keep is not None and not any(block is kept for kept in keep):
+            continue
         for example in block.examples:
             example.lineno += offset
             examples.append(example)
@@ -594,6 +601,178 @@ def _merge_blocks(
         origin,
         "\n".join(lines),
     )
+
+
+class _CollectedBlock(t.NamedTuple):
+    """One block of a page, parsed against one namespace.
+
+    Attributes
+    ----------
+    position : int
+        Where the block sits in the document, counted from zero. It is the
+        number a block's name carries at ``"block"`` scope, and the number a
+        block lifted out of its namespace is named for. Spelled ``position``
+        rather than ``index`` because a :class:`tuple` already has an
+        ``index``.
+    block_type : str
+        ``doctest``, ``testsetup``, ``testcleanup``, or the node's tag name.
+    test : doctest.DocTest
+        The block's examples, with its directive options already merged in.
+    """
+
+    position: int
+    block_type: str
+    test: doctest.DocTest
+
+
+def _all_examples_skipped(test: doctest.DocTest) -> bool:
+    r"""Return whether every example of `test` carries :data:`doctest.SKIP`.
+
+    This is the question ``_pytest.doctest._check_all_skipped`` asks of an item
+    before running it, and the answer decides whether pytest reports the item
+    ``SKIPPED``. Asking it of a single block says whether that block would
+    report, were it an item of its own.
+
+    A block holding no examples answers ``False``: there is nothing in it to
+    skip, and nothing for a reader to be told about.
+
+    Parameters
+    ----------
+    test : doctest.DocTest
+        Examples of one block.
+
+    Returns
+    -------
+    bool
+        Whether none of the block's examples is left to run.
+
+    Examples
+    --------
+    >>> parser = doctest.DocTestParser()
+    >>> def block(source):
+    ...     return parser.get_doctest(source, {}, "page.rst", "page.rst", 0)
+
+    >>> _all_examples_skipped(block(">>> 1 / 0  # doctest: +SKIP\n"))
+    True
+    >>> _all_examples_skipped(block(">>> 2 + 2\n4\n"))
+    False
+
+    A block only half of whose examples are gated still has one to run:
+
+    >>> _all_examples_skipped(
+    ...     block(">>> 1 / 0  # doctest: +SKIP\n>>> 2 + 2\n4\n")
+    ... )
+    False
+
+    >>> _all_examples_skipped(block("Prose, and no prompts at all.\n"))
+    False
+    """
+    return bool(test.examples) and all(
+        example.options.get(doctest.SKIP, False) for example in test.examples
+    )
+
+
+def _split_skipped_blocks(
+    blocks: list[_CollectedBlock],
+) -> tuple[list[_CollectedBlock], list[_CollectedBlock]]:
+    r"""Split a namespace's blocks into the ones it keeps and the ones it lifts out.
+
+    A block whose every example is skipped binds nothing, so the namespace
+    reaches the same state with it or without it. Merged in, though, it is
+    silent: pytest reports a namespace skipped only when *no* example in it is
+    left to run, so one gated block among running ones reports as a pass.
+    Lifting it back out gives it an item of its own, which reports.
+
+    A namespace with nothing left to run keeps every block, so it reports
+    skipped once as a namespace rather than once per block.
+
+    Parameters
+    ----------
+    blocks : list[_CollectedBlock]
+        Every block of one namespace, in the order it runs.
+
+    Returns
+    -------
+    tuple[list[_CollectedBlock], list[_CollectedBlock]]
+        Blocks the namespace keeps, and blocks that become items of their own.
+        The first is never empty: the namespace lifts a block out only when
+        another one is left to run.
+
+    Examples
+    --------
+    >>> parser = doctest.DocTestParser()
+    >>> def block(index, source):
+    ...     return _CollectedBlock(
+    ...         index,
+    ...         "doctest",
+    ...         parser.get_doctest(source, {}, "page.rst", "page.rst", index),
+    ...     )
+
+    The gated block of a namespace that still runs is lifted out:
+
+    >>> kept, lifted = _split_skipped_blocks([
+    ...     block(0, ">>> value = 1\n"),
+    ...     block(1, ">>> value = 999  # doctest: +SKIP\n"),
+    ...     block(2, ">>> value\n1\n"),
+    ... ])
+    >>> [held.position for held in kept], [held.position for held in lifted]
+    ([0, 2], [1])
+
+    A namespace with nothing left to run keeps its blocks, so the one item it
+    collects as reports skipped once:
+
+    >>> kept, lifted = _split_skipped_blocks([
+    ...     block(0, ">>> 1 / 0  # doctest: +SKIP\n"),
+    ...     block(1, ">>> 2 / 0  # doctest: +SKIP\n"),
+    ... ])
+    >>> [held.position for held in kept], [held.position for held in lifted]
+    ([0, 1], [])
+    """
+    runnable = any(
+        not example.options.get(doctest.SKIP, False)
+        for held in blocks
+        for example in held.test.examples
+    )
+    if not runnable:
+        return list(blocks), []
+    return (
+        [held for held in blocks if not _all_examples_skipped(held.test)],
+        [held for held in blocks if _all_examples_skipped(held.test)],
+    )
+
+
+def _lifted_name(namespace: str, position: int) -> str:
+    """Return the name a block lifted out of `namespace` collects under.
+
+    It is the namespace's own name with the block's document position, the
+    same ``name[n]`` shape a block that names no group already carries at
+    ``"block"`` scope. So a gated block reads the same in ``--collect-only``
+    and answers to the same node id whether the page shares a namespace or
+    not, and it cannot collide with the namespace it came out of.
+
+    Parameters
+    ----------
+    namespace : str
+        Namespace the block was lifted out of.
+    position : int
+        Where the block sits in the document, counted from zero.
+
+    Returns
+    -------
+    str
+        Name for the block's own test.
+
+    Examples
+    --------
+    >>> _lifted_name("intro", 3)
+    'intro[3]'
+
+    A page sharing one namespace names its blocks as ``"block"`` scope would:
+
+    >>> _lifted_name("page.md", 3)
+    'page.md[3]'
+    """
+    return f"{namespace}[{position}]"
 
 
 class DocTestFinderNameDoesNotExist(ValueError):
@@ -619,6 +798,11 @@ class DocutilsDocTestFinder:
     name no group get a namespace each unless `namespace_scope` widens them to
     the page.
 
+    A block whose every example is skipped is the exception: it binds nothing,
+    so it comes back as a test of its own, named for its namespace and for
+    where it sits on the page, and reports as the skip it is instead of
+    vanishing into a namespace that runs.
+
     Examples
     --------
     Two blocks in group ``intro`` come back as one test named for the group:
@@ -638,6 +822,16 @@ class DocutilsDocTestFinder:
     >>> tests = DocutilsDocTestFinder().find(page, "page.md")
     >>> [(test.name, len(test.examples)) for test in tests]
     [('intro', 2)]
+
+    A gated block between them is its own test, named for where it sits:
+
+    >>> gated = page.replace(
+    ...     "Narrative prose between the blocks.",
+    ...     "```{doctest} intro\n>>> greeting = 'nope'  # doctest: +SKIP\n```",
+    ... )
+    >>> [(test.name, len(test.examples)) for test in
+    ...  DocutilsDocTestFinder().find(gated, "page.md")]
+    [('intro', 2), ('intro[1]', 1)]
     """
 
     def __init__(
@@ -682,7 +876,8 @@ class DocutilsDocTestFinder:
     ) -> list[doctest.DocTest]:
         r"""Return list of the DocTests defined by given string (its parsed directives).
 
-        One DocTest comes back per namespace: the blocks that share a namespace
+        One DocTest comes back per namespace, plus one for each fully skipped
+        block a running namespace lifted out: the blocks that share a namespace
         are merged into one, and the rest stand alone. The globals for each
         DocTest is formed by combining `globs` and `extraglobs` (bindings in
         `extraglobs` override bindings in `globs`).  A new copy of the globals
@@ -704,6 +899,21 @@ class DocutilsDocTestFinder:
         >>> finder = DocutilsDocTestFinder()
         >>> [test.name for test in finder.find(">>> 2 + 2\n4\n", "docs/page.rst")]
         ['page.rst[0]']
+
+        A page sharing one namespace names a gated block the same way ``block``
+        scope would, so the node id that selects it does not move with the
+        scope:
+
+        >>> page = "\n".join([
+        ...     "```python", ">>> value = 1", "```", "",
+        ...     "```python", ">>> value = 999  # doctest: +SKIP", "```", "",
+        ...     "```python", ">>> value", "1", "```",
+        ... ])
+        >>> shared = DocutilsDocTestFinder(namespace_scope="document")
+        >>> [test.name for test in shared.find(page, "page.md")]
+        ['page.md', 'page.md[1]']
+        >>> [test.name for test in DocutilsDocTestFinder().find(page, "page.md")]
+        ['page.md[0]', 'page.md[1]', 'page.md[2]']
         """
         # If name was not specified, then extract it from the string.
         if name is None:
@@ -804,7 +1014,7 @@ class DocutilsDocTestFinder:
         # setup, test, and cleanup blocks apart: sphinx.ext.doctest runs a
         # group's setup before its tests and its cleanup after, whatever order
         # the page wrote them in, and a testsetup exists to be movable.
-        namespaces: dict[str, dict[str, list[doctest.DocTest]]] = {}
+        namespaces: dict[str, dict[str, list[_CollectedBlock]]] = {}
 
         block_nodes = list(findall(doc)(condition))
         declared = [
@@ -912,17 +1122,64 @@ class DocutilsDocTestFinder:
                     namespace,
                     {"testsetup": [], "test": [], "testcleanup": []},
                 )
-                phases[block_type if block_type in phases else "test"].append(test)
+                phases[block_type if block_type in phases else "test"].append(
+                    _CollectedBlock(idx, block_type, test),
+                )
 
-        tests.extend(
-            _merge_blocks(
-                [*phases["testsetup"], *phases["test"], *phases["testcleanup"]],
-                namespace,
-                name,
-                globs,
+        # Anchored on the document position of the first block each test holds,
+        # so the tests come back in the order a reader meets them. A namespace
+        # anchors where it now starts, which is where it started before if it
+        # lifted nothing out. Ties — one block joining two groups — keep the
+        # order the page declared them in, which a stable sort preserves.
+        anchored: list[tuple[int, int, doctest.DocTest]] = []
+        for namespace, phases in namespaces.items():
+            in_phase_order = [
+                *phases["testsetup"],
+                *phases["test"],
+                *phases["testcleanup"],
+            ]
+            kept, lifted = _split_skipped_blocks(in_phase_order)
+            anchored.append(
+                (
+                    # Every block anchors its namespace, lifted or not, so
+                    # lifting the first one cannot let another namespace
+                    # declared below it collect first.
+                    min(held.position for held in in_phase_order),
+                    # Ties with a block this namespace lifted break toward the
+                    # block: it sits at that line, the namespace resumes later.
+                    min(held.position for held in kept),
+                    # Merged over every block, so the padding a lifted block
+                    # contributed stays and the blocks after it keep the lines
+                    # they reported before it was lifted.
+                    _merge_blocks(
+                        [held.test for held in in_phase_order],
+                        namespace,
+                        name,
+                        globs,
+                        keep=[held.test for held in kept],
+                    ),
+                ),
             )
-            for namespace, phases in namespaces.items()
-        )
+            for held in lifted:
+                lifted_name = _lifted_name(namespace, held.position)
+                logger.debug(
+                    "skipped doctest block lifted out of namespace %s as %s",
+                    namespace,
+                    lifted_name,
+                    extra={
+                        "doctest_source_file": name,
+                        "doctest_block_type": held.block_type,
+                    },
+                )
+                anchored.append(
+                    (
+                        held.position,
+                        held.position,
+                        _merge_blocks([held.test], lifted_name, name, globs),
+                    ),
+                )
+        anchored.sort(key=lambda entry: (entry[0], entry[1]))
+        tests.extend(test for _, _, test in anchored)
 
     def _get_test(
         self,

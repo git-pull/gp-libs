@@ -596,37 +596,44 @@ def test_skipif_marks_its_block_skip(
     assert test.examples[0].options.get(doctest.SKIP, False) is skipped
 
 
+GATED_MIDDLE_BLOCK_REST = textwrap.dedent(
+    """
+    .. doctest:: intro
+
+        >>> greeting = "hello"
+
+    .. doctest:: intro
+        :skipif: True
+
+        >>> raise AssertionError("the skipped block ran")
+
+    .. doctest:: intro
+
+        >>> greeting.upper()
+        'HELLO'
+    """,
+)
+
+
 def test_skipif_skips_only_its_own_block_of_a_group() -> None:
     """A group's other blocks keep running when one of them is skipped.
 
-    A namespace is one test, so skipping a block is not skipping the test it
-    belongs to. Only the skipped block's own examples carry the flag.
+    The gated block binds nothing its group could read, so it comes back on
+    its own rather than merged into a group that runs without it. What is
+    left of the group carries no flag, and the block that does still holds
+    the source it would have run.
     """
-    page = textwrap.dedent(
-        """
-        .. doctest:: intro
-
-            >>> greeting = "hello"
-
-        .. doctest:: intro
-            :skipif: True
-
-            >>> raise AssertionError("the skipped block ran")
-
-        .. doctest:: intro
-
-            >>> greeting.upper()
-            'HELLO'
-        """,
+    group, gated = doctest_docutils.DocutilsDocTestFinder().find(
+        GATED_MIDDLE_BLOCK_REST,
+        "page.rst",
     )
 
-    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
-
-    assert [example.options.get(doctest.SKIP, False) for example in test.examples] == [
+    assert [test.name for test in (group, gated)] == ["intro", "intro[1]"]
+    assert [example.options.get(doctest.SKIP, False) for example in group.examples] == [
         False,
-        True,
         False,
     ]
+    assert [example.options[doctest.SKIP] for example in gated.examples] == [True]
 
 
 def test_an_inline_flag_cannot_reopen_a_true_skipif() -> None:
@@ -661,7 +668,9 @@ def test_skipif_marks_setup_and_cleanup_blocks_skip(
     """``:skipif:`` reaches the setup and cleanup directives that declare it.
 
     Both list ``skipif`` in their ``option_spec``, so the option is not a
-    ``.. doctest::`` exclusive and has to behave the same on all three.
+    ``.. doctest::`` exclusive and has to behave the same on all three. A
+    gated one comes back on its own, as any gated block does, so a group whose
+    setup never ran says so.
     """
     page = (
         f".. {directive}:: fixture\n    :skipif: True\n\n"
@@ -669,11 +678,13 @@ def test_skipif_marks_setup_and_cleanup_blocks_skip(
         ".. doctest:: fixture\n\n    >>> 2 + 2\n    4\n"
     )
 
-    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+    gated, group = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
 
-    assert sorted(
-        example.options.get(doctest.SKIP, False) for example in test.examples
-    ) == [False, True]
+    assert [test.name for test in (gated, group)] == ["fixture[0]", "fixture"]
+    assert [example.options.get(doctest.SKIP, False) for example in group.examples] == [
+        False,
+    ]
+    assert [example.options[doctest.SKIP] for example in gated.examples] == [True]
 
 
 SKIPIF_STANDALONE_PAGE = textwrap.dedent(
@@ -1477,8 +1488,9 @@ def test_directive_blocks_run_from_their_own_source(
 def test_a_failing_block_still_fails_beside_a_skipped_one() -> None:
     """Skipping one block of a group does not excuse the rest of it.
 
-    A namespace is one test, so a skip that quietly took the whole namespace
-    with it would turn a broken page green — the failure has to survive.
+    Lifting the gated block out must not lift the group's coverage out with
+    it: a skip that quietly took the whole namespace along would turn a broken
+    page green.
     """
     page = textwrap.dedent(
         """
@@ -1497,10 +1509,12 @@ Title
         """,
     )
 
-    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+    tests = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
     runner = doctest.DocTestRunner(verbose=False)
-    runner.run(test, out=lambda _: None)
+    for test in tests:
+        runner.run(test, out=lambda _: None)
 
+    assert [test.name for test in tests] == ["demo[0]", "demo"]
     assert runner.failures == 1
 
 

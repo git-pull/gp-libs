@@ -702,7 +702,10 @@ def test_skipif_true_reports_like_the_skip_flag(
 
     result.assert_outcomes(passed=1, skipped=2)
     result.stdout.fnmatch_lines(
-        ["SKIPPED [[]2[]] *: all tests skipped by +SKIP option"],
+        [
+            "SKIPPED [[]1[]] *: test_doc.rst:6: every example skipped",
+            "SKIPPED [[]1[]] *: test_doc.rst:11: every example skipped",
+        ],
     )
 
 
@@ -724,45 +727,56 @@ def test_skipif_block_is_selectable_by_node_id(
     result.assert_outcomes(skipped=1)
 
 
+GATED_GROUP_REST = textwrap.dedent(
+    """
+    Example
+    =======
+
+    .. doctest:: intro
+
+        >>> greeting = "hello"
+
+    .. doctest:: intro
+        :skipif: True
+
+        >>> raise AssertionError("the skipped block ran")
+
+    .. doctest:: intro
+
+        >>> greeting.upper()
+        'HELLO'
+    """,
+)
+
+
 def test_skipif_leaves_the_rest_of_its_group_running(
     pytester: _pytest.pytester.Pytester,
 ) -> None:
     """Skipping one block of a group is not skipping the group's item.
 
-    A namespace is one item, so the item passes on the strength of the blocks
-    that did run. The skipped block would raise if it ran, and the last block
+    The group's item passes on the strength of the blocks that did run, and
+    the gated block is an item of its own that reports skipped with a node id
+    and a reason. The skipped block would raise if it ran, and the last block
     needs a name the first one bound, which pins both halves of that claim.
     """
     pytester.plugins = ["pytest_doctest_docutils"]
     pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
     page = pytester.path / "test_doc.rst"
-    page.write_text(
-        textwrap.dedent(
-            """
-            Example
-            =======
+    page.write_text(GATED_GROUP_REST, encoding="utf-8")
 
-            .. doctest:: intro
+    result = pytester.runpytest(str(page), "-rs", "-v")
 
-                >>> greeting = "hello"
-
-            .. doctest:: intro
-                :skipif: True
-
-                >>> raise AssertionError("the skipped block ran")
-
-            .. doctest:: intro
-
-                >>> greeting.upper()
-                'HELLO'
-            """,
-        ),
-        encoding="utf-8",
+    result.assert_outcomes(passed=1, skipped=1)
+    result.stdout.fnmatch_lines(
+        [
+            "test_doc.rst::intro PASSED*",
+            "test_doc.rst::intro[[]1[]] SKIPPED*",
+        ],
+        consecutive=True,
     )
-
-    result = pytester.runpytest(str(page), "-rs")
-
-    result.assert_outcomes(passed=1)
+    result.stdout.fnmatch_lines(
+        ["SKIPPED [[]1[]] *: test_doc.rst:*: every example skipped"],
+    )
 
 
 def test_a_group_skipped_end_to_end_reports_skipped(
@@ -807,7 +821,8 @@ def test_skipif_reaches_setup_and_cleanup_under_pytest(
     """A skipped ``testsetup`` or ``testcleanup`` does not run its examples.
 
     Both directives declare ``skipif``, and both would fail the group's item
-    if their examples ran.
+    if their examples ran. Each reports as its own skipped item, so a group
+    running without the setup it was written with is visible in the report.
     """
     pytester.plugins = ["pytest_doctest_docutils"]
     pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
@@ -837,9 +852,17 @@ def test_skipif_reaches_setup_and_cleanup_under_pytest(
         encoding="utf-8",
     )
 
-    result = pytester.runpytest(str(page))
+    result = pytester.runpytest(str(page), "-v")
 
-    result.assert_outcomes(passed=1)
+    result.assert_outcomes(passed=1, skipped=2)
+    result.stdout.fnmatch_lines(
+        [
+            "test_doc.rst::fixture[[]0[]] SKIPPED*",
+            "test_doc.rst::fixture PASSED*",
+            "test_doc.rst::fixture[[]2[]] SKIPPED*",
+        ],
+        consecutive=True,
+    )
 
 
 def test_collect_only_evaluates_the_skipif_expression(
