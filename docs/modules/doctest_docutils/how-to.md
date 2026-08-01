@@ -42,6 +42,14 @@ argument, `.. doctest:: intro` in reStructuredText and its `{doctest} intro`
 fence in Markdown. `--namespace-scope document` also pools the blocks that name
 none.
 
+One name a group cannot take is the one the page would generate for a block that
+declares none — the page's own name at `--namespace-scope document`, the page and
+the block's position at the default. Both would answer to one namespace and one
+node id, so a page spelling both stops with
+{exc}`~doctest_docutils.NamespaceNameCollisionError` rather than merging them.
+Rename the group; a page whose every block names one generates nothing to collide
+with, so `.. doctest:: README.md` on such a page is only a style choice.
+
 Sharing costs you the guarantee that a block stands alone: a block that reads an
 earlier binding fails when it is read, or run, by itself. See
 {ref}`the pytest plugin's how-to <pytest_doctest_docutils-how-to>` for the same
