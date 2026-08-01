@@ -231,9 +231,19 @@ survive. Under `merged` a retry re-runs the namespace from its first block, so
 the run rebuilds what it needs and a real failure stays a failure. Under
 `per-block` the retry re-runs only the block that failed, against the mapping
 that block already changed — so an example whose expectation happens to come
-true on the second attempt is reported as a pass. Do not combine `per-block`
-with `--reruns`; there is no way for the plugin to rebuild the namespace for a
-single retried block.
+true on the second attempt would be reported as a pass. There is no way to
+rebuild the namespace for one block, so the repeat is refused instead:
+
+```text
+Failed: page.rst::demo[1] was run twice against a namespace laid out per
+block. A repeated block runs against the globals it already changed, so its
+result cannot be trusted. Drop --reruns (and anything else that repeats an
+item), or set doctest_docutils_namespace_items = merged, which re-runs a
+namespace from its first block.
+```
+
+A block that passes first time is never repeated, so a green run under
+`--reruns` is unaffected.
 
 Running one block by its id has the same shape: `pytest page.md::page.md[1]`
 runs that block and nothing else, so a block reading a name an earlier one
