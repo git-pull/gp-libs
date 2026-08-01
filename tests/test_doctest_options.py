@@ -594,38 +594,58 @@ def test_edge_cases(
         result.assert_outcomes(passed=expected_tests)
 
 
-def test_skipif_true_drops_the_block(
+THREE_BLOCK_REST = textwrap.dedent(
+    """
+    Example
+    =======
+
+    .. doctest::
+        :skipif: True
+
+        >>> 1 / 0
+
+    .. doctest::
+        :options: +SKIP
+
+        >>> 1 / 0
+
+    .. doctest::
+
+        >>> 2 + 2
+        4
+    """,
+)
+
+
+def test_skipif_true_reports_like_the_skip_flag(
     pytester: _pytest.pytester.Pytester,
 ) -> None:
-    """A true ``:skipif:`` expression drops its block before collection.
+    """A ``:skipif:`` block collects, counts, and reports as ``+SKIP`` does.
 
-    The expression is evaluated, so the page decides what runs. The block that
-    stays behind is the only item collected.
+    A page holding all three spellings — a true ``:skipif:``, an
+    ``:options: +SKIP``, and an ordinary block — collects three items. The two
+    skipped ones report under ``-rs`` with the same reason, so a reader who
+    knows either spelling can predict the other.
     """
     pytester.plugins = ["pytest_doctest_docutils"]
     pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
     page = pytester.path / "test_doc.rst"
-    page.write_text(
-        textwrap.dedent(
-            """
-            Example
-            =======
+    page.write_text(THREE_BLOCK_REST, encoding="utf-8")
 
-            .. doctest::
-                :skipif: True
+    collected = pytester.runpytest(str(page), "--collect-only", "-q")
 
-                >>> 1 / 0
-
-            .. doctest::
-                :skipif: 1 > 2
-
-                >>> 2 + 2
-                4
-            """,
-        ),
-        encoding="utf-8",
+    collected.stdout.fnmatch_lines(
+        [
+            "test_doc.rst::test_doc.rst[[]0[]]",
+            "test_doc.rst::test_doc.rst[[]1[]]",
+            "test_doc.rst::test_doc.rst[[]2[]]",
+        ],
+        consecutive=True,
     )
 
-    result = pytester.runpytest(str(page))
+    result = pytester.runpytest(str(page), "-rs")
 
-    result.assert_outcomes(passed=1)
+    result.assert_outcomes(passed=1, skipped=2)
+    result.stdout.fnmatch_lines(
+        ["SKIPPED [[]2[]] *: all tests skipped by +SKIP option"],
+    )

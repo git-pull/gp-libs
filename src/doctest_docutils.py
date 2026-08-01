@@ -454,13 +454,14 @@ def _node_line(node: nodes.Element) -> int:
 
 
 def _skipif(expression: str, globs: dict[str, t.Any]) -> bool:
-    """Return whether a block's ``:skipif:`` expression asks to drop the block.
+    """Return whether a block's ``:skipif:`` expression asks to skip the block.
 
     The expression is Python source read from the document and **evaluated**,
     the contract :mod:`sphinx.ext.doctest` documents. It sees a copy of the
     globals the document starts with — the `globs` handed to
     :meth:`DocutilsDocTestFinder.find` — and nothing the page's own examples
-    bound, because a block is dropped before any of them run.
+    bound, because it is answered while the page is being read, before any of
+    them run.
 
     Sphinx seeds that namespace from its ``doctest_global_setup`` setting;
     gp-libs has no such setting, so it binds :mod:`sys` instead unless the
@@ -477,7 +478,7 @@ def _skipif(expression: str, globs: dict[str, t.Any]) -> bool:
     Returns
     -------
     bool
-        Whether the block is dropped.
+        Whether the block's examples are marked :data:`doctest.SKIP`.
 
     Examples
     --------
@@ -804,6 +805,12 @@ class DocutilsDocTestFinder:
             assert isinstance(node, nodes.Element)
             block_type = str(node.get("testnodetype", node.tagname))
             lineno = _node_line(node)
+            # The block's own flags, before its examples get a say. A true
+            # ``:skipif:`` joins them as ``+SKIP``: one spelling of "do not run
+            # this" that a reader can predict from the other, and one path
+            # through the runner, which keeps the block collected, reported and
+            # selectable by node id instead of vanishing from the page.
+            options = dict(node.get("options") or {})
             skipif = node.get("skipif")
             if skipif is not None:
                 try:
@@ -811,6 +818,7 @@ class DocutilsDocTestFinder:
                 except Exception as exc:
                     raise SkipifExpressionError(skipif, name, lineno, exc) from exc
                 if skipped:
+                    options[doctest.SKIP] = True
                     logger.debug(
                         "doctest block skipped by skipif",
                         extra={
@@ -818,7 +826,6 @@ class DocutilsDocTestFinder:
                             "doctest_block_type": block_type,
                         },
                     )
-                    continue
             # ``node["test"]`` is the source before the directive trimmed
             # ``# doctest:`` flags out of the code a reader sees. Both
             # spellings have the same line count, so either positions the
@@ -845,7 +852,6 @@ class DocutilsDocTestFinder:
                 globs=globs,
                 lineno=lineno,
             )
-            options = node.get("options")
             if options:
                 for example in test.examples:
                     # A directive's ``:options:`` set the block's defaults; an
