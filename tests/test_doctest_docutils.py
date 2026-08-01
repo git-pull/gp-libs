@@ -1596,7 +1596,8 @@ def test_a_group_may_not_take_the_name_a_page_generates() -> None:
             "page.rst",
         )
 
-    assert "group 'page.rst' takes the namespace name" in str(excinfo.value)
+    assert "group 'page.rst' takes the name this page generates" in str(excinfo.value)
+    assert "a block declaring none at 'document' scope" in str(excinfo.value)
     assert "Rename the group" in str(excinfo.value)
 
 
@@ -1612,7 +1613,46 @@ def test_a_group_may_not_take_a_generated_block_name() -> None:
             "page.rst",
         )
 
-    assert "group 'page.rst[0]' takes the namespace name" in str(excinfo.value)
+    assert "group 'page.rst[0]' takes the name this page generates" in str(
+        excinfo.value,
+    )
+
+
+TAKEN_LIFTED_NAME_REST = """
+Page
+====
+
+.. doctest:: alpha
+
+   >>> a = 1
+
+.. doctest:: alpha
+
+   >>> a  # doctest: +SKIP
+   1
+
+.. doctest:: alpha[1]
+
+   >>> b = 2
+"""
+
+
+def test_a_group_may_not_take_a_lifted_block_name() -> None:
+    """Lifting names a block the same way declaring a group does.
+
+    A block gated end to end is lifted out of its namespace as ``name[n]``,
+    which is a name a group can spell. Two tests answering to one node id is
+    the same wrong answer whichever half of the page generated it, so the
+    refusal covers the lifted name as well as the declared one.
+    """
+    with pytest.raises(doctest_docutils.NamespaceNameCollisionError) as excinfo:
+        doctest_docutils.DocutilsDocTestFinder().find(
+            TAKEN_LIFTED_NAME_REST,
+            "page.rst",
+        )
+
+    assert "group 'alpha[1]' takes the name this page generates" in str(excinfo.value)
+    assert "a block lifted out of 'alpha'" in str(excinfo.value)
 
 
 @pytest.mark.parametrize("scope", ["block", "document"])
