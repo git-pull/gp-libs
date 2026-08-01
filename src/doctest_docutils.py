@@ -46,6 +46,10 @@ DEFAULT_NAMESPACE_SCOPE: NamespaceScope = "block"
 #: :mod:`sphinx.ext.doctest`. It means the author named no group.
 _DEFAULT_GROUP = "default"
 
+#: Group name meaning "every group this document declares", as in
+#: :mod:`sphinx.ext.doctest`. It resolves only once the page has been read.
+_WILDCARD_GROUP = "*"
+
 #: ``HIDE`` marks a prompt that rendered documentation drops and a test run
 #: keeps. It changes no output check, but a page carrying it fails to parse
 #: wherever the name is unregistered, so registration happens on import rather
@@ -310,12 +314,12 @@ def _ensure_directives_registered() -> None:
     _DIRECTIVES_READY = True
 
 
-def _node_group(node: nodes.Element) -> str | None:
-    """Return the doctest group a block declares, `None` when it declares none.
+def _node_groups(node: nodes.Element) -> list[str]:
+    """Return every doctest group a block declares, in the order written.
 
     Only the directive forms carry a ``groups`` attribute: ``.. doctest:: name``
     in reStructuredText and the ``{doctest} name`` fence in Markdown. Declaring
-    a group is the author asking two blocks to share a namespace, so it holds at
+    a group is the author asking blocks to share a namespace, so it holds at
     every :data:`NamespaceScope`.
 
     Parameters
@@ -325,35 +329,33 @@ def _node_group(node: nodes.Element) -> str | None:
 
     Returns
     -------
-    str or None
-        Group name, or `None` for a block that named none.
+    list[str]
+        Group names, empty for a block that named none.
 
     Examples
     --------
     >>> from docutils import nodes
-    >>> _node_group(nodes.literal_block("", "", groups=["intro"]))
-    'intro'
+    >>> _node_groups(nodes.literal_block("", "", groups=["intro"]))
+    ['intro']
+
+    A comma list names every group the block joins:
+
+    >>> _node_groups(nodes.literal_block("", "", groups=["alpha", "beta"]))
+    ['alpha', 'beta']
 
     A directive written without an argument names no group, and a plain fence
     or a reStructuredText doctest block has nowhere to write one:
 
-    >>> _node_group(nodes.literal_block("", "", groups=["default"])) is None
-    True
-    >>> _node_group(nodes.doctest_block("", "")) is None
-    True
-
-    A comma list joins the first group written, once:
-
-    >>> _node_group(nodes.literal_block("", "", groups=["alpha", "beta"]))
-    'alpha'
+    >>> _node_groups(nodes.literal_block("", "", groups=["default"]))
+    []
+    >>> _node_groups(nodes.doctest_block("", ""))
+    []
     """
     groups = node.get("groups")
-    if not isinstance(groups, list) or not groups:
-        return None
-    group = str(groups[0]).strip()
-    if not group or group == _DEFAULT_GROUP:
-        return None
-    return group
+    if not isinstance(groups, list):
+        return []
+    names = [str(group).strip() for group in groups]
+    return [name for name in names if name and name != _DEFAULT_GROUP]
 
 
 def _namespace_name(
@@ -370,7 +372,7 @@ def _namespace_name(
     Parameters
     ----------
     group : str or None
-        Group the block declared, from :func:`_node_group`.
+        Group the block declared, from :func:`_node_groups`.
     scope : NamespaceScope
         Scope chosen for blocks that declared no group.
     document_name : str
@@ -804,7 +806,44 @@ class DocutilsDocTestFinder:
         # the page wrote them in, and a testsetup exists to be movable.
         namespaces: dict[str, dict[str, list[doctest.DocTest]]] = {}
 
-        for idx, node in enumerate(findall(doc)(condition)):
+        block_nodes = list(findall(doc)(condition))
+        declared = [
+            _node_groups(node)
+            for node in block_nodes
+            if isinstance(node, nodes.Element)
+        ]
+        # A block joins every group it names. ``*`` means every group the
+        # document declares, so it can only be resolved once the page has been
+        # read; a page whose only blocks are wildcards has no group to join, so
+        # each keeps its own namespace.
+        memberships: list[list[str]] = [
+            []
+            if _WILDCARD_GROUP in groups
+            else (
+                groups
+                or [
+                    _namespace_name(
+                        None,
+                        self._namespace_scope,
+                        document_name,
+                        idx,
+                    )
+                ]
+            )
+            for idx, groups in enumerate(declared)
+        ]
+        ordered: list[str] = []
+        for names in memberships:
+            for candidate in names:
+                if candidate not in ordered:
+                    ordered.append(candidate)
+        for idx, groups in enumerate(declared):
+            if _WILDCARD_GROUP in groups:
+                memberships[idx] = list(ordered) or [
+                    _namespace_name(None, self._namespace_scope, document_name, idx)
+                ]
+
+        for idx, node in enumerate(block_nodes):
             assert isinstance(node, nodes.Element)
             block_type = str(node.get("testnodetype", node.tagname))
             lineno = _node_line(node)
@@ -834,39 +873,38 @@ class DocutilsDocTestFinder:
             # spellings have the same line count, so either positions the
             # block the same way.
             source = str(node.get("test") or node.astext())
-            namespace = _namespace_name(
-                _node_group(node),
-                self._namespace_scope,
-                document_name,
-                idx,
-            )
-            logger.debug(
-                "doctest block collected into namespace %s",
-                namespace,
-                extra={
-                    "doctest_source_file": name,
-                    "doctest_block_type": block_type,
-                },
-            )
-            test = self._get_test(
-                string=source,
-                name=namespace,
-                filename=name,
-                globs=globs,
-                lineno=lineno,
-            )
-            if options:
-                for example in test.examples:
-                    # A directive's ``:options:`` set the block's defaults; an
-                    # example's own inline flags win, as in sphinx.ext.doctest.
-                    merged = dict(options)
-                    merged.update(example.options)
-                    example.options = merged
-            phases = namespaces.setdefault(
-                namespace,
-                {"testsetup": [], "test": [], "testcleanup": []},
-            )
-            phases[block_type if block_type in phases else "test"].append(test)
+            for namespace in memberships[idx]:
+                logger.debug(
+                    "doctest block collected into namespace %s",
+                    namespace,
+                    extra={
+                        "doctest_source_file": name,
+                        "doctest_block_type": block_type,
+                    },
+                )
+                # Parsed once per namespace: _merge_blocks shifts
+                # ``example.lineno`` in place, so two namespaces sharing one
+                # block's examples would shift them twice.
+                test = self._get_test(
+                    string=source,
+                    name=namespace,
+                    filename=name,
+                    globs=globs,
+                    lineno=lineno,
+                )
+                if options:
+                    for example in test.examples:
+                        # A directive's ``:options:`` set the block's defaults;
+                        # an example's own inline flags win, as in
+                        # sphinx.ext.doctest.
+                        merged = dict(options)
+                        merged.update(example.options)
+                        example.options = merged
+                phases = namespaces.setdefault(
+                    namespace,
+                    {"testsetup": [], "test": [], "testcleanup": []},
+                )
+                phases[block_type if block_type in phases else "test"].append(test)
 
         tests.extend(
             _merge_blocks(
