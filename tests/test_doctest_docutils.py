@@ -629,17 +629,18 @@ def test_skipif_skips_only_its_own_block_of_a_group() -> None:
     ]
 
 
-def test_an_inline_flag_overrides_a_true_skipif() -> None:
-    """An example's own ``-SKIP`` wins, as it does over ``:options: +SKIP``.
+def test_an_inline_flag_cannot_reopen_a_true_skipif() -> None:
+    """An example's own ``-SKIP`` loses to a condition, unlike to ``:options:``.
 
-    A true ``:skipif:`` joins the block's options; an example writing its own
-    flag beats them, which is the rule ``:options:`` already follows.
+    ``sphinx.ext.doctest`` drops a gated block before its source is read, so
+    nothing written inside one can turn the gate off. An example that could
+    would run on exactly the interpreter or platform it was guarded against.
     """
     page = ".. doctest::\n    :skipif: True\n\n    >>> 2 + 2  # doctest: -SKIP\n    4\n"
 
     (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
 
-    assert test.examples[0].options[doctest.SKIP] is False
+    assert test.examples[0].options[doctest.SKIP] is True
 
 
 SKIPPED_SETUP_DIRECTIVES = [

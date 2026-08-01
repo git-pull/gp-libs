@@ -200,7 +200,7 @@ DOCTEST_OPTION_CASES = [
         description=":skipif: True reports as skipped in a Markdown fence too",
     ),
     DoctestOptionCase(
-        test_id="inline-flag-beats-a-true-skipif-rst",
+        test_id="inline-flag-cannot-reopen-a-true-skipif-rst",
         file_ext=".rst",
         ini_options="",
         doctest_content=textwrap.dedent(
@@ -215,8 +215,8 @@ DOCTEST_OPTION_CASES = [
                 4
             """,
         ),
-        expected_outcome="passed",
-        description="An example's own flag overrides a true :skipif:",
+        expected_outcome="skipped",
+        description="An example's own flag cannot reopen a true :skipif:",
     ),
     # Inline ELLIPSIS directive
     DoctestOptionCase(

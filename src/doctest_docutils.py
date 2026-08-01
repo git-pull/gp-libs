@@ -853,14 +853,14 @@ class DocutilsDocTestFinder:
             # through the runner, which keeps the block collected, reported and
             # selectable by node id instead of vanishing from the page.
             options = dict(node.get("options") or {})
+            gated = False
             skipif = node.get("skipif")
             if skipif is not None:
                 try:
-                    skipped = _skipif(skipif, globs)
+                    gated = _skipif(skipif, globs)
                 except Exception as exc:
                     raise SkipifExpressionError(skipif, name, lineno, exc) from exc
-                if skipped:
-                    options[doctest.SKIP] = True
+                if gated:
                     logger.debug(
                         "doctest block skipped by skipif",
                         extra={
@@ -892,13 +892,21 @@ class DocutilsDocTestFinder:
                     globs=globs,
                     lineno=lineno,
                 )
-                if options:
+                if options or gated:
                     for example in test.examples:
                         # A directive's ``:options:`` set the block's defaults;
                         # an example's own inline flags win, as in
                         # sphinx.ext.doctest.
                         merged = dict(options)
                         merged.update(example.options)
+                        if gated:
+                            # A ``:skipif:`` is a gate, not a default.
+                            # sphinx.ext.doctest drops the block before its
+                            # source is ever read, so nothing written inside it
+                            # can turn the gate off — and an example that did
+                            # would run on exactly the interpreter or platform
+                            # the condition was guarding against.
+                            merged[doctest.SKIP] = True
                         example.options = merged
                 phases = namespaces.setdefault(
                     namespace,
