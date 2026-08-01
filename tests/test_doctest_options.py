@@ -178,6 +178,24 @@ DOCTEST_OPTION_CASES = [
         expected_outcome="passed",
         description="Inline +ELLIPSIS directive works in .md files",
     ),
+    DoctestOptionCase(
+        test_id="inline-flag-inside-directive-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+
+                >>> print("a  b")  # doctest: +NORMALIZE_WHITESPACE
+                a b
+            """,
+        ),
+        expected_outcome="passed",
+        description="An inline flag applies although the directive trims it",
+    ),
 ]
 
 
