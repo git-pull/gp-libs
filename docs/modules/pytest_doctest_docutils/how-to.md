@@ -68,6 +68,22 @@ A group collects as one item — `page.md::intro` — holding every block that n
 it, in page order. A group reaches as far as the page it is written on: the same
 name on a second page is a second namespace.
 
+A block can name several groups at once, comma separated, and joins each of
+them — it runs once per group, against that group's namespace. `*` stands for
+every group the page declares, which is how you write one setup for all of them:
+
+```rst
+.. testsetup:: *
+
+    >>> import math
+```
+
+`.. testsetup::` and `.. testcleanup::` run before and after the rest of their
+group whatever order the page writes them in, so you can move them out of a
+reader's way. Their output is still checked, unlike in Sphinx, so a setup that
+raises is reported rather than swallowed. A failing example ends its namespace,
+which means that namespace's cleanup does not run.
+
 Only the directive form can name a group. A plain ```` ```python ```` fence, a
 bare fence, an indented block, and a reStructuredText doctest block have nowhere
 to write one. To share state between those, widen the page for a single run:
