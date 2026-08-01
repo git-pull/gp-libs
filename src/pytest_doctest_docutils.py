@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import bdb
+import collections
 import doctest
 import io
 import logging
@@ -42,7 +43,7 @@ from doctest_docutils import (
 
 if t.TYPE_CHECKING:
     import types
-    from collections.abc import Iterable
+    from collections.abc import Generator, Iterable, Sequence
     from doctest import _Out
 
     from _pytest.config.argparsing import Parser
@@ -63,6 +64,10 @@ _NAMESPACE_SCOPE_KEY = pytest.StashKey[NamespaceScope]()
 #: Namespace layout resolved once at configure time, read back during collection.
 _NAMESPACE_ITEMS_KEY = pytest.StashKey[NamespaceItems]()
 
+#: Whether the run asked for a ``--dist`` scheduler by name, captured before
+#: pytest-xdist rewrites the value ``-n`` alone leaves behind.
+_DIST_NAMED_KEY = pytest.StashKey[bool]()
+
 _NAMESPACE_HELP = (
     "namespace the doctest blocks of one .rst/.md file run in when they name"
     " no group: block (default, one each) or document (one for the page);"
@@ -78,13 +83,17 @@ _ITEMS_HELP = (
 #: The ``--dist`` values that keep every item of one file on one worker, which
 #: is what a shared namespace needs: a globals mapping is a Python object, so
 #: it does not cross processes. Named as an allowlist rather than a list of
-#: splitting schedulers so that a scheduler pytest-xdist adds later is refused
-#: until it has been checked, instead of silently splitting a namespace.
+#: splitting schedulers so that a scheduler pytest-xdist adds later is handled
+#: before it is trusted, instead of silently splitting a namespace.
 #: ``load`` and ``worksteal`` hand a file's items to whichever worker is free;
 #: ``-n`` without ``--dist`` resolves to ``load``.
 _WHOLE_NAMESPACE_SCHEDULERS = frozenset(
     {"no", "each", "loadfile", "loadgroup", "loadscope"},
 )
+
+#: What a page is when nothing says otherwise, matching the collector: a
+#: ``.rst`` or ``.md`` file is one whatever ``--doctest-glob`` says.
+_PAGE_SUFFIXES = frozenset({".rst", ".md"})
 
 
 def pytest_addoption(parser: Parser) -> None:
@@ -281,63 +290,314 @@ def pytest_configure(config: pytest.Config) -> None:
         config.pluginmanager.set_blocked("doctest")
 
 
-def pytest_sessionstart(session: pytest.Session) -> None:
-    """Stop a run whose scheduler would split a shared namespace across workers.
-
-    Blocks laid out ``per-block`` can hold one globals mapping between them —
-    any page declaring a group does, whatever the scope — and a mapping does
-    not cross processes. ``--dist load`` and ``--dist worksteal`` hand a file's
-    items to whichever worker is free, so half a namespace can land on a worker
-    that never ran the block binding the names it reads, which reports as a
-    ``NameError`` in the page rather than as the configuration problem it is.
-
-    Refused only for a run that would really distribute, matching xdist's own
-    condition: it declines to distribute under ``--collect-only``, and with
-    fewer than two workers there is nothing to split a namespace between.
-
-    The scheduler is only knowable on the controller: a worker is told
-    ``dist`` is ``no`` whatever the controller was given, which is why the
-    check is gated on ``is_xdist_controller``. The controller never collects,
-    so which pages a run holds cannot be known here — selecting ``per-block``
-    is what the refusal reads as the opt-in.
+def _splitting_scheduler(
+    items: NamespaceItems,
+    scheduler: str,
+    workers: int,
+) -> str | None:
+    """Name the scheduler that would hand one namespace to two workers.
 
     Parameters
     ----------
-    session : pytest.Session
-        Session about to run, which carries the resolved ``--dist`` value.
+    items : doctest_docutils.NamespaceItems
+        Resolved namespace layout.
+    scheduler : str
+        Resolved ``--dist`` value.
+    workers : int
+        Number of execution environments the run has behind it.
+
+    Returns
+    -------
+    str or None
+        The scheduler's name when it would split a namespace, else `None`.
+
+    Examples
+    --------
+    >>> _splitting_scheduler("per-block", "load", 2)
+    'load'
+
+    >>> _splitting_scheduler("per-block", "worksteal", 4)
+    'worksteal'
+
+    A merged namespace is one item, which no scheduler can cut in half:
+
+    >>> _splitting_scheduler("merged", "load", 2) is None
+    True
+
+    Neither can a scheduler that keeps a file, a group or a scope whole:
+
+    >>> _splitting_scheduler("per-block", "loadfile", 2) is None
+    True
+
+    >>> _splitting_scheduler("per-block", "loadgroup", 2) is None
+    True
+
+    Nor a run with nothing to split a namespace between:
+
+    >>> _splitting_scheduler("per-block", "load", 1) is None
+    True
+    """
+    if items != "per-block":
+        return None
+    if workers < 2:
+        return None
+    if scheduler in _WHOLE_NAMESPACE_SCHEDULERS:
+        return None
+    return scheduler
+
+
+def _shared_page(ids: Iterable[str], globs: Sequence[str]) -> str | None:
+    """Name the first page a run collected more than one item from.
+
+    A namespace never reaches past the page it was read from, so a page
+    collecting one item holds its namespace whole and no scheduler can split
+    it. Two items from one page is the shape a shared mapping needs, and it
+    is the only shape a controller can see: it is handed node ids, not the
+    namespaces behind them.
+
+    Parameters
+    ----------
+    ids : Iterable[str]
+        Node ids a worker collected.
+    globs : Sequence[str]
+        ``--doctest-glob`` patterns, which decide what this plugin collects
+        as a page.
+
+    Returns
+    -------
+    str or None
+        Path of the first page holding several items, or `None` when a
+        namespace cannot be split however the run is scheduled.
+
+    Examples
+    --------
+    >>> globs = ["*.rst", "*.md"]
+    >>> _shared_page(["docs/page.md::page.md[0]", "docs/page.md::page.md[1]"], globs)
+    'docs/page.md'
+
+    A page collecting a single item has nothing to hand a second worker:
+
+    >>> _shared_page(["docs/page.md::page.md"], globs) is None
+    True
+
+    A suite of Python tests holds no page at all, however many items one
+    module collects — which is what keeps ``-n`` for a project that carries
+    the layout in its ini and no documentation in its suite:
+
+    >>> _shared_page(["tests/t.py::test_one", "tests/t.py::test_two"], globs) is None
+    True
+
+    A project that renamed what a page is says so through ``--doctest-glob``:
+
+    >>> _shared_page(
+    ...     ["docs/page.txt::page.txt[0]", "docs/page.txt::page.txt[1]"],
+    ...     ["*.txt"],
+    ... )
+    'docs/page.txt'
+    """
+    counts = collections.Counter(
+        page
+        for page in (node_id.split("::", 1)[0] for node_id in ids)
+        if _is_page(page, globs)
+    )
+    return next((page for page, held in counts.items() if held > 1), None)
+
+
+def _is_page(path: str, globs: Sequence[str]) -> bool:
+    """Say whether a node id's path is a file this plugin collects as a page.
+
+    Mirrors what the collector accepts, so the two cannot drift into a run
+    scheduled as though a page were a Python module.
+
+    Parameters
+    ----------
+    path : str
+        Path part of a node id, always written with forward slashes.
+    globs : Sequence[str]
+        ``--doctest-glob`` patterns.
+
+    Returns
+    -------
+    bool
+        `True` when the path names a page.
+
+    Examples
+    --------
+    >>> _is_page("docs/page.md", ["*.rst", "*.md"])
+    True
+
+    >>> _is_page("tests/test_plugin.py", ["*.rst", "*.md"])
+    False
+
+    reStructuredText and Markdown stay pages whatever the patterns say,
+    because a file named on the command line is collected on its suffix
+    alone:
+
+    >>> _is_page("docs/page.rst", ["*.txt"])
+    True
+
+    >>> _is_page("docs/page.txt", ["*.txt"])
+    True
+    """
+    page = pathlib.PurePosixPath(path)
+    if page.suffix in _PAGE_SUFFIXES:
+        return True
+    return any(page.match(glob) for glob in globs)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_cmdline_main(config: pytest.Config) -> Generator[None, None, None]:
+    """Record whether the run named a ``--dist`` scheduler, before xdist rewrites it.
+
+    pytest-xdist promotes ``-n`` to ``--dist load`` inside its own
+    ``pytest_cmdline_main``, after which a promoted ``load`` and a typed
+    ``--dist load`` are the same string and nothing downstream can tell them
+    apart. Reading the value first is what separates them, and reading it
+    from a wrapper is what makes that reliable: pluggy enters every wrapper
+    before it calls any implementation, so this does not race pytest-xdist
+    for the value. Marking it ``tryfirst`` would only tie — pytest-xdist
+    marks its own implementation ``tryfirst`` too, leaving plugin
+    registration order to break it.
+
+    What it sees is argparse's own result, which is ``no`` unless the run
+    asked for a scheduler. That covers both places a run can ask from:
+    pytest splices ini ``addopts`` into the arguments before parsing them,
+    so a ``--dist`` written there reaches argparse exactly as one typed on
+    the command line does — unlike ``sys.argv``, which never shows it.
+
+    ``-d`` is the same request spelled short, and is read as one. ``--dist
+    no`` alongside ``-n`` is not a choice pytest-xdist keeps, so it is not
+    one this keeps either.
+
+    Parameters
+    ----------
+    config : pytest.Config
+        Configuration whose options argparse has filled in.
+
+    Yields
+    ------
+    None
+        Once, to run the implementations this wraps.
+    """
+    config.stash[_DIST_NAMED_KEY] = config.getoption("dist", "no") != "no" or bool(
+        config.getoption("distload", False),
+    )
+    yield
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_xdist_make_scheduler(config: pytest.Config, log: t.Any) -> t.Any:
+    """Keep a shared namespace whole when the run left the scheduler open.
+
+        ``-n`` on its own is a request for workers, not for a way of filling
+        them, and pytest-xdist answers it with ``--dist load``, which hands a
+        file's items to whichever worker is free. Under ``per-block`` that can
+        put the block binding a name and the block reading it on different
+        workers. Where the run expressed no preference, this fills it in with
+        file-level scheduling rather than failing: a namespace never reaches
+        past its page, so keeping a page whole keeps every namespace in it
+        whole.
+
+    Only a page is kept whole. Everything
+        else keeps a scope of its own, so a suite whose Python tests happen to
+        share a file still spreads across the workers it asked for.
+
+        ``loadgroup`` is not the substitute to make: it reads a group off the node
+        id, and that suffix is written by the *worker*, from the worker's own
+        ``--dist`` value, so nothing the controller decides here reaches it.
+        File-level scheduling also leaves node ids untouched, which a group suffix
+        would not.
+
+        A run that named its scheduler is left alone, whatever it named.
+
+    Parameters
+    ----------
+        config : pytest.Config
+            Configuration carrying the resolved layout and ``--dist`` value.
+        log : Any
+            pytest-xdist ``Producer`` the scheduler logs through.
+
+    Returns
+    -------
+        Any
+            A scheduler keeping each page whole when it is standing in, else
+            `None` to leave the choice to pytest-xdist.
+    """
+    if config.stash.get(_DIST_NAMED_KEY, True):
+        return None
+    if not _splitting_scheduler(
+        config.stash[_NAMESPACE_ITEMS_KEY],
+        config.getoption("dist", "no"),
+        len(config.getoption("tx", None) or []),
+    ):
+        return None
+    from xdist.scheduler import (  # type: ignore[import-untyped,unused-ignore]
+        LoadScopeScheduling,
+    )
+
+    globs = config.getoption("doctestglob") or ["*.rst", "*.md"]
+
+    class _PageScheduling(LoadScopeScheduling):  # type: ignore[misc]
+        """Keep a page's items together, and spread everything else."""
+
+        def _split_scope(self, nodeid: str) -> str:
+            path = nodeid.split("::", 1)[0]
+            return path if _is_page(path, globs) else nodeid
+
+    return _PageScheduling(config, log)
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_xdist_node_collection_finished(node: t.Any, ids: Sequence[str]) -> None:
+    """Stop a run whose named scheduler would split a page this suite holds.
+
+    Reached only when the run asked for ``--dist load`` or ``--dist
+    worksteal`` itself. Choosing a scheduler by name is not something a
+    plugin should quietly overrule, so the session stops and says why rather
+    than reporting a page that is only wrong because of how it was
+    scheduled — a shared globals mapping is a Python object, and half a
+    namespace on a worker reads as a ``NameError`` in the page.
+
+    Read here because here is the first moment a controller knows what the
+    run actually holds: it never collects itself, and a worker's collection
+    arrives as node ids. A suite with no page among them has no namespace to
+    protect, so it keeps its workers.
+
+    Parameters
+    ----------
+    node : Any
+        pytest-xdist ``WorkerController`` that finished collecting.
+    ids : Sequence[str]
+        Node ids it collected.
 
     Raises
     ------
     pytest.UsageError
-        If the namespace layout and the scheduler cannot both hold.
+        If a page the run holds would be split between workers.
     """
-    config = session.config
-    if config.stash[_NAMESPACE_ITEMS_KEY] != "per-block":
+    config = node.config
+    if not config.stash.get(_DIST_NAMED_KEY, True):
+        # Left open, so a scheduler that keeps a page whole stood in.
         return
-    if not config.pluginmanager.hasplugin("xdist"):
-        return
-    from xdist import (  # type: ignore[import-untyped,unused-ignore]
-        is_xdist_controller,
+    scheduler = _splitting_scheduler(
+        config.stash[_NAMESPACE_ITEMS_KEY],
+        config.getoption("dist", "no"),
+        len(config.getoption("tx", None) or []),
     )
-
-    if not is_xdist_controller(session):
+    if scheduler is None:
         return
-    if config.getoption("collectonly", False):
-        return
-    if len(config.getoption("tx", None) or []) < 2:
-        return
-    scheduler = config.getoption("dist", "no")
-    if scheduler in _WHOLE_NAMESPACE_SCHEDULERS:
+    page = _shared_page(ids, config.getoption("doctestglob") or ["*.rst", "*.md"])
+    if page is None:
         return
     message = (
         "doctest_docutils_namespace_items = per-block can hand a namespace's"
         " blocks one globals mapping between them — a page declaring a group"
         " does, whatever the scope — and a mapping cannot cross processes."
         f" --dist {scheduler} hands a file's items to whichever worker is"
-        " free, so it can send them to different workers. Run with --dist"
-        " loadgroup or --dist loadfile, or set"
-        " doctest_docutils_namespace_items = merged. -n without --dist"
-        " selects --dist load."
+        f" free, so it can send {page}'s blocks to different workers. Run"
+        " with --dist loadgroup or --dist loadfile, or set"
+        " doctest_docutils_namespace_items = merged. Dropping --dist leaves"
+        " -n free to keep each page on one worker."
     )
     raise pytest.UsageError(message)
 
@@ -793,8 +1053,10 @@ class DocTestDocutilsFile(pytest.Module):
                 if per_block:
                     # pytest-xdist reads this on the worker and suffixes the
                     # node id with the group, so --dist loadgroup keeps a
-                    # namespace whole. It cannot choose the scheduler, which is
-                    # why an unusable one is refused at session start instead.
+                    # namespace whole. Only that scheduler reads it: the
+                    # suffix is written from the worker's own --dist value,
+                    # so a controller standing a scheduler in cannot rely on
+                    # it and groups by file instead.
                     item.add_marker(
                         pytest.mark.xdist_group(
                             f"{self.nodeid}::{collected.namespace}",
