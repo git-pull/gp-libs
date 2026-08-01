@@ -1200,6 +1200,12 @@ SPLITTING_SCHEDULER_CASES = [
         addopts="",
         named="load",
     ),
+    SplittingSchedulerCase(
+        test_id="a-count-asking-for-none-takes-none-away",
+        args=["--tx", "-1*popen", "--tx", "2*popen", "--dist", "load"],
+        addopts="",
+        named="load",
+    ),
 ]
 
 
