@@ -25,8 +25,13 @@ from _pytest.outcomes import OutcomeException
 
 from doctest_docutils import (
     _HIDE_FLAG,
+    DEFAULT_NAMESPACE_SCOPE,
+    NAMESPACE_SCOPES,
     DocutilsDocTestFinder,
+    NamespaceScope,
+    NamespaceScopeError,
     _ensure_directives_registered,
+    _parse_namespace_scope,
 )
 
 if t.TYPE_CHECKING:
@@ -47,6 +52,15 @@ PYTEST_VERSION = tuple(int(x) for x in pytest.__version__.split(".")[:2])
 # Lazy definition of runner class
 RUNNER_CLASS = None
 
+#: Namespace scope resolved once at configure time, read back during collection.
+_NAMESPACE_SCOPE_KEY = pytest.StashKey[NamespaceScope]()
+
+_NAMESPACE_HELP = (
+    "namespace the doctest blocks of one .rst/.md file run in when they name"
+    " no group: block (default, one each) or document (one for the page);"
+    " blocks naming a group always share that group's namespace"
+)
+
 
 def pytest_addoption(parser: Parser) -> None:
     """Add options to py.test for doctest_docutils."""
@@ -64,6 +78,80 @@ def pytest_addoption(parser: Parser) -> None:
         help="disable doctest-doctests in .py modules (pass-through to pytest-doctest)",
         dest="doctestmodules",
     )
+    group.addoption(
+        "--doctest-docutils-namespace-scope",
+        action="store",
+        choices=NAMESPACE_SCOPES,
+        default=None,
+        help=(
+            f"{_NAMESPACE_HELP}; overrides the doctest_docutils_namespace_scope"
+            " ini option"
+        ),
+        dest="doctest_docutils_namespace_scope",
+    )
+    parser.addini(
+        "doctest_docutils_namespace_scope",
+        _NAMESPACE_HELP,
+        default=DEFAULT_NAMESPACE_SCOPE,
+    )
+
+
+def _resolve_namespace_scope(
+    cli_value: str | None,
+    ini_value: str | None,
+) -> NamespaceScope:
+    """Resolve the namespace scope: command line first, then ini, then default.
+
+    Parameters
+    ----------
+    cli_value : str | None
+        Value of ``--doctest-docutils-namespace-scope``, `None` when unset.
+    ini_value : str | None
+        Value of the ``doctest_docutils_namespace_scope`` ini option.
+
+    Returns
+    -------
+    doctest_docutils.NamespaceScope
+        Scope to build the finder with.
+
+    Raises
+    ------
+    pytest.UsageError
+        If either value names a scope that does not exist.
+
+    Examples
+    --------
+    >>> _resolve_namespace_scope(None, None)
+    'block'
+
+    >>> _resolve_namespace_scope(None, "document")
+    'document'
+
+    One run can narrow a project that shares each page, without editing the
+    configuration everyone else reads:
+
+    >>> _resolve_namespace_scope("block", "document")
+    'block'
+
+    A name that no scope answers to stops the session once, rather than
+    failing every file it collects, and says where the name was written —
+    argparse already names the flag, so only the ini file needs saying:
+
+    >>> try:
+    ...     _resolve_namespace_scope(None, "per-file")
+    ... except pytest.UsageError as exc:
+    ...     print(exc)
+    Unknown namespace scope: 'per-file'. Expected one of: block, document
+    Set by the doctest_docutils_namespace_scope ini option.
+    """
+    value = cli_value or ini_value or DEFAULT_NAMESPACE_SCOPE
+    try:
+        return _parse_namespace_scope(value)
+    except NamespaceScopeError as exc:
+        message = str(exc)
+        if value == ini_value:
+            message += "\nSet by the doctest_docutils_namespace_scope ini option."
+        raise pytest.UsageError(message) from exc
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -71,6 +159,12 @@ def pytest_configure(config: pytest.Config) -> None:
 
     Todo: Find a way to make these plugins cooperate without collecting twice.
     """
+    # Resolved once, so a misspelled scope stops the session here instead of
+    # erroring on every file collected.
+    config.stash[_NAMESPACE_SCOPE_KEY] = _resolve_namespace_scope(
+        config.getoption("doctest_docutils_namespace_scope", None),
+        config.getini("doctest_docutils_namespace_scope"),
+    )
     if config.pluginmanager.has_plugin("doctest"):
         config.pluginmanager.set_blocked("doctest")
 
@@ -362,7 +456,9 @@ class DocTestDocutilsFile(pytest.Module):
         text = self.path.read_text(encoding)
 
         # Uses internal doctest module parsing mechanism.
-        finder = DocutilsDocTestFinder()
+        finder = DocutilsDocTestFinder(
+            namespace_scope=self.config.stash[_NAMESPACE_SCOPE_KEY],
+        )
 
         # While doctests in .rst/.md files don't support fixtures directly,
         # we still need to pick up autouse fixtures.
