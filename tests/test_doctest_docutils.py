@@ -252,6 +252,63 @@ def test_DocutilsDocTestFinder(
         doctest.DebugRunner(verbose=False).run(test)
 
 
+class DocumentOrderFixture(t.NamedTuple):
+    """Page of eleven numbered blocks, enough for name order to diverge.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    file_name : str
+        Page name, whose suffix picks the parser.
+    page : str
+        Page content: block ``n`` evaluates to ``n``.
+    """
+
+    test_id: str
+    file_name: str
+    page: str
+
+
+DOCUMENT_ORDER_FIXTURES = [
+    DocumentOrderFixture(
+        test_id="MyST-fences",
+        file_name="example.md",
+        page="\n".join(f"```python\n>>> {n}\n{n}\n```\n" for n in range(11)),
+    ),
+    DocumentOrderFixture(
+        test_id="reST-doctest_blocks",
+        file_name="example.rst",
+        page="\n".join(f">>> {n}\n{n}\n" for n in range(11)),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    DocumentOrderFixture._fields,
+    DOCUMENT_ORDER_FIXTURES,
+    ids=[f.test_id for f in DOCUMENT_ORDER_FIXTURES],
+)
+def test_finder_collects_in_document_order(
+    tmp_path: pathlib.Path,
+    test_id: str,
+    file_name: str,
+    page: str,
+) -> None:
+    """Blocks come back in the order a reader meets them, not in name order.
+
+    Sorting by name put ``page.md[10]`` ahead of ``page.md[1]``.
+    """
+    page_path = tmp_path / file_name
+    page_path.write_text(page, encoding="utf-8")
+
+    tests = doctest_docutils.DocutilsDocTestFinder().find(page, str(page_path))
+
+    assert [test.examples[0].source.strip() for test in tests] == [
+        str(n) for n in range(11)
+    ]
+
+
 class DoctestOptReTestCase(t.NamedTuple):
     """Test fixture for doctestopt_re regex.
 
