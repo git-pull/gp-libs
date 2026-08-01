@@ -1188,6 +1188,18 @@ SPLITTING_SCHEDULER_CASES = [
         addopts="--dist load",
         named="load",
     ),
+    SplittingSchedulerCase(
+        test_id="multiplied-tx-spells-more-than-one-worker",
+        args=["--tx", "2*popen", "--dist", "load"],
+        addopts="",
+        named="load",
+    ),
+    SplittingSchedulerCase(
+        test_id="multiplied-tx-adds-up-across-specifications",
+        args=["--tx", "1*popen", "--tx", "1*popen", "--dist", "load"],
+        addopts="",
+        named="load",
+    ),
 ]
 
 
@@ -1230,6 +1242,34 @@ def test_per_block_refuses_a_named_splitting_scheduler(
     assert result.ret == pytest.ExitCode.USAGE_ERROR
     result.stderr.fnmatch_lines([f"*--dist {named} hands a file's items*"])
     result.stderr.fnmatch_lines(["*--dist loadgroup or --dist loadfile*"])
+
+
+def test_per_block_keeps_a_single_multiplied_worker(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """One worker cannot split a namespace, however the run spelled it.
+
+    ``--tx 1*popen`` asks for the same single environment ``--tx popen``
+    does. Counting the multiplier has to leave that run alone, or reading
+    the shorthand correctly would cost every one-worker run its scheduler.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        "doctest_docutils_namespace_scope = document",
+        "doctest_docutils_namespace_items = per-block",
+    )
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest(
+        str(pytester.path),
+        "--tx",
+        "1*popen",
+        "--dist",
+        "load",
+    )
+
+    result.assert_outcomes(passed=2)
 
 
 def test_per_block_keeps_workers_for_a_suite_holding_no_page(
