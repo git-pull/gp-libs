@@ -520,3 +520,71 @@ def demo() -> int:
 
     result = pytester.runpytest(str(example), "--doctest-docutils-modules")
     result.assert_outcomes(passed=1)
+
+
+def _write_ini(pytester: _pytest.pytester.Pytester, *lines: str) -> None:
+    """Write a pytest.ini that keeps the built-in doctest plugin out."""
+    pytester.makefile(
+        ".ini",
+        pytest="\n".join(["[pytest]", "addopts=-p no:doctest", *lines]),
+    )
+
+
+class NamespaceCollectionCase(t.NamedTuple):
+    """Page and the items it collects.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    file_name : str
+        Page written into the pytester directory.
+    page : str
+        Page content.
+    node_ids : list[str]
+        Node ids expected, in collection order.
+    """
+
+    test_id: str
+    file_name: str
+    page: str
+    node_ids: list[str]
+
+
+NAMESPACE_COLLECTION_CASES = [
+    NamespaceCollectionCase(
+        test_id="ungrouped-blocks-collect-one-item-each",
+        file_name="page.md",
+        page="\n".join(f"```python\n>>> {n}\n{n}\n```\n" for n in range(12)),
+        node_ids=[f"page.md::page.md[{n}]" for n in range(12)],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    NamespaceCollectionCase._fields,
+    NAMESPACE_COLLECTION_CASES,
+    ids=[case.test_id for case in NAMESPACE_COLLECTION_CASES],
+)
+def test_namespace_collection(
+    pytester: _pytest.pytester.Pytester,
+    test_id: str,
+    file_name: str,
+    page: str,
+    node_ids: list[str],
+) -> None:
+    """A page collects one item per namespace, in the order it reads.
+
+    The node id carries the namespace and nothing machine-specific, so it can
+    be written into a ``--deselect`` and survive the trip to another checkout.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester)
+    (pytester.path / file_name).write_text(page, encoding="utf-8")
+
+    items, _ = pytester.inline_genitems(file_name)
+
+    assert [item.nodeid for item in items] == node_ids
+
+    result = pytester.runpytest(file_name)
+    result.assert_outcomes(passed=len(node_ids))
