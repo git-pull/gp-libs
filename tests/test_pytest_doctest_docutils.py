@@ -1631,3 +1631,43 @@ def test_merged_keeps_a_failure_through_a_retry(
 
     result.assert_outcomes(failed=1)
     result.stdout.fnmatch_lines(["*1 failed*2 rerun*"])
+
+
+def test_per_block_refuses_a_repeated_block(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A block run twice is refused rather than trusted.
+
+    A retry re-runs one block against the globals it already changed, so an
+    expectation that comes true on the second attempt would report as a pass.
+    The namespace cannot be rebuilt for one block alone, so the repeat fails
+    with a message naming the way out.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester, "doctest_docutils_namespace_items = per-block")
+    (pytester.path / "page.rst").write_text(
+        textwrap.dedent(
+            """
+            Title
+            =====
+
+            .. doctest:: demo
+
+                >>> seen = []
+
+            .. doctest:: demo
+
+                >>> seen.append(1)
+                >>> len(seen)
+                2
+            """,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest("page.rst", "--reruns", "2")
+
+    result.assert_outcomes(passed=1, failed=1)
+    result.stdout.fnmatch_lines(
+        ["*was run twice against a namespace laid out per block*"]
+    )
