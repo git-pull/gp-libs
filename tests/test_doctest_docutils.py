@@ -596,6 +596,178 @@ def test_skipif_marks_its_block_skip(
     assert test.examples[0].options.get(doctest.SKIP, False) is skipped
 
 
+def test_skipif_skips_only_its_own_block_of_a_group() -> None:
+    """A group's other blocks keep running when one of them is skipped.
+
+    A namespace is one test, so skipping a block is not skipping the test it
+    belongs to. Only the skipped block's own examples carry the flag.
+    """
+    page = textwrap.dedent(
+        """
+        .. doctest:: intro
+
+            >>> greeting = "hello"
+
+        .. doctest:: intro
+            :skipif: True
+
+            >>> raise AssertionError("the skipped block ran")
+
+        .. doctest:: intro
+
+            >>> greeting.upper()
+            'HELLO'
+        """,
+    )
+
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert [example.options.get(doctest.SKIP, False) for example in test.examples] == [
+        False,
+        True,
+        False,
+    ]
+
+
+def test_an_inline_flag_overrides_a_true_skipif() -> None:
+    """An example's own ``-SKIP`` wins, as it does over ``:options: +SKIP``.
+
+    A true ``:skipif:`` joins the block's options; an example writing its own
+    flag beats them, which is the rule ``:options:`` already follows.
+    """
+    page = ".. doctest::\n    :skipif: True\n\n    >>> 2 + 2  # doctest: -SKIP\n    4\n"
+
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert test.examples[0].options[doctest.SKIP] is False
+
+
+SKIPPED_SETUP_DIRECTIVES = [
+    ("testsetup", "testsetup"),
+    ("testcleanup", "testcleanup"),
+]
+
+
+@pytest.mark.parametrize(
+    ("test_id", "directive"),
+    SKIPPED_SETUP_DIRECTIVES,
+    ids=[test_id for test_id, _ in SKIPPED_SETUP_DIRECTIVES],
+)
+def test_skipif_marks_setup_and_cleanup_blocks_skip(
+    test_id: str,
+    directive: str,
+) -> None:
+    """``:skipif:`` reaches the setup and cleanup directives that declare it.
+
+    Both list ``skipif`` in their ``option_spec``, so the option is not a
+    ``.. doctest::`` exclusive and has to behave the same on all three.
+    """
+    page = (
+        f".. {directive}:: fixture\n    :skipif: True\n\n"
+        "    >>> raise AssertionError('the skipped block ran')\n\n"
+        ".. doctest:: fixture\n\n    >>> 2 + 2\n    4\n"
+    )
+
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert sorted(
+        example.options.get(doctest.SKIP, False) for example in test.examples
+    ) == [False, True]
+
+
+SKIPIF_STANDALONE_PAGE = textwrap.dedent(
+    """
+    Standalone
+    ==========
+
+    .. doctest::
+        :skipif: True
+
+        >>> 1 / 0
+
+    .. doctest::
+
+        >>> 2 + 2
+        4
+    """,
+)
+
+
+def test_skipif_under_testdocutils(tmp_path: pathlib.Path) -> None:
+    """The standalone runner skips the block instead of never seeing it.
+
+    :class:`doctest.DocTestRunner` honours ``SKIP`` itself, so the library
+    stays usable without pytest and the skipped example is never executed.
+    """
+    page = tmp_path / "page.rst"
+    page.write_text(SKIPIF_STANDALONE_PAGE, encoding="utf-8")
+
+    results = doctest_docutils.testdocutils(
+        str(page),
+        module_relative=False,
+        report=False,
+    )
+
+    assert results.failed == 0
+
+
+class StandaloneExitFixture(t.NamedTuple):
+    """Page run through the ``python -m doctest_docutils`` entry point.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    page : str
+        reStructuredText source written to the temporary page.
+    exit_code : int
+        Status ``doctest_docutils._test`` is expected to return.
+    """
+
+    test_id: str
+    page: str
+    exit_code: int
+
+
+STANDALONE_EXIT_FIXTURES = [
+    StandaloneExitFixture(
+        test_id="a-skipped-block-alone-passes",
+        page=SKIPIF_STANDALONE_PAGE,
+        exit_code=0,
+    ),
+    StandaloneExitFixture(
+        test_id="a-real-failure-beside-it-still-fails",
+        page=SKIPIF_STANDALONE_PAGE.replace(
+            "    >>> 2 + 2\n    4\n", "    >>> 2 + 2\n    5\n"
+        ),
+        exit_code=1,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    StandaloneExitFixture._fields,
+    STANDALONE_EXIT_FIXTURES,
+    ids=[f.test_id for f in STANDALONE_EXIT_FIXTURES],
+)
+def test_skipif_exit_code_from_the_command(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    test_id: str,
+    page: str,
+    exit_code: int,
+) -> None:
+    """``python -m doctest_docutils`` exits non-zero only on a real failure."""
+    page_path = tmp_path / "page.rst"
+    page_path.write_text(page, encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["doctest_docutils", str(page_path)])
+
+    assert doctest_docutils._test() == exit_code
+
+    assert "ZeroDivisionError" not in capsys.readouterr().out
+
+
 def test_skipif_that_cannot_be_evaluated_names_its_block() -> None:
     """An expression naming something out of reach reports as that block.
 
@@ -1299,3 +1471,45 @@ def test_directive_blocks_run_from_their_own_source(
 
     assert len(tests) == collected
     assert runner.failures == 0
+
+
+def test_a_failing_block_still_fails_beside_a_skipped_one() -> None:
+    """Skipping one block of a group does not excuse the rest of it.
+
+    A namespace is one test, so a skip that quietly took the whole namespace
+    with it would turn a broken page green — the failure has to survive.
+    """
+    page = textwrap.dedent(
+        """
+Title
+=====
+
+.. doctest:: demo
+    :skipif: True
+
+    >>> 1 / 0
+
+.. doctest:: demo
+
+    >>> 2 + 2
+    5
+        """,
+    )
+
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+    runner = doctest.DocTestRunner(verbose=False)
+    runner.run(test, out=lambda _: None)
+
+    assert runner.failures == 1
+
+
+def test_a_skipped_block_must_still_parse() -> None:
+    """A skipped block is parsed, so malformed doctest source still reports.
+
+    Dropping the block hid its syntax; marking it ``SKIP`` does not. That
+    matches ``:options: +SKIP``, whose blocks have always had to parse.
+    """
+    page = ".. doctest::\n    :skipif: True\n\n    >>>print(2)\n"
+
+    with pytest.raises(ValueError, match="lacks blank after >>>"):
+        doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
