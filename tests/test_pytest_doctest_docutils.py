@@ -522,6 +522,44 @@ def demo() -> int:
     result.assert_outcomes(passed=1)
 
 
+STATE_MD = textwrap.dedent(
+    """
+# Title
+
+```python
+>>> greeting = "hello"
+>>> greeting
+'hello'
+```
+
+Narrative prose between the two blocks.
+
+```python
+>>> greeting.upper()
+'HELLO'
+```
+    """,
+)
+
+SHARED_GROUP_REST = textwrap.dedent(
+    """
+Title
+=====
+
+.. doctest:: intro
+
+    >>> greeting = "hello"
+
+Narrative prose.
+
+.. doctest:: intro
+
+    >>> greeting.upper()
+    'HELLO'
+    """,
+)
+
+
 def _write_ini(pytester: _pytest.pytester.Pytester, *lines: str) -> None:
     """Write a pytest.ini that keeps the built-in doctest plugin out."""
     pytester.makefile(
@@ -552,6 +590,54 @@ class NamespaceCollectionCase(t.NamedTuple):
 
 
 NAMESPACE_COLLECTION_CASES = [
+    NamespaceCollectionCase(
+        test_id="group-collects-as-one-item",
+        file_name="page.rst",
+        page=SHARED_GROUP_REST,
+        node_ids=["page.rst::intro"],
+    ),
+    NamespaceCollectionCase(
+        test_id="markdown-group-collects-as-one-item",
+        file_name="page.md",
+        page=textwrap.dedent(
+            """
+# Title
+
+```{doctest} intro
+>>> greeting = "hello"
+```
+
+Narrative prose.
+
+```{doctest} intro
+>>> greeting.upper()
+'HELLO'
+```
+            """,
+        ),
+        node_ids=["page.md::intro"],
+    ),
+    NamespaceCollectionCase(
+        test_id="distinct-groups-collect-separately",
+        file_name="page.rst",
+        page=textwrap.dedent(
+            """
+Title
+=====
+
+.. doctest:: alpha
+
+    >>> alpha_only = 1
+
+.. doctest:: beta
+
+    >>> alpha_only
+    Traceback (most recent call last):
+    NameError: name 'alpha_only' is not defined
+            """,
+        ),
+        node_ids=["page.rst::alpha", "page.rst::beta"],
+    ),
     NamespaceCollectionCase(
         test_id="ungrouped-blocks-collect-one-item-each",
         file_name="page.md",
@@ -588,3 +674,199 @@ def test_namespace_collection(
 
     result = pytester.runpytest(file_name)
     result.assert_outcomes(passed=len(node_ids))
+
+
+def test_node_id_selects_one_namespace(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """Running a node id runs exactly the namespace it names."""
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester)
+    (pytester.path / "page.rst").write_text(SHARED_GROUP_REST, encoding="utf-8")
+
+    result = pytester.runpytest("page.rst::intro", "-v")
+
+    result.assert_outcomes(passed=1)
+    result.stdout.fnmatch_lines(["page.rst::intro *"])
+
+
+def test_group_stops_at_the_document(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """The same group name on two pages is two namespaces.
+
+    Groups are read per document, as they are in :mod:`sphinx.ext.doctest`, so
+    one page cannot reach into the state another built.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester)
+    (pytester.path / "first.rst").write_text(
+        ".. doctest:: intro\n\n    >>> only_in_first = 1\n",
+        encoding="utf-8",
+    )
+    (pytester.path / "second.rst").write_text(
+        textwrap.dedent(
+            """
+.. doctest:: intro
+
+    >>> only_in_first
+    Traceback (most recent call last):
+    NameError: name 'only_in_first' is not defined
+            """,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(str(pytester.path))
+
+    result.assert_outcomes(passed=2)
+
+
+class NamespaceScopeOptionCase(t.NamedTuple):
+    """Namespace scope driven through the plugin's configuration.
+
+    Attributes
+    ----------
+    test_id : str
+        pytest parametrize id.
+    file_name : str
+        Page written into the pytester directory.
+    page : str
+        Page content.
+    ini_scope : str
+        Value for the ``doctest_docutils_namespace_scope`` ini option, empty to
+        leave it unset.
+    cli_args : list[str]
+        Extra command-line arguments for the run.
+    passed : int
+        Items expected to pass.
+    failed : int
+        Items expected to fail.
+    """
+
+    test_id: str
+    file_name: str
+    page: str
+    ini_scope: str
+    cli_args: list[str]
+    passed: int
+    failed: int
+
+
+NAMESPACE_SCOPE_OPTION_CASES = [
+    NamespaceScopeOptionCase(
+        test_id="unconfigured-keeps-blocks-apart",
+        file_name="page.md",
+        page=STATE_MD,
+        ini_scope="",
+        cli_args=[],
+        passed=1,
+        failed=1,
+    ),
+    NamespaceScopeOptionCase(
+        test_id="ini-document-shares-the-page",
+        file_name="page.md",
+        page=STATE_MD,
+        ini_scope="document",
+        cli_args=[],
+        passed=1,
+        failed=0,
+    ),
+    NamespaceScopeOptionCase(
+        test_id="cli-document-shares-the-page",
+        file_name="page.md",
+        page=STATE_MD,
+        ini_scope="",
+        cli_args=["--doctest-docutils-namespace-scope=document"],
+        passed=1,
+        failed=0,
+    ),
+    NamespaceScopeOptionCase(
+        test_id="cli-block-overrides-ini-document",
+        file_name="page.md",
+        page=STATE_MD,
+        ini_scope="document",
+        cli_args=["--doctest-docutils-namespace-scope=block"],
+        passed=1,
+        failed=1,
+    ),
+    NamespaceScopeOptionCase(
+        test_id="a-group-shares-whatever-the-scope-says",
+        file_name="page.rst",
+        page=SHARED_GROUP_REST,
+        ini_scope="block",
+        cli_args=[],
+        passed=1,
+        failed=0,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    NamespaceScopeOptionCase._fields,
+    NAMESPACE_SCOPE_OPTION_CASES,
+    ids=[case.test_id for case in NAMESPACE_SCOPE_OPTION_CASES],
+)
+def test_namespace_scope_option(
+    pytester: _pytest.pytester.Pytester,
+    test_id: str,
+    file_name: str,
+    page: str,
+    ini_scope: str,
+    cli_args: list[str],
+    passed: int,
+    failed: int,
+) -> None:
+    """The scope reaches the finder from the ini file or the flag, flag first."""
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        *([f"doctest_docutils_namespace_scope = {ini_scope}"] if ini_scope else []),
+    )
+    (pytester.path / file_name).write_text(page, encoding="utf-8")
+
+    result = pytester.runpytest(file_name, *cli_args)
+
+    result.assert_outcomes(passed=passed, failed=failed)
+
+
+def test_namespace_scope_rejects_an_unknown_ini_value(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A misspelled scope stops the session once, naming the values it knows."""
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester, "doctest_docutils_namespace_scope = per-file")
+    (pytester.path / "first.md").write_text(STATE_MD, encoding="utf-8")
+    (pytester.path / "second.md").write_text(STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest(str(pytester.path))
+
+    assert result.ret == pytest.ExitCode.USAGE_ERROR
+    result.stderr.fnmatch_lines(
+        ["*Unknown namespace scope: 'per-file'*block, document*"],
+    )
+    assert (
+        len(
+            [line for line in result.stderr.lines if "Unknown namespace scope" in line],
+        )
+        == 1
+    )
+
+
+def test_document_scope_survives_xdist(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A shared page passes when pytest splits the session across workers.
+
+    A namespace is one item, so no worker can be handed half of one. This is
+    the property that decided the design, which is why ``pytest-xdist`` is a
+    development dependency rather than something to skip around when absent.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester, "doctest_docutils_namespace_scope = document")
+    (pytester.path / "page.md").write_text(STATE_MD, encoding="utf-8")
+    (pytester.path / "other.md").write_text(STATE_MD, encoding="utf-8")
+
+    result = pytester.runpytest(str(pytester.path), "-n", "2")
+
+    result.assert_outcomes(passed=2)
