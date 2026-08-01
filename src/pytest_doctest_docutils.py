@@ -290,6 +290,61 @@ def pytest_configure(config: pytest.Config) -> None:
         config.pluginmanager.set_blocked("doctest")
 
 
+def _worker_count(specs: Iterable[str]) -> int:
+    """Count the execution environments a run's ``--tx`` specifications ask for.
+
+    A specification may stand for more than one environment: ``2*popen`` is
+    two. pytest-xdist expands the multiplier in ``parse_tx_spec_config`` and
+    sizes every scheduler on the result, so counting the specifications
+    themselves would undercount a run that used the shorthand and read a
+    two-worker session as a one-worker one. Reproduced rather than imported
+    because the upstream helper raises when a run names no environment at
+    all, which is a question for pytest-xdist to answer and not for a hook
+    that only wants a number.
+
+    Parameters
+    ----------
+    specs : Iterable[str]
+        ``--tx`` specifications, as argparse collected them.
+
+    Returns
+    -------
+    int
+        Environments the run has behind it.
+
+    Examples
+    --------
+    One specification is usually one environment:
+
+    >>> _worker_count(["popen", "popen"])
+    2
+
+    A multiplier stands for as many as it says:
+
+    >>> _worker_count(["2*popen"])
+    2
+
+    >>> _worker_count(["2*popen", "3*popen"])
+    5
+
+    Anything that is not a count is the specification itself, ``*`` and all:
+
+    >>> _worker_count(["popen//python=python3.13"])
+    1
+
+    >>> _worker_count([])
+    0
+    """
+    total = 0
+    for spec in specs:
+        count, star, _ = spec.partition("*")
+        try:
+            total += int(count) if star else 1
+        except ValueError:
+            total += 1
+    return total
+
+
 def _splitting_scheduler(
     items: NamespaceItems,
     scheduler: str,
@@ -528,7 +583,7 @@ def pytest_xdist_make_scheduler(config: pytest.Config, log: t.Any) -> t.Any:
     if not _splitting_scheduler(
         config.stash[_NAMESPACE_ITEMS_KEY],
         config.getoption("dist", "no"),
-        len(config.getoption("tx", None) or []),
+        _worker_count(config.getoption("tx", None) or []),
     ):
         return None
     from xdist.scheduler import (  # type: ignore[import-untyped,unused-ignore]
@@ -582,7 +637,7 @@ def pytest_xdist_node_collection_finished(node: t.Any, ids: Sequence[str]) -> No
     scheduler = _splitting_scheduler(
         config.stash[_NAMESPACE_ITEMS_KEY],
         config.getoption("dist", "no"),
-        len(config.getoption("tx", None) or []),
+        _worker_count(config.getoption("tx", None) or []),
     )
     if scheduler is None:
         return
