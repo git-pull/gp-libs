@@ -238,7 +238,7 @@ class TestDirective(Directive):
             node["trim_flags"] = True
         elif "no-trim-doctest-flags" in self.options:
             node["trim_flags"] = False
-        logger.debug("parsed %s directive", self.name)
+        logger.debug("parsed directive", extra={"doctest_block_type": self.name})
         return [node]
 
 
@@ -1198,7 +1198,11 @@ class DocutilsDocTestFinder:
             extra={"doctest_source_file": name},
         )
         if self._verbose:
-            logger.info("found %d test(s) in %s", len(anchored), name)
+            logger.info(
+                "found %d test(s)",
+                len(anchored),
+                extra={"doctest_source_file": name},
+            )
 
     def _get_test(
         self,
