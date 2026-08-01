@@ -541,7 +541,7 @@ def test_a_nested_block_collects(
 
 
 class SkipifFixture(t.NamedTuple):
-    """Directive whose ``:skipif:`` decides if its block is collected.
+    """Directive whose ``:skipif:`` decides whether its block runs.
 
     Attributes
     ----------
@@ -549,27 +549,27 @@ class SkipifFixture(t.NamedTuple):
         pytest parametrize id.
     expression : str
         Expression written on the directive's ``:skipif:`` option.
-    collected : int
-        Tests expected back from the page.
+    skipped : bool
+        Whether the block is expected to carry ``SKIP``.
     """
 
     test_id: str
     expression: str
-    collected: int
+    skipped: bool
 
 
 SKIPIF_FIXTURES = [
-    SkipifFixture(test_id="true-drops-the-block", expression="True", collected=0),
-    SkipifFixture(test_id="false-keeps-the-block", expression="False", collected=1),
+    SkipifFixture(test_id="true-skips-the-block", expression="True", skipped=True),
+    SkipifFixture(test_id="false-runs-the-block", expression="False", skipped=False),
     SkipifFixture(
         test_id="expression-sees-the-starting-globals",
         expression="__name__ == 'nonesuch'",
-        collected=1,
+        skipped=False,
     ),
     SkipifFixture(
         test_id="expression-sees-sys",
         expression="sys.version_info < (3, 10)",
-        collected=1,
+        skipped=False,
     ),
 ]
 
@@ -579,17 +579,21 @@ SKIPIF_FIXTURES = [
     SKIPIF_FIXTURES,
     ids=[f.test_id for f in SKIPIF_FIXTURES],
 )
-def test_skipif_drops_a_block_before_it_runs(
+def test_skipif_marks_its_block_skip(
     test_id: str,
     expression: str,
-    collected: int,
+    skipped: bool,
 ) -> None:
-    """A true ``:skipif:`` expression drops its block out of collection."""
+    """A true ``:skipif:`` marks its block ``SKIP`` rather than dropping it.
+
+    Both spellings of "do not run this" land on the same flag, so the block
+    stays collectable, countable, and selectable by node id either way.
+    """
     page = f".. doctest::\n    :skipif: {expression}\n\n    >>> 2 + 2\n    4\n"
 
-    tests = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
 
-    assert len(tests) == collected
+    assert test.examples[0].options.get(doctest.SKIP, False) is skipped
 
 
 def test_skipif_that_cannot_be_evaluated_names_its_block() -> None:
