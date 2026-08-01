@@ -779,6 +779,24 @@ def test_skipif_leaves_the_rest_of_its_group_running(
     )
 
 
+def test_a_gated_block_of_a_group_is_selectable(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """The item a gated block collects as answers to its own node id.
+
+    A reader who sees the skip in ``-rs`` can paste the id back to pytest and
+    get the same one line, which is what makes the report actionable.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
+    page = pytester.path / "test_doc.rst"
+    page.write_text(GATED_GROUP_REST, encoding="utf-8")
+
+    result = pytester.runpytest(f"{page}::intro[1]", "-rs")
+
+    result.assert_outcomes(skipped=1)
+
+
 def test_a_group_skipped_end_to_end_reports_skipped(
     pytester: _pytest.pytester.Pytester,
 ) -> None:
