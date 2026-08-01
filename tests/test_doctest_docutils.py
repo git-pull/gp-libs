@@ -393,3 +393,28 @@ def test_docutils_package_relative_error_message() -> None:
     exc = doctest_docutils.TestDocutilsPackageRelativeError()
 
     assert str(exc) == "Package may only be specified for module-relative paths."
+
+
+def test_inline_flags_survive_a_directive(tmp_path: pathlib.Path) -> None:
+    """A ``# doctest:`` flag applies even where the rendered code drops it.
+
+    ``.. doctest::`` trims the flag out of the code a reader sees and keeps the
+    original on the node, so the finder has to read the original.
+    """
+    page = textwrap.dedent(
+        """
+.. doctest::
+
+    >>> print("a  b")  # doctest: +NORMALIZE_WHITESPACE
+    a b
+        """,
+    )
+    page_path = tmp_path / "page.rst"
+    page_path.write_text(page, encoding="utf-8")
+
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, str(page_path))
+    runner = doctest.DocTestRunner(verbose=False)
+    runner.run(test, out=lambda _: None)
+
+    assert test.examples[0].options[doctest.NORMALIZE_WHITESPACE] is True
+    assert runner.failures == 0
