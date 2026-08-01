@@ -14,7 +14,7 @@ import docutils
 from docutils import nodes
 from docutils.parsers.rst import Directive, directives
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
-from packaging.version import Version
+from packaging.version import InvalidVersion, Version
 
 from docutils_compat import findall
 
@@ -219,10 +219,12 @@ class TestDirective(Directive):
             try:
                 spec = self.options["pyversion"]
                 python_version = ".".join([str(v) for v in sys.version_info[:3]])
-                if not is_allowed_version(spec, python_version):
+                # Sphinx, which this was ported from, spells the signature
+                # (spec, version); gp-libs reversed it. The version goes first.
+                if not is_allowed_version(python_version, spec):
                     flag = doctest.OPTIONFLAGS_BY_NAME["SKIP"]
                     node["options"][flag] = True  # Skip the test
-            except InvalidSpecifier:
+            except (InvalidSpecifier, InvalidVersion):
                 self.state.document.reporter.warning(
                     f"'{spec}' is not a valid pyversion option",
                     line=self.lineno,
