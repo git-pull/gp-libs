@@ -14,7 +14,7 @@ The disagreements are entirely about which of those four are the same object.
 | Sybil | `Region` | `Example` = one `Item` | `Document.namespace` | truthy return or exception |
 | xdoctest | `DoctestPart` | own `DocTest` | `global_namespace` | own report objects |
 | pytest-examples | `CodeExample` | the block, exec'd once | explicit `module_globals=` | captured output, or a rewrite |
-| ADR 0001 | `Block` | `DocTest` per block | one `globs` per **group**, on the `Item` | stdlib's, per block |
+| ADR 0001 | `ParsedBlock` | `DocTest` per block | one `globs` per **group**, on the `Item` | `BlockResult`/`GroupResult`, projected to stdlib's |
 
 Reading across the "shared-state unit" column against the "execution unit" column
 is the whole design problem. Sphinx and Sybil both put the shared state at a
@@ -29,10 +29,10 @@ is six process-wide integers.
 
 ## Field-by-field: what a source unit carries
 
-| Field | `Example` | `TestCode` | `Region` | `CodeExample` | `Block` (ADR 0001) |
+| Field | `Example` | `TestCode` | `Region` | `CodeExample` | `ParsedBlock` (ADR 0001) |
 |---|---|---|---|---|---|
 | source text | `source` | `code` | via `lexemes` | `source` | `source` |
-| expected output | `want` | paired separately | — | written, not read | `want` |
+| expected output | `want` | paired separately | — | written, not read | a separate `ParsedOutput` |
 | line | `lineno` (0-based, string-relative) | `lineno` | computed from span | `start_line` | `line` (nullable) |
 | byte offsets | — | — | `start`, `end` | `start_index`, `end_index` | — (deferred) |
 | dedent scalar | `indent` | — | `Lexeme.offset` | `indent` | — (deferred) |
@@ -41,20 +41,22 @@ is six process-wide integers.
 | options | `options` | `options` | — | — | `options` |
 | gate | — | `skipif` on the node | — | — | `skipif` (unevaluated) |
 | file | on the `DocTest` | `filename` | on the `Document` | `path` | `path` |
-| compile mode | — | on the *builder*, mutable | — | always exec | on the `Example` subclass |
+| compile mode | — | on the *builder*, mutable | — | always exec | on `ProjectedBlock` |
 
 Three observations.
 
-**Only pytest-examples carries byte offsets and an invertible dedent.** Those two
-fields are the entire difference between a read-only tool and one that can rewrite
-expected output later. ADR 0001 defers them, which is a decision to be revisited
-rather than a decision made.
+**Only pytest-examples carries source offsets and a recorded dedent.** They are
+Python string indices rather than byte offsets, and one indent scalar does not
+generally invert a dedent — but carrying them at all is the difference between a
+read-only tool and one that can rewrite expected output later. ADR 0001 defers
+them, which is a decision to be revisited rather than a decision made.
 
 **Compile mode is on the wrong object everywhere except ADR 0001.** Sphinx keeps
 it as mutable builder state read through a process-global patch; stdlib hard-codes
-it in the loop. Putting it on the example data is what lets it survive
-`copy.copy`, merging and any reordering, without a flag some runner has to be
-holding at the right moment.
+it in the loop. ADR 0001 puts it on the projected *block*, which is where it
+actually belongs — a block's execution policy is uniform across its examples, so
+putting it on an `Example` subclass would both over-specify and drag the
+compatibility kernel into carrying metadata.
 
 **Nobody but ADR 0001 makes the line nullable.** Every other system either always
 has a line (because it computed the span itself) or fabricates one. With a real

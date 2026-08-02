@@ -36,8 +36,9 @@ drift would occur: `_get_asyncio_mode`
 ([`:222-232`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L222-L232))
 reads the CLI value, falls back to the ini value, and calls `Mode(val)` inside a
 `try`, translating a `ValueError` into a {exc}`pytest.UsageError` that lists the
-valid modes. The lesson is not "no conversion" — it is that the conversion
-happens **once**, in one named function, with a good error.
+valid modes. It is *called* from several sites, so the value is not literally
+resolved once per session — but the conversion and its error message live in one
+named function, and that is the transferable part.
 
 Declaring its own `HookspecMarker("pytest")` namespace is the interesting one. A
 third party extends pytest-asyncio by implementing a hook, not by subclassing
@@ -89,9 +90,9 @@ the second group is warned. `pytest_configure` does exactly that for an unset
 `asyncio_default_fixture_loop_scope`
 ([`:296-301`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L296-L301)).
 
-This project has the same problem coming: ADR 0001's vocabulary change renames
-`namespace_scope` to `share`, and any future move of the block-vs-document default
-needs the same mechanism.
+This project has the same problem coming: ADR 0001 settles the vocabulary as
+`ungrouped = "default" | "block"`, and any future move of that default needs the
+same mechanism.
 
 **Normalize, then query once.** In `AUTO` mode the plugin literally adds the
 marker it would otherwise have to special-case, so downstream code has one
@@ -101,8 +102,8 @@ class of bug.
 
 **Reuse the host's vocabulary rather than inventing a parallel one.** Loop scope
 uses pytest's own `function`/`class`/`module`/`package`/`session` ladder and its
-scope names verbatim. It does not invent a third word for lifetime. Compare the
-current `namespace_scope`/`namespace_items` naming, which collides with two pytest
+scope names verbatim. It does not invent a third word for lifetime. Compare
+PR #87's `namespace_scope`/`namespace_items`, which collides with two pytest
 concepts at once.
 
 **Session-wide errors raise {exc}`pytest.UsageError`.** An invalid `asyncio_mode`

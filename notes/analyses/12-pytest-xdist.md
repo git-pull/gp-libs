@@ -71,8 +71,16 @@ cause. Worker restarts are on by default.
 | `pytest_xdist_node_collection_finished(node, ids)` | hook — observe the agreed id list |
 | `pytest_xdist_setupnodes(config, specs)` | hook — receives the already-expanded spec list; never raises |
 | `pytest_xdist_auto_num_workers(config)` | hook |
-| `LoadScopeScheduling._split_scope(nodeid) -> str` ([`loadscope.py:284`](https://github.com/pytest-dev/pytest-xdist/blob/v3.8.0/src/xdist/scheduler/loadscope.py#L284)) | subclass hook — **the only affinity primitive in the codebase** |
+| `LoadScopeScheduling._split_scope(nodeid) -> str` ([`loadscope.py:284`](https://github.com/pytest-dev/pytest-xdist/blob/v3.8.0/src/xdist/scheduler/loadscope.py#L284)) | subclass hook — the only affinity primitive *inside the shipped schedulers* |
 | `@pytest.mark.xdist_group(name)` | marker, honoured only under `--dist loadgroup` |
+
+`pytest_xdist_make_scheduler` is the broader seam: a plugin may substitute an
+entire `Scheduling` implementation, which is strictly more control than
+`_split_scope` alone. That does not rescue shared state, because the substitution
+happens controller-side and the controller only ever sees node-id strings — but
+"the only affinity seam in the codebase" overstates it, and the honest claim is
+narrower: *within the shipped schedulers*, `_split_scope` is the only affinity
+primitive.
 
 `_split_scope` is worth stating plainly: it is a pure function from a node-id
 string to a scope string, and both shipped grouping modes are two-line overrides
