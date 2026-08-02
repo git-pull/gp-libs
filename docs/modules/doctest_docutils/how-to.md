@@ -72,6 +72,88 @@ Nothing here schedules the blocks apart, so they share the namespace either way.
 Under pytest they can be scheduled apart, which is what
 {ref}`the plugin's how-to <pytest_doctest_docutils-how-to>` covers.
 
+## Write a block a reader is meant to paste
+
+A `>>>` prompt is for a session a reader reads. When the block is there to be
+copied into a file, the prompt is in the way, and an expected-output line beneath
+it puts an assertion into whatever the reader pasted. Such a page carries no
+prompt at all — and a finder that goes looking for `>>>` cannot see it.
+
+Write those blocks as `{testcode}`, the directive {mod}`sphinx.ext.doctest`
+defines. The body is plain Python, run the way a module body runs, so it takes as
+many statements as it likes and a bare expression on the last line prints
+nothing:
+
+```{testcode}
+greeting = "hello"
+shouted = greeting.upper()
+```
+
+A `{testcode}` expects to print nothing. When it does print, say what with a
+`{testoutput}` block under it:
+
+```{testcode}
+print(shouted)
+```
+
+```{testoutput}
+HELLO
+```
+
+The two blocks above share a namespace, so the second reads what the first bound.
+Every `{testcode}` and `{testoutput}` that names no group joins Sphinx's
+`default` group, which is one namespace for the page — unlike a `>>>` block,
+whose namespace the scope above decides. Name a group as the directive's
+argument, `{testcode} intro`, to keep two runs on one page apart.
+
+Because those are two different namespaces, a `{testcode}` and a `>>>` block on
+one page do not see each other's names, at any scope. Write the page one way or
+the other, or put both in a named group.
+
+A page written this way sets up the same way, with no prompt:
+
+````markdown
+```{testsetup}
+base = 40
+```
+````
+
+A `{testsetup}` and `{testcleanup}` may still be written with prompts, which is
+how the rest of these docs write them; the prompt decides how the body is read.
+A page holding a `{testcode}` puts its unnamed setup in the `default` group too,
+so the setup a prompt-free page writes reaches the code it is for.
+
+That is what lets a page assert without showing its assertions. Mark a block
+`:hide:` and it runs while every builder drops it, so the reader meets only the
+block written to be pasted:
+
+````markdown
+```{testcode}
+:hide:
+
+assert shouted == "HELLO"
+```
+````
+
+```{testcode}
+:hide:
+
+assert shouted == "HELLO"
+```
+
+The page you are reading has that hidden block in it, immediately above.
+
+`{testoutput}` takes `:options:` for the doctest flags the comparison runs under,
+and both directives take `:skipif:`. `:pyversion:` parses, because Sphinx
+declares it here, but neither Sphinx nor this runner acts on it outside
+`{doctest}` — the page says so when you use it. Guard a block with `:skipif:`
+instead.
+
+The cost of the prompt-free form is that there is no interleaving: one block is
+one example, so a `{testoutput}` says what the block prints in total rather than
+what any line in it prints. A failure quotes the block entire, so the reader sees
+where they are.
+
 ## Compare with stdlib doctest
 
 Use the stdlib command when you are checking Python modules or plain text that
