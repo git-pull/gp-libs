@@ -688,7 +688,7 @@ the narrow default set in {doc}`0004-diagnostics-as-data`.
 
 This ADR fixes the architecture. Five decisions it defers get their own records:
 {doc}`0002-runner-conformance-across-cpython` (how the owned loop is proven
-equivalent), {doc}`0003-retiring-per-block-namespace-items` (the deprecation
+equivalent), {doc}`0003-rejecting-per-block-items` (the deprecation
 path), {doc}`0004-diagnostics-as-data` (what is reported and what is suppressed),
 {doc}`0005-line-recovery-for-nested-blocks` (the optional last step), and
 {doc}`0006-pytest-private-api-compatibility` (the quarantine and its matrix).
