@@ -1820,3 +1820,165 @@ def test_per_block_refuses_a_repeated_block(
     result.stdout.fnmatch_lines(
         ["*was run twice against a namespace laid out per block*"]
     )
+
+
+TESTCODE_PAGE_MD = textwrap.dedent(
+    """
+    # Page
+
+    Visible, pasteable, no prompt:
+
+    ```{testcode}
+    value = 41
+    ```
+
+    Hidden assertion the reader never sees:
+
+    ```{testcode}
+    :hide:
+
+    assert value == 41
+    ```
+
+    Visible with expected output:
+
+    ```{testcode}
+    print(value + 1)
+    ```
+
+    ```{testoutput}
+    42
+    ```
+    """,
+)
+
+
+TESTCODE_NAMESPACE_CASES = [
+    ("block-merged", "block", "merged", 1),
+    ("document-merged", "document", "merged", 1),
+    ("block-per-block", "block", "per-block", 3),
+    ("document-per-block", "document", "per-block", 3),
+]
+
+
+@pytest.mark.parametrize(
+    ("test_id", "scope", "items", "passed"),
+    TESTCODE_NAMESPACE_CASES,
+    ids=[case[0] for case in TESTCODE_NAMESPACE_CASES],
+)
+def test_a_prompt_free_page_passes_at_every_namespace_setting(
+    pytester: _pytest.pytester.Pytester,
+    test_id: str,
+    scope: str,
+    items: str,
+    passed: int,
+) -> None:
+    """The page a reader pastes out of runs under every namespace setting.
+
+    The blocks share the ``default`` group whatever the scope, so the layout
+    decides only how many items they collect as.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(
+        pytester,
+        f"doctest_docutils_namespace_scope = {scope}",
+        f"doctest_docutils_namespace_items = {items}",
+    )
+    (pytester.path / "page.md").write_text(TESTCODE_PAGE_MD, encoding="utf-8")
+
+    result = pytester.runpytest("page.md")
+
+    result.assert_outcomes(passed=passed)
+
+
+def test_a_prompt_free_page_collects_as_its_group(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """The node id a reader pastes back names the group, not a block index."""
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester)
+    (pytester.path / "page.md").write_text(TESTCODE_PAGE_MD, encoding="utf-8")
+
+    items, _ = pytester.inline_genitems("page.md")
+
+    assert [item.name for item in items] == ["default"]
+
+
+def test_a_failing_testoutput_reports_against_its_page(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A mismatch reports as an ordinary doctest failure on the page's line."""
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester)
+    (pytester.path / "page.md").write_text(
+        "```{testcode}\nprint(41 + 1)\n```\n\n```{testoutput}\n99\n```\n",
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest("page.md")
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(["*Expected:*", "*99*", "*Got:*", "*42*"])
+
+
+def test_the_canonical_sphinx_page_passes(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A page copied out of the Sphinx docs collects and passes as one item.
+
+    Nothing on it carries a prompt: :mod:`sphinx.ext.doctest` runs a
+    ``{testsetup}`` body through ``exec`` and rejects ``>>>`` outright, so the
+    setup, the code and the hidden assertion are all plain Python.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester)
+    (pytester.path / "page.md").write_text(
+        textwrap.dedent(
+            """
+            # Page
+
+            ```{testsetup}
+            base = 40
+            ```
+
+            ```{testcode}
+            print(base + 2)
+            ```
+
+            ```{testoutput}
+            42
+            ```
+
+            ```{testcode}
+            :hide:
+
+            assert base == 40
+            ```
+            """,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest("page.md")
+
+    result.assert_outcomes(passed=1)
+
+
+def test_a_failing_testcode_reports_the_whole_block(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """The report quotes every line of the block and lands inside it."""
+    pytester.plugins = ["pytest_doctest_docutils"]
+    _write_ini(pytester)
+    (pytester.path / "page.md").write_text(
+        "# Page\n\n```{testcode}\na = 1\nb = 2\nraise ValueError('boom')\n```\n",
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest("page.md")
+
+    result.assert_outcomes(failed=1)
+    result.stdout.fnmatch_lines(
+        ["004 a = 1", "005 b = 2", "006 raise ValueError('boom')"],
+    )
+    result.stdout.fnmatch_lines(["*page.md:6: UnexpectedException*"])

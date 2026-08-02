@@ -2465,3 +2465,508 @@ def test_merging_reads_its_blocks_rather_than_consuming_them() -> None:
     assert [
         example.lineno for block in blocks for example in block.examples
     ] == originals
+
+
+TESTCODE_PAGE_MD = textwrap.dedent(
+    """
+    # Page
+
+    Visible, pasteable, no prompt:
+
+    ```{testcode}
+    value = 41
+    ```
+
+    Hidden assertion the reader never sees:
+
+    ```{testcode}
+    :hide:
+
+    assert value == 41
+    ```
+
+    Visible with expected output:
+
+    ```{testcode}
+    print(value + 1)
+    ```
+
+    ```{testoutput}
+    42
+    ```
+    """,
+)
+
+
+def _run_page(
+    tmp_path: pathlib.Path, source: str, **kwargs: t.Any
+) -> doctest.TestResults:
+    """Run one page through ``testdocutils`` with its report swallowed."""
+    page = tmp_path / kwargs.pop("filename", "page.md")
+    page.write_text(source, encoding="utf-8")
+    with contextlib.redirect_stdout(io.StringIO()):
+        return doctest_docutils.testdocutils(
+            str(page),
+            module_relative=False,
+            report=False,
+            **kwargs,
+        )
+
+
+def test_a_page_without_a_prompt_collects() -> None:
+    """A page a reader can paste out of is one namespace of three examples.
+
+    A ``{testcode}`` carries no ``>>>``, which is the whole reason the pages
+    it is written for were invisible to the finder.
+    """
+    tests = doctest_docutils.DocutilsDocTestFinder().find(TESTCODE_PAGE_MD, "page.md")
+
+    assert [(test.name, len(test.examples)) for test in tests] == [("default", 3)]
+
+
+def test_a_page_without_a_prompt_passes(tmp_path: pathlib.Path) -> None:
+    """The hidden block reads what the visible one bound, and asserts on it."""
+    assert _run_page(tmp_path, TESTCODE_PAGE_MD) == doctest.TestResults(
+        failed=0,
+        attempted=3,
+    )
+
+
+def test_a_hidden_testcode_asserts_for_real(tmp_path: pathlib.Path) -> None:
+    """The hidden block is a test, not decoration: a false one fails the page."""
+    broken = TESTCODE_PAGE_MD.replace("assert value == 41", "assert value == 999")
+
+    assert _run_page(tmp_path, broken).failed == 1
+
+
+def test_a_hidden_testcode_leaves_the_rendered_page() -> None:
+    """``:hide:`` turns the block into a comment, as in :mod:`sphinx.ext.doctest`.
+
+    Every builder drops a comment, so the reader meets only the block written
+    to be pasted.
+    """
+    import docutils.core
+    from docutils import nodes
+
+    doctest_docutils._ensure_directives_registered()
+    page = (
+        ".. testcode::\n\n    value = 41\n\n"
+        ".. testcode::\n    :hide:\n\n    assert value == 41\n"
+    )
+
+    doctree = docutils.core.publish_doctree(page)
+
+    assert [
+        (node.tagname, node.astext())
+        for node in doctree.findall(nodes.Element)
+        if node.get("testnodetype")
+    ] == [
+        ("literal_block", "value = 41"),
+        ("comment", "assert value == 41"),
+    ]
+
+
+def test_a_bare_expression_in_testcode_reports_no_output(
+    tmp_path: pathlib.Path,
+) -> None:
+    """``exec`` mode echoes nothing, so a bare expression is not a failure.
+
+    ``single`` mode would print the value and report it as output the block
+    never said to expect.
+    """
+    page = "```{testcode}\nvalue = 41\nvalue\n```\n"
+
+    assert _run_page(tmp_path, page) == doctest.TestResults(failed=0, attempted=1)
+
+
+def test_a_multi_statement_testcode_body_runs(tmp_path: pathlib.Path) -> None:
+    """``single`` mode takes one statement; a pasteable block takes many."""
+    page = (
+        "```{testcode}\nfirst = 1\nsecond = first + 1\nprint(second + 1)\n```\n"
+        "\n```{testoutput}\n3\n```\n"
+    )
+
+    assert _run_page(tmp_path, page) == doctest.TestResults(failed=0, attempted=1)
+
+
+ECHO_FIXTURES = [
+    ("a-block-that-expects-the-echo", "```python\n>>> 2 + 2\n4\n```\n", 0),
+    ("a-block-that-expects-nothing", "```python\n>>> 2 + 2\n```\n", 1),
+]
+
+
+@pytest.mark.parametrize(
+    ("test_id", "page", "failed"),
+    ECHO_FIXTURES,
+    ids=[fixture[0] for fixture in ECHO_FIXTURES],
+)
+def test_a_prompt_keeps_its_echo(
+    tmp_path: pathlib.Path,
+    test_id: str,
+    page: str,
+    failed: int,
+) -> None:
+    """A ``>>>`` example still compiles in ``single`` mode.
+
+    The second page proves the echo is real rather than merely tolerated: a
+    bare expression that printed nothing would pass it.
+    """
+    assert _run_page(tmp_path, page).failed == failed
+
+
+def test_testoutput_checks_the_block_above_it(tmp_path: pathlib.Path) -> None:
+    """The output a ``{testcode}`` prints is compared against the block below."""
+    page = "```{testcode}\nprint(41 + 1)\n```\n\n```{testoutput}\n99\n```\n"
+
+    assert _run_page(tmp_path, page).failed == 1
+
+
+def test_testoutput_options_reach_the_example(tmp_path: pathlib.Path) -> None:
+    """``:options:`` on the output block set the flags the check runs under."""
+    page = (
+        "```{testcode}\nprint('a long line of output')\n```\n\n"
+        "```{testoutput}\n:options: +ELLIPSIS\n\na long ... output\n```\n"
+    )
+
+    assert _run_page(tmp_path, page) == doctest.TestResults(failed=0, attempted=1)
+
+
+def test_testoutput_can_expect_an_exception(tmp_path: pathlib.Path) -> None:
+    """A traceback in the output block is checked as an exception, not as text."""
+    page = (
+        "```{testcode}\nraise ValueError('boom')\n```\n\n"
+        "```{testoutput}\nTraceback (most recent call last):\n"
+        "  ...\nValueError: boom\n```\n"
+    )
+
+    assert _run_page(tmp_path, page) == doctest.TestResults(failed=0, attempted=1)
+
+
+def test_a_stray_testoutput_is_dropped(caplog: pytest.LogCaptureFixture) -> None:
+    """Output with no block above it checks nothing, and says so.
+
+    Collecting it as a test of its own would report a pass for an expectation
+    nothing ever produced.
+    """
+    page = "```{testoutput}\n42\n```\n"
+
+    with caplog.at_level(logging.WARNING, logger="doctest_docutils"):
+        tests = doctest_docutils.DocutilsDocTestFinder().find(page, "page.md")
+
+    assert tests == []
+    assert [
+        record.doctest_block_type
+        for record in caplog.records
+        if hasattr(record, "doctest_block_type")
+    ] == ["testoutput"]
+
+
+TESTCODE_NAMESPACE_FIXTURES = [
+    ("block-merged", "block", "merged", ["default"]),
+    ("document-merged", "document", "merged", ["default"]),
+    ("block-per-block", "block", "per-block", ["default[0]", "default[1]"]),
+    ("document-per-block", "document", "per-block", ["default[0]", "default[1]"]),
+]
+
+
+@pytest.mark.parametrize(
+    ("test_id", "scope", "items", "names"),
+    TESTCODE_NAMESPACE_FIXTURES,
+    ids=[fixture[0] for fixture in TESTCODE_NAMESPACE_FIXTURES],
+)
+def test_testcode_shares_its_group_at_every_setting(
+    test_id: str,
+    scope: str,
+    items: str,
+    names: list[str],
+) -> None:
+    """A ``{testcode}`` keeps the ``default`` group whatever the scope says.
+
+    The scope names the namespace of a block that declared *no* group; a
+    ``{testcode}`` always declares one, so the visible block and the hidden
+    one asserting on it stay together.
+    """
+    page = "```{testcode}\nvalue = 41\n```\n\n```{testcode}\nassert value == 41\n```\n"
+
+    finder = doctest_docutils.DocutilsDocTestFinder(
+        namespace_scope=t.cast("t.Any", scope),
+        namespace_items=t.cast("t.Any", items),
+    )
+
+    assert [test.name for test in finder.find(page, "page.md")] == names
+
+
+def test_skipif_gates_a_testcode(tmp_path: pathlib.Path) -> None:
+    """A gated ``{testcode}`` is skipped rather than run and failed."""
+    page = "```{testcode}\n:skipif: True\n\nraise AssertionError('never run')\n```\n"
+
+    assert _run_page(tmp_path, page) == doctest.TestResults(failed=0, attempted=1)
+
+
+def test_a_testsetup_of_the_group_runs_before_a_testcode(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Phase order holds with a ``{testcode}`` in the namespace.
+
+    The setup block is written below the code it sets up, and still runs
+    first. It is written with prompts, which a page may keep doing.
+    """
+    page = (
+        "```{testcode} demo\nassert base == 40\nprint(base + 2)\n```\n\n"
+        "```{testoutput} demo\n42\n```\n\n"
+        "```{testsetup} demo\n>>> base = 40\n```\n"
+    )
+
+    assert _run_page(tmp_path, page) == doctest.TestResults(failed=0, attempted=2)
+
+
+def test_testcode_reaches_the_command(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``python -m doctest_docutils`` runs a prompt-free page too.
+
+    The command never loads pytest, so the mode a ``{testcode}`` runs under
+    cannot come from the plugin.
+    """
+    page = tmp_path / "page.md"
+    page.write_text(TESTCODE_PAGE_MD, encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["doctest_docutils", str(page)])
+
+    assert doctest_docutils._test() == 0
+
+    broken = tmp_path / "broken.md"
+    broken.write_text(
+        TESTCODE_PAGE_MD.replace("assert value == 41", "assert value == 999"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sys.argv", ["doctest_docutils", str(broken)])
+
+    assert doctest_docutils._test() == 1
+    assert "AssertionError" in capsys.readouterr().out
+
+
+def test_the_exec_mode_seam_leaves_the_doctest_module_alone() -> None:
+    """The mode rides on one function object, not on :mod:`doctest`.
+
+    :mod:`sphinx.ext.doctest` rebinds ``doctest.compile`` for the process and
+    never puts it back. gp-libs loads into every pytest session through its
+    ``pytest11`` entry point, so the rebinding stays inside the runner it was
+    made for — and the seam it needs is pinned here, because a CPython that
+    stopped resolving ``compile`` as a global would break it silently.
+    """
+    stock = doctest.DocTestRunner._DocTestRunner__run  # type: ignore[attr-defined]
+
+    assert "compile" not in vars(doctest)
+    assert "compile" in stock.__code__.co_names
+    # A closure would need its cells rebuilt, and rebuilding a function without
+    # them raises nothing — it just misbehaves.
+    assert stock.__code__.co_freevars == ()
+    assert (
+        doctest_docutils._ExecModeRunner._DocTestRunner__run.__globals__["compile"]
+        is doctest_docutils._compile_source
+    )
+
+
+def test_two_groups_running_interleaved_each_get_their_output() -> None:
+    """A ``{testoutput}`` answers its own group, not whichever block sits above.
+
+    :meth:`sphinx.ext.doctest.TestGroup.add_code` keeps a list per group and
+    pairs an output with that group's latest block, so a page may run two
+    groups' blocks alternately.
+    """
+    page = textwrap.dedent(
+        """
+        ```{testcode} alpha
+        print("A")
+        ```
+
+        ```{testcode} beta
+        print("B")
+        ```
+
+        ```{testoutput} alpha
+        A
+        ```
+
+        ```{testoutput} beta
+        B
+        ```
+        """,
+    )
+    finder = doctest_docutils.DocutilsDocTestFinder()
+
+    tests = finder.find(page, "page.md")
+
+    assert {test.name: test.examples[0].want for test in tests} == {
+        "alpha": "A\n",
+        "beta": "B\n",
+    }
+
+
+def test_a_block_between_a_testcode_and_its_output_closes_the_pairing() -> None:
+    """Only the group's latest block takes an output, as under Sphinx.
+
+    ``sphinx-build -b doctest`` fails this page: the ``{doctest}`` block lands
+    in the same group and leaves the ``{testcode}`` expecting nothing.
+    """
+    page = textwrap.dedent(
+        """
+        ```{testcode}
+        print("A")
+        ```
+
+        ```{doctest}
+        >>> 1 + 1
+        2
+        ```
+
+        ```{testoutput}
+        A
+        ```
+        """,
+    )
+    finder = doctest_docutils.DocutilsDocTestFinder()
+
+    tests = finder.find(page, "page.md")
+
+    assert [example.want for test in tests for example in test.examples] == [
+        "",
+        "2\n",
+    ]
+
+
+def test_a_prompt_free_testsetup_runs(tmp_path: pathlib.Path) -> None:
+    """A page copied out of the Sphinx docs works, prompts and all absent.
+
+    :mod:`sphinx.ext.doctest` runs a ``{testsetup}`` body through the same
+    ``exec`` its ``{testcode}`` uses and rejects a ``>>>`` outright, so the
+    canonical page carries no prompt anywhere.
+    """
+    page = textwrap.dedent(
+        """
+        ```{testsetup}
+        base = 40
+        ```
+
+        ```{testcode}
+        print(base + 2)
+        ```
+
+        ```{testoutput}
+        42
+        ```
+        """,
+    )
+
+    assert _run_page(tmp_path, page) == doctest.TestResults(failed=0, attempted=2)
+
+
+def test_a_prompt_style_testsetup_reaches_an_unnamed_testcode(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Both spellings of a setup body feed the same page.
+
+    gp-libs has always written a ``{testsetup}`` with prompts, so the prompt
+    decides how the body is read rather than the directive.
+    """
+    page = textwrap.dedent(
+        """
+        ```{testsetup}
+        >>> base = 40
+        ```
+
+        ```{testcode}
+        print(base + 2)
+        ```
+
+        ```{testoutput}
+        42
+        ```
+        """,
+    )
+
+    assert _run_page(tmp_path, page) == doctest.TestResults(failed=0, attempted=2)
+
+
+def test_a_page_of_prompt_blocks_keeps_the_setup_it_had() -> None:
+    """An unnamed ``{testsetup}`` follows the prompt blocks when no testcode does.
+
+    The implicit ``default`` group widens to the setup phase only for the pages
+    that need it, so a page written before ``{testcode}`` existed collects
+    exactly the namespaces it always did.
+    """
+    page = textwrap.dedent(
+        """
+        ```{testsetup}
+        >>> base = 40
+        ```
+
+        ```python
+        >>> base + 2
+        42
+        ```
+        """,
+    )
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_scope="document")
+
+    (test,) = finder.find(page, "page.md")
+
+    assert test.name == "page.md"
+    assert len(test.examples) == 2
+
+
+def test_a_failing_testcode_quotes_the_whole_block() -> None:
+    """The report shows the block and lands inside it, not on its opening line.
+
+    pytest quotes ``lines[example.lineno - 9 : example.lineno + 1]`` and sends
+    the reader to ``test.lineno + example.lineno + 1``.
+    """
+    page = (
+        "# Page\n\n```{testcode}\na = 1\nb = 2\nc = 3\nraise ValueError('boom')\n```\n"
+    )
+    finder = doctest_docutils.DocutilsDocTestFinder()
+
+    (test,) = finder.find(page, "page.md")
+    (example,) = test.examples
+
+    assert example.lineno == 3
+    assert (test.lineno or 0) + example.lineno + 1 == 7
+
+
+def test_pyversion_on_a_testcode_says_it_does_nothing(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A declared option that is ignored has to say so.
+
+    :mod:`sphinx.ext.doctest` declares ``:pyversion:`` on ``{testcode}`` and
+    acts on it only for ``{doctest}``. Honouring it here would pass a page
+    Sphinx fails; refusing it would fail a page Sphinx renders.
+    """
+    page = ".. testcode::\n   :pyversion: < 3.0\n\n   ran = True\n"
+
+    (test,) = doctest_docutils.DocutilsDocTestFinder().find(page, "page.rst")
+
+    assert test.examples[0].options.get(doctest.SKIP, False) is False
+    assert "'pyversion' has no effect on 'testcode'" in capsys.readouterr().err
+
+
+def test_the_exec_mode_seam_degrades_instead_of_failing_to_import() -> None:
+    """A moved private method must not break unrelated sessions.
+
+    gp-libs loads through its ``pytest11`` entry point into every session that
+    has it installed, so an interpreter without the seam leaves CPython's loop
+    in place. ``{testcode}`` is what stops working, and
+    ``test_the_exec_mode_seam_leaves_the_doctest_module_alone`` is where that
+    is caught loudly.
+    """
+    stock = doctest.DocTestRunner._DocTestRunner__run  # type: ignore[attr-defined]
+    try:
+        del doctest.DocTestRunner._DocTestRunner__run  # type: ignore[attr-defined]
+
+        assert doctest_docutils._exec_mode_run() is None
+    finally:
+        doctest.DocTestRunner._DocTestRunner__run = stock  # type: ignore[attr-defined]
+
+    assert doctest_docutils._exec_mode_run() is not None
