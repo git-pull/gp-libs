@@ -69,11 +69,17 @@ structural, not incidental:
 
 Every one of these evaporates when the item is the sharing unit.
 
-## Test identity: never positional
+## Test identity: never source-coordinate-derived
 
-Two of the surveyed projects derive node ids from position — Sybil's
+Two of the surveyed projects derive node ids from **source coordinates** —
+Sybil's
 [`line:{line},column:{column}`](https://github.com/simplistix/sybil/blob/10.0.1/src/sybil/sybil.py#L155-L157)
 and pytest-examples' `path:start-end`.
+
+An **ordinal among the extracted blocks** is a different thing and is fine. It is
+not a source coordinate: `page.md[3]` is unchanged by a paragraph inserted above
+it, which is exactly the edit that renames a `line:N` id. Released
+`doctest_docutils` names its tests that way already, and the rule preserves it.
 
 For a *documentation* test runner this is indefensible, because prose above
 examples is the thing that changes most often. Adding a sentence renames every

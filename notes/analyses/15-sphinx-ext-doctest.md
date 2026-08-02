@@ -33,11 +33,13 @@ losses live: an orphan `testoutput` is discarded; a `testoutput` following a
 `doctest` block is discarded, because a doctest entry has length 1 and fails the
 `len(latest_test) == 2` guard; and a second `testoutput` *replaces* the first.
 
-A fourth silent loss is in the directive rather than `add_code`: `:pyversion:` is
-in `TestcodeDirective.option_spec`
+A fourth silent loss is in the directives rather than `add_code`: `:pyversion:` is
+declared on **both** `testcode`
 ([`:174-180`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L174-L180))
-and is then ignored, because the version gate only runs for `doctest` and
-`testoutput`.
+and `testoutput`
+([`:184-190`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L184-L190)),
+and honoured on neither — the version gate runs only for `doctest`. An author who
+writes it on either gets no error and no gate.
 
 `:options:` on a `testcode` is **not** a silent loss. It is absent from
 `TestcodeDirective.option_spec` entirely, so writing it is an unknown-option

@@ -85,10 +85,10 @@ needs it. Applied to the candidates that came up:
 
 | Candidate | Verdict |
 |---|---|
-| `BlockKind` registry | **Yes.** Turns "a new block kind" from an edit to a method branching on string literals into adding a tuple. Its `node_types` field is what keeps the `nodes.comment` requirement reviewable rather than buried in a `findall` call |
+| `BlockKind` registry | **Yes.** Turns "a new block kind" from an edit to a method branching on string literals into adding a tuple. Which docutils node classes a kind arrives as stays in `markup/`, not on `BlockKind`, so the leaf keeps its stdlib-only contract |
 | Output checker injection | **Yes.** The highest-demand seam, and the one Sybil closed entirely by hard-coding `checker=OutputChecker()` — adding one there requires subclassing two classes |
 | `Frontend` protocol | **Yes.** Four implementations ship on day one (rST, MyST, text, Python docstrings) |
-| Compile-policy callable | **No.** One implementation, and a second would have to reproduce the `<doctest name[i]>` filename shape or break `linecache` |
+| `ExecutionProfile` (private) | **Yes, private.** [PR #59](https://github.com/git-pull/gp-libs/pull/59) adds top-level `await` — a second execution policy a `Literal["single", "exec"]` cannot express. Stays private until an out-of-tree caller exists |
 | A per-example observer protocol | **No.** pytest gets failures through `report_*` and `MultipleDoctestFailures`; the CLI uses `summarize()`. No third consumer |
 | A registry *object* with builders, digests and manifests | **No.** Two module-level dicts and two `register_*` functions do the same work |
 | Entry-point plugin discovery | **No.** Not until a caller outside the package exists. It also breaks xdist's collection-purity requirement, since discovery is an import side effect rather than a function of (files, argv, ini) |

@@ -10,7 +10,7 @@ The disagreements are entirely about which of those four are the same object.
 |---|---|---|---|---|
 | CPython `doctest` | `Example` | `DocTest` | `DocTest.globs` | `TestResults` (2 ints + an attribute) |
 | `_pytest.doctest` | `Example` | `DocTest` = one `Item` | `DocTest.globs`, wiped per item | `MultipleDoctestFailures` → `ReprFailDoctest` |
-| `sphinx.ext.doctest` | `TestCode` | `TestGroup` | `ns` assigned post-construction | six ints + text to a file |
+| `sphinx.ext.doctest` | `TestCode` | one `DocTest` **per block** (`TestGroup` is the batching unit, not the execution unit) | `ns`, assigned post-construction to every block's `DocTest` | six ints + text to a file |
 | Sybil | `Region` | `Example` = one `Item` | `Document.namespace` | truthy return or exception |
 | xdoctest | `DoctestPart` | own `DocTest` | `global_namespace` | own report objects |
 | pytest-examples | `CodeExample` | the block, exec'd once | explicit `module_globals=` | captured output, or a rewrite |
@@ -18,9 +18,14 @@ The disagreements are entirely about which of those four are the same object.
 
 Reading across the "shared-state unit" column against the "execution unit" column
 is the whole design problem. Sphinx and Sybil both put the shared state at a
-coarser granularity than the execution unit; only Sphinx also puts the *pytest
-item* at that same coarser granularity, which is why Sphinx never hits Sybil's
-`-k` failure.
+coarser granularity than the execution unit. Sphinx gets away with it by having
+no selectable unit at all — it is a builder, not a test runner, so there is
+nothing for a `-k` to split. Sybil does not: it hands out one pytest item per
+span over one shared mapping, which is the failure.
+
+Three units are easy to conflate for Sphinx specifically, so keep them apart: the
+**runner call** is per block, the **shared state** is per group, and the **result**
+is six process-wide integers.
 
 ## Field-by-field: what a source unit carries
 
