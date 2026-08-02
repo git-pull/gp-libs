@@ -13,12 +13,18 @@ Date: 2026-08-02
 over a docutils or MyST doctree and keeps CPython's *running* half.
 `pytest_doctest_docutils` wraps that in a pytest plugin.
 
-Two facts about the shipped code set the problem.
+**Released gp-libs already has per-block identity, and no sharing unit at all.**
+`DocutilsDocTestFinder._find` walks the doctree and appends one
+{class}`doctest.DocTest` per matched node, named `page.md[k]` where `k` is the
+document-order index. The collector yields one {class}`pytest.DoctestItem` per
+test. Each test is built by handing `globs` to
+{meth}`doctest.DocTestParser.get_doctest`, and `DocTest.__init__` **copies** the
+mapping — so every block runs against its own isolated namespace.
 
-**A page is one test.** `DocutilsDocTestFinder` produces a single
-{class}`doctest.DocTest` per document. A page cannot build state across the prose
-that explains it, because there is no unit smaller than the page and no unit that
-groups blocks within one.
+That is the real starting point, and it frames the problem precisely: the
+granularity this design wants to *preserve* is already shipped. What is missing
+is any unit coarser than a block — no groups, no phases, no way for a narrative
+page to build state across the prose that explains it.
 
 **The plugin blocks the plugin whose internals it imports.**
 `pytest_configure` calls `config.pluginmanager.set_blocked("doctest")`, and the
@@ -81,7 +87,12 @@ Sybil ships the second shape without acknowledging it (see [](#prior-art)).
 
 ## Decision
 
-**The pytest item is the group. The {class}`doctest.DocTest` is the block.**
+**One pytest item owns one shared-state group; inside it, each source block
+remains a real, independent {class}`doctest.DocTest`.**
+
+The decoupling is not "group versus block". It is **scheduling identity versus
+diagnostic identity**: pytest schedules the group, while each `DocTest` keeps its
+own source location, examples and failure gutter.
 
 One {class}`pytest.Item` per (document, group). Inside it, a tuple of per-block
 `DocTest`s run in phase order against one live `globs` mapping that never leaves
@@ -211,6 +222,17 @@ This design takes the same position: **skip the item when every runnable block i
 skipped; otherwise report partial skips as typed block detail, not as a pytest
 outcome.** No extra reports are synthesized.
 
+"Typed block detail" needs a channel, or implementers will re-invent skip lifting
+or write to stderr. The channel is a `GroupResult` — one `BlockResult` per block,
+each carrying phase, outcome, gate reason and location — attached to the item and
+rendered in two places: the failure longrepr when the group fails, and a
+terminal-summary line at `-rs`. It is **not** visible at default verbosity, and
+it never becomes a JUnit `<skipped>` entry.
+
+That is a real product loss relative to lifting a gated block into its own item,
+and it is accepted deliberately: **a gated block inside a mixed group gives up its
+selectable skip row.** The information survives; the addressable unit does not.
+
 `subtests` — a builtin pytest plugin since 9.0, exporting `pytest.Subtests` and
 `pytest.SubtestReport` — can emit per-block outcomes, and is the only sanctioned
 mechanism that can. It is not adopted here: pytest documents it as experimental,
@@ -261,18 +283,26 @@ an implementer cannot get it wrong by omission:
 
 1. **Collection** builds one `GroupPlan` per (document, group) and one item per
    plan. An empty plan yields no item.
-2. **`setup()`** clears the group mapping in place, then calls `super().setup()`
-   so fixtures inject into that same object. Clearing in place rather than
-   rebinding is what keeps `item.globs is plan.globs` true for every block, and
-   what stops attempt two of a `--reruns` run from reading attempt one's
-   mutations.
+2. **`setup()`** starts an attempt. In order: clear the live mapping **in place**;
+   restore the plan's `seed`, `extraglobs` and `__name__`; then call
+   `super().setup()` so fixtures inject into that same object. Clearing in place
+   rather than rebinding is what keeps `item.globs is run.globs` true for every
+   block, and what stops attempt two of a `--reruns` run from reading attempt
+   one's mutations. Every block's `DocTest.globs` is assigned this object *after*
+   construction, because `DocTest.__init__` copies.
 3. **`runtest()`** is overridden. It must not delegate to
    `DoctestItem.runtest`, which runs a single `dtest` with `clear_globs`
    defaulting to `True` — that would empty the shared mapping after the first
    block. It calls `run_group()`, which runs each `PlannedBlock` in phase order
-   with `clear_globs=False`, evaluates `:skipif:` against the group mapping, and
-   wraps the body in a `try`/`finally` so cleanup runs whether or not the body
-   raised.
+   with `clear_globs=False`, evaluates `:skipif:` against the live mapping,
+   finalizes each paired `want` from its gated `ExpectedOutput`, and wraps the
+   body in a `try`/`finally` so cleanup runs whether or not the body raised. When
+   cleanup *also* fails, the body's failure is the one raised; cleanup's is
+   recorded in the `GroupResult`.
+
+   The `OutcomeException` re-raise, the `bdb.BdbQuit` → `outcomes.exit`
+   conversion and `continue_on_failure` are reimplemented here, because
+   `PytestDoctestRunner` is nested inside a factory and cannot be imported.
 4. **Outcome** follows [](#the-outcome-contract): skip the item only when every
    runnable block is skipped.
 5. **`repr_failure`** is inherited unchanged. It already reads each failure's own
@@ -335,8 +365,27 @@ class PlannedBlock(t.NamedTuple):
 
 class GroupPlan(t.NamedTuple):
     group: str
-    blocks: tuple[PlannedBlock, ...]  # in phase order
-    globs: dict[str, t.Any]  # the live mapping, shared by every block above
+    blocks: tuple[PlannedBlock, ...]  # in phase order; IMMUTABLE
+    seed: t.Mapping[str, t.Any]  # initial namespace; copied per attempt
+
+
+class GroupRun:
+    """One execution attempt. Owns the live mapping; a plan never does."""
+
+    plan: GroupPlan
+    globs: dict[str, t.Any]  # cleared and reseeded per attempt
+
+
+class BlockResult(t.NamedTuple):
+    block: PlannedBlock
+    outcome: t.Literal["passed", "failed", "skipped"]
+    reason: str | None  # the gate expression, when skipped
+
+
+class GroupResult(t.NamedTuple):
+    group: str
+    blocks: tuple[BlockResult, ...]
+    failures: tuple[doctest.DocTestFailure | doctest.UnexpectedException, ...]
 ```
 
 `Block.line` being nullable is load-bearing, not defensive. A bare `>>>` block
@@ -350,6 +399,25 @@ source=None` from docutils, and an `.. include::`-ed block numbers against the
 from a bare tuple of `DocTest`s. A `DocTest` carries no phase and no gate, so the
 plan has to. Tagging each entry also makes the ordering self-describing rather
 than a convention a comment asserts.
+
+**A `PlannedBlock.test` cannot always be fully preconstructed.** Sphinx accepts
+`:skipif:` on a `testoutput`, and when that output is gated away its `testcode`
+still runs — expecting *empty* output. So the `want` of a paired block is a
+function of a gate evaluated at run time, and the plan must carry the paired
+output as data (`ExpectedOutput`, itself gated) with the `DocTest` finalized in
+`run_group()`. Freezing `want` at projection time silently runs the wrong
+assertion.
+
+**A wildcard block needs a distinct `DocTest` per group it joins.** `DocTest.globs`
+is a plain mutable attribute, so one object shared across two `GroupPlan`s would
+have the second group's assignment win and both groups would execute against one
+mapping. `*` membership therefore materializes a separate `DocTest` per group.
+
+**The gate's evaluation namespace is a deliberate divergence.** Sphinx evaluates
+each `:skipif:` in a fresh context seeded with `doctest_global_setup`; this design
+evaluates it against the live group mapping, after fixture injection and after
+earlier blocks have run. That is more useful — a gate can consult a fixture — and
+it is not what `sphinx-build` does. Recorded rather than hidden.
 
 `ExecutionProfile` is a **private** protocol carrying compile mode, extra compile
 flags, and an optional per-group context manager. It is not a `Literal["single",
@@ -450,8 +518,9 @@ that owns the loop must probe for it rather than assume it.
 
 Making the item the sharing unit removes the need to satisfy the second and third
 at all. **The first still binds at any granularity** — identical collection is
-required whether a page yields one item or fifty — and is satisfied instead by
-collection being a pure function of (bytes, argv, ini). The fourth is why a
+required whether a page yields one item or fifty — and is approached instead
+through determinism over source closure, normalized settings and a frozen
+registry, not through a purity claim collection cannot make. The fourth is why a
 worker-count fork is not worth carrying: `pytest_xdist_setupnodes(config, specs)`
 hands over the already-expanded spec list and never raises.
 
@@ -482,15 +551,50 @@ Each is a genuine conflict where satisfying one goal costs another. "Both" is no
 an answer; the position taken and its price are recorded.
 
 **A vanilla `DocTest` cannot carry the front-end's metadata.** It has exactly
-`(examples, globs, name, filename, lineno, docstring)`. *Position:* metadata that
-the runner needs rides on a nominal {class}`doctest.Example` subclass —
-`doctest.Example` has no `__slots__`, so attributes survive
-{func}`copy.copy`, {mod}`pickle`, and a third party's naive
+`(examples, globs, name, filename, lineno, docstring)`. *Position:* metadata the
+runner needs at run time rides on a {class}`doctest.Example` subclass —
+`doctest.Example` has no `__slots__`, so attributes survive {func}`copy.copy`,
+{mod}`pickle`, and a third party's naive
 `DocTest(examples, globs, name, filename, lineno, docstring)` rebuild, because
 that rebuild reuses the same `Example` objects. Metadata the runner does *not*
 need — groups, wildcards, pairing — never touches a stdlib object and dies in the
-projection layer. *Price:* one subclass to explain, and a rule that nothing may
-smuggle through `DocTest.name`.
+projection layer.
+
+*Price:* the subclass must restore equality, because
+{meth}`doctest.Example.__eq__` gates on **exact type identity**
+([`Lib/doctest.py:518`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L518)) —
+a bare subclass compares unequal to a stock `Example` with identical fields, in
+both directions, while hashing the same. So the subclass overrides `__eq__` with
+an {func}`isinstance` check and re-binds `__hash__` explicitly; Python's
+reflected-operand rule then makes equality symmetric again:
+
+```{doctest}
+>>> import doctest
+>>> class Tagged(doctest.Example):
+...     def __eq__(self, other):
+...         if not isinstance(other, doctest.Example):
+...             return NotImplemented
+...         return (self.source, self.want, self.lineno, self.indent,
+...                 self.options, self.exc_msg) == (
+...                other.source, other.want, other.lineno, other.indent,
+...                other.options, other.exc_msg)
+...     __hash__ = doctest.Example.__hash__
+>>> plain, tagged = doctest.Example("1\n", "1\n"), Tagged("1\n", "1\n")
+>>> tagged == plain, plain == tagged, tagged in [plain]
+(True, True, True)
+
+Without the override, a bare subclass is unequal both ways:
+
+>>> class Bare(doctest.Example): pass
+>>> bare = Bare("1\n", "1\n")
+>>> bare == plain, plain == bare
+(False, False)
+```
+
+The alternative — setting the attribute on a *stock* `Example` with no subclass
+at all — is equality-safe by construction and equally durable. It is rejected
+only because it forfeits the typed surface; if the subclass ever proves
+troublesome, that is the fallback.
 
 **Node-id granularity versus shared state.** *Position:* decouple them — N
 `DocTest`s under one node id. *Price:* selecting a group runs all its blocks;
@@ -504,9 +608,20 @@ block gains an item relative to `sphinx-build -b doctest`, and `--collect-only`
 must not evaluate the gate, which is why `:skipif:` is carried through collection
 unevaluated and run in `runtest()`.
 
-**Collection purity versus `--collect-only` fidelity.** *Position:* collection
-evaluates no user Python, so it is a pure function of (bytes, argv, ini). *Price:*
-`--collect-only` no longer shows which blocks will skip.
+**Collection determinism versus `--collect-only` fidelity.** *Position:*
+collection evaluates no *author-supplied* Python — `:skipif:` is carried through
+unevaluated and run in `runtest()`. *Price:* `--collect-only` no longer shows
+which blocks will skip.
+
+Collection is **not** a pure function of (bytes, argv, ini), and claiming so
+would be wrong on four counts: `.. include::` reads transitive files, docutils
+directive implementations execute during parsing, the directive registry is
+process-global, and MyST plugins change the tree. The defensible contract is
+determinism over **complete source closure + normalized settings + frozen
+registry**. Deferring the author's gate removes the largest divergence risk; it
+does not make xdist divergence structurally impossible, and the
+{doc}`registry freeze <0006-pytest-private-api-compatibility>` is what closes the
+rest.
 
 **Sphinx compatibility versus silent-loss behaviours.** Sphinx silently discards
 an orphan `testoutput`, silently discards a `testoutput` following a `doctest`
@@ -640,8 +755,8 @@ conformance test in CI.
   fabricated line, and does not affect its siblings.
 - Every `--dist` mode works, because there is no shared state to split.
 - No CPython code-object clone, and no process-global rebinding of anything.
-- Collection is a pure function of (bytes, argv, ini), so worker divergence is
-  structurally impossible and `--collect-only` runs no user code.
+- Collection runs no author-supplied Python, so `--collect-only` has no side
+  effects and the largest source of worker divergence is removed.
 - Grouping is one pure function with no docutils, pytest or filesystem dependency,
   and is testable without any of them.
 - A new block kind is a registration, not an edit to a method branching on string
@@ -696,9 +811,12 @@ path), {doc}`0004-diagnostics-as-data` (what is reported and what is suppressed)
 ## Final position
 
 The core produces real {class}`doctest.DocTest` objects holding real
-{class}`doctest.Example` objects, and `Example.source` is the author's verbatim
-text. Everything else — groups, phases, pairing, diagnostics, distribution — is a
-layer above that fact, and no layer reaches around another.
+{class}`doctest.Example` objects. `Example.source` is the stdlib-normalized
+executable body — prompts and indentation stripped, trailing newline added, the
+stripped column recorded in `Example.indent` — not a synthesized wrapper and not
+the author's verbatim text, which is what `Block.source` holds. Everything else —
+groups, phases, pairing, diagnostics, distribution — is a layer above that fact,
+and no layer reaches around another.
 
 The unit that shares a `globs` mapping is the unit pytest schedules. That is the
 one invariant every other property in this document follows from, and it is not
