@@ -39,6 +39,14 @@ configuration, and `pytest_collect_file` is not `firstresult` — the directory
 collector yields the results of *every* implementation for a path. Declining the
 path is therefore not sufficient; the duplicate has to be removed.
 
+**Narrowing `--doctest-glob` cannot help**, because `_is_doctest` returns `True`
+for an `.rst` initial path *before* it consults the glob at all.
+
+**And removing the duplicate late is too late.** `DoctestTextfile.collect()`
+reads and parses the page inside `collect()`, so by the time
+`pytest_collection_modifyitems` runs, the built-in has already produced an item —
+or already reported a collection error, which deselection cannot retract.
+
 ## Question
 
 What private surface is depended on, and how does a pytest release that changes
@@ -56,13 +64,22 @@ reimplemented rather than inherited.
 ## Direction
 
 Quarantine every private import in one module, `pytest_doctest_docutils._compat`,
-with a pinned support matrix and an import-time probe that raises a named error at
-plugin registration — naming the pytest version and the missing symbol — rather
-than failing somewhere in the middle of collection.
+with a pinned support matrix.
 
-Claim `.rst` and `.md` paths and deselect the built-in plugin's duplicate items in
-a `pytest_collection_modifyitems` hookwrapper, firing `pytest_deselected` so the
-reported counts stay consistent.
+**Filter the built-in's collector out of the `pytest_collect_file` result, in a
+`@pytest.hookimpl(wrapper=True)`.** The directory collector consumes the
+multicall result directly, and returning a modified result from a hook wrapper is
+documented and supported. Filtering there removes the duplicate *before* the
+built-in collector parses anything, so neither the duplicate item nor its
+collection error is ever produced — which late deselection cannot achieve.
+
+**Fail on an unsupported pytest only when an affected document is collected**,
+not at plugin registration. A `pytest11` plugin that raises at import takes down
+sessions whose majority of tests never touch a doctest, and
+{doc}`0001-typed-vanilla-doctest-core` and
+{doc}`0002-runner-conformance-across-cpython` both reject session-wide startup
+failures for the same reason. The error names the pytest version and the missing
+symbol, and it names the document that triggered it.
 
 CI carries a job pinned to the minimum supported pytest and one tracking its
 prerelease.
@@ -72,10 +89,11 @@ prerelease.
 - Whether requiring the built-in plugin should be stated as a hard dependency.
   `-p no:doctest` already fails today with a raw `ValueError` about an unknown
   option, so this is not a regression — but the message should become actionable.
-- Whether deselecting is preferable to narrowing the built-in's globs. Deselecting
-  is explicit and reportable; narrowing is quieter but mutates another plugin's
-  configuration.
 - Whether the probe should accept a *newer* pytest it has not been tested against,
-  or refuse it. Refusing is safer and more annoying.
+  or refuse it. Refusing is safer and more annoying; for a private-API quarantine
+  with a small matrix, safer probably wins.
+- What the filtering wrapper should do when the built-in's collector is the *only*
+  one for a path — that is the ordinary `--doctest-glob` case this plugin has no
+  business touching, so the filter must be scoped to paths it actually claims.
 - Whether any of these helpers can be promoted upstream, which would delete the
   quarantine entirely.
