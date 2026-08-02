@@ -690,10 +690,7 @@ def _ensure_directives_registered() -> None:
     _DIRECTIVES_READY = True
 
 
-def _node_groups(
-    node: nodes.Element,
-    grouped_types: frozenset[str] = _GROUPED_BLOCK_TYPES,
-) -> list[str]:
+def _node_groups(node: nodes.Element) -> list[str]:
     """Return every doctest group a block declares, in the order written.
 
     Only the directive forms carry a ``groups`` attribute: ``.. doctest:: name``
@@ -701,13 +698,14 @@ def _node_groups(
     a group is the author asking blocks to share a namespace, so it holds at
     every :data:`NamespaceScope`.
 
+    ``default`` is the group a directive lands in when its author wrote no
+    argument, so it names nothing the author chose. A block that wants it is
+    asking for its page, which :func:`_page_scoped` answers.
+
     Parameters
     ----------
     node : docutils.nodes.Element
         Node a doctest was collected from.
-    grouped_types : frozenset[str]
-        Block types whose implicit ``default`` group counts as declared. See
-        :data:`_PHASE_BLOCK_TYPES` for why a page can widen it.
 
     Returns
     -------
@@ -733,34 +731,65 @@ def _node_groups(
     >>> _node_groups(nodes.doctest_block("", ""))
     []
 
-    A ``{testcode}`` keeps the ``default`` group it lands in, so the hidden
-    block asserting on a visible one reads what it bound:
+    A ``{testcode}`` is read the same way, whatever it lands in:
 
     >>> _node_groups(
     ...     nodes.literal_block(
     ...         "", "", testnodetype="testcode", groups=["default"]
     ...     )
     ... )
-    ['default']
-
-    A ``{testsetup}`` joins it only where the page asked, so a page of prompt
-    blocks keeps the setup it has always had:
-
-    >>> setup = nodes.literal_block(
-    ...     "", "", testnodetype="testsetup", groups=["default"]
-    ... )
-    >>> _node_groups(setup)
     []
-    >>> _node_groups(setup, _GROUPED_BLOCK_TYPES | _PHASE_BLOCK_TYPES)
-    ['default']
     """
     groups = node.get("groups")
     if not isinstance(groups, list):
         return []
     names = [str(group).strip() for group in groups]
-    if node.get("testnodetype") in grouped_types:
-        return [name for name in names if name]
     return [name for name in names if name and name != _DEFAULT_GROUP]
+
+
+def _page_scoped(node: nodes.Element, grouped_types: frozenset[str]) -> bool:
+    """Say whether a block shares its page whatever the scope says.
+
+    A ``{testcode}`` exists so a visible block and the ``:hide:`` block
+    asserting on it read one namespace, which is the page. Sphinx spells that
+    the ``default`` group; here it is the name an ungrouped block already
+    carries at ``"document"`` scope, so the two forms meet on one page instead
+    of on a name no author wrote.
+
+    Parameters
+    ----------
+    node : docutils.nodes.Element
+        Node a doctest was collected from.
+    grouped_types : frozenset[str]
+        Block types that share their page. See :data:`_PHASE_BLOCK_TYPES` for
+        why a page can widen it.
+
+    Returns
+    -------
+    bool
+        `True` when the block shares its page.
+
+    Examples
+    --------
+    >>> from docutils import nodes
+    >>> code = nodes.literal_block("", "", testnodetype="testcode")
+    >>> _page_scoped(code, _GROUPED_BLOCK_TYPES)
+    True
+
+    A prompt block keeps the scope the run asked for:
+
+    >>> _page_scoped(nodes.doctest_block("", ""), _GROUPED_BLOCK_TYPES)
+    False
+
+    A ``{testsetup}`` shares the page only where the page asked:
+
+    >>> setup = nodes.literal_block("", "", testnodetype="testsetup")
+    >>> _page_scoped(setup, _GROUPED_BLOCK_TYPES)
+    False
+    >>> _page_scoped(setup, _GROUPED_BLOCK_TYPES | _PHASE_BLOCK_TYPES)
+    True
+    """
+    return node.get("testnodetype") in grouped_types
 
 
 def _namespace_name(
@@ -963,7 +992,6 @@ def _pair_testoutput(
     block_nodes: list[nodes.Element],
     filename: str,
     globs: dict[str, t.Any],
-    grouped_types: frozenset[str] = _GROUPED_BLOCK_TYPES,
 ) -> tuple[list[nodes.Element], dict[int, nodes.Element]]:
     r"""Hand each ``{testoutput}`` to the ``{testcode}`` it follows.
 
@@ -977,6 +1005,11 @@ def _pair_testoutput(
     closes the pairing. A stray is dropped with a warning rather than collected
     as a test that checks nothing.
 
+    A second ``{testoutput}`` for one ``{testcode}`` replaces the first, as
+    :mod:`sphinx.ext.doctest` does, so a page reads the same here as it builds
+    there. Unlike Sphinx it says so: the page kept two answers to one question
+    and only one of them ran.
+
     A gated ``{testoutput}`` is dropped as well, which leaves its
     ``{testcode}`` expecting no output — what :mod:`sphinx.ext.doctest` does
     when a ``:skipif:`` takes the node out of the doctree.
@@ -989,8 +1022,6 @@ def _pair_testoutput(
         Path warnings and failed expressions are reported against.
     globs : dict[str, typing.Any]
         Globals the document starts with.
-    grouped_types : frozenset[str]
-        Passed through to :func:`_node_groups`.
 
     Returns
     -------
@@ -1012,13 +1043,23 @@ def _pair_testoutput(
     >>> wants[id(code)].astext()
     '1'
 
-    A second one has nothing left to attach to:
+    A second one replaces the first, and the page hears about it:
 
     >>> blocks, wants = _pair_testoutput(
     ...     [code, output, block("testoutput", "2")], "page.md", {}
     ... )
-    >>> len(blocks), len(wants)
-    (1, 1)
+    >>> len(blocks), wants[id(code)].astext()
+    (1, '2')
+
+    An intervening block closes the pairing, so a later output is a stray:
+
+    >>> _, wants = _pair_testoutput(
+    ...     [code, block("doctest", ">>> 1\n1"), block("testoutput", "2")],
+    ...     "page.md",
+    ...     {},
+    ... )
+    >>> wants
+    {}
 
     Two groups can run interleaved and still each be answered:
 
@@ -1036,7 +1077,7 @@ def _pair_testoutput(
     # ``None`` records a group whose latest block cannot take one.
     pending: dict[str, nodes.Element | None] = {}
     for node in block_nodes:
-        groups = _node_groups(node, grouped_types) or [_DEFAULT_GROUP]
+        groups = _node_groups(node) or [_DEFAULT_GROUP]
         if node.get("testnodetype") != "testoutput":
             blocks.append(node)
             open_to_output = node.get("testnodetype") == "testcode"
@@ -1049,11 +1090,7 @@ def _pair_testoutput(
             (pending[group] for group in groups if pending.get(group) is not None),
             None,
         )
-        if above is not None:
-            wants[id(above)] = node
-            for group in _node_groups(above, grouped_types) or [_DEFAULT_GROUP]:
-                pending[group] = None
-        else:
+        if above is None:
             logger.warning(
                 "testoutput block follows no testcode of its group",
                 extra={
@@ -1061,6 +1098,17 @@ def _pair_testoutput(
                     "doctest_block_type": "testoutput",
                 },
             )
+            continue
+        if id(above) in wants:
+            logger.warning(
+                "testoutput block replaces the one above it",
+                extra={
+                    "doctest_source_file": filename,
+                    "doctest_block_type": "testoutput",
+                },
+            )
+        # Left open, so a third replaces the second, as sphinx.ext.doctest does.
+        wants[id(above)] = node
     return blocks, wants
 
 
@@ -1879,26 +1927,25 @@ class DocutilsDocTestFinder:
         grouped_types = _GROUPED_BLOCK_TYPES
         if any(node.get("testnodetype") == "testcode" for node in found):
             grouped_types = _GROUPED_BLOCK_TYPES | _PHASE_BLOCK_TYPES
-        block_nodes, wants = _pair_testoutput(found, name, globs, grouped_types)
-        declared = [_node_groups(node, grouped_types) for node in block_nodes]
+        block_nodes, wants = _pair_testoutput(found, name, globs)
+        declared = [_node_groups(node) for node in block_nodes]
+        # A prompt-free block shares its page, so it is named for the page the
+        # way an ungrouped block already is at document scope. That is what
+        # lets the two forms meet there instead of on a name no author wrote.
+        scopes: list[NamespaceScope] = [
+            "document" if _page_scoped(node, grouped_types) else self._namespace_scope
+            for node in block_nodes
+        ]
+
+        def generated_name(idx: int) -> str:
+            return _namespace_name(None, scopes[idx], document_name, idx)
+
         # A block joins every group it names. ``*`` means every group the
         # document declares, so it can only be resolved once the page has been
         # read; a page whose only blocks are wildcards has no group to join, so
         # each keeps its own namespace.
         memberships: list[list[str]] = [
-            []
-            if _WILDCARD_GROUP in groups
-            else (
-                groups
-                or [
-                    _namespace_name(
-                        None,
-                        self._namespace_scope,
-                        document_name,
-                        idx,
-                    )
-                ]
-            )
+            [] if _WILDCARD_GROUP in groups else (groups or [generated_name(idx)])
             for idx, groups in enumerate(declared)
         ]
         ordered: list[str] = []
@@ -1908,9 +1955,7 @@ class DocutilsDocTestFinder:
                     ordered.append(candidate)
         for idx, groups in enumerate(declared):
             if _WILDCARD_GROUP in groups:
-                memberships[idx] = list(ordered) or [
-                    _namespace_name(None, self._namespace_scope, document_name, idx)
-                ]
+                memberships[idx] = list(ordered) or [generated_name(idx)]
 
         # A generated name and a declared one are the same string to everything
         # downstream: the namespace mapping keys on it and the test is named
@@ -1920,9 +1965,7 @@ class DocutilsDocTestFinder:
         # is left alone. A page of nothing but wildcards declares no name to
         # collide with, which is why the fallback above needs no check.
         generated = {
-            _namespace_name(None, self._namespace_scope, document_name, idx)
-            for idx, groups in enumerate(declared)
-            if not groups
+            generated_name(idx) for idx, groups in enumerate(declared) if not groups
         }
         for group in sorted(
             {name for groups in declared for name in groups} & generated,
