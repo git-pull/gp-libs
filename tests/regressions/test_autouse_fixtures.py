@@ -134,3 +134,61 @@ def add_get_value_to_doctest_namespace(doctest_namespace):
 
     result = pytester.runpytest(str(test_file))
     result.assert_outcomes(passed=1)
+
+
+def test_a_module_scoped_fixture_spans_a_shared_page(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A page is what ``scope="module"`` means, across every block of it.
+
+    :class:`~pytest_doctest_docutils.DocTestDocutilsFile` collects a page as a
+    :class:`pytest.Module`, which is the node pytest resolves module scope
+    against. That is what lets a page carry an object its blocks derived from a
+    fixture: one setup for the page, so the object block one saved is still the
+    object block two reads.
+
+    The case above runs a single block, which passes whether the fixture spans
+    the page or sets up per item. This one fails if the lifetime ever narrows
+    back to the block.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makeconftest(
+        textwrap.dedent(
+            """
+import pytest
+
+
+@pytest.fixture(scope="module")
+def resource():
+    yield object()
+
+
+@pytest.fixture(autouse=True)
+def seed(doctest_namespace, resource):
+    doctest_namespace["resource"] = resource
+            """,
+        ),
+    )
+    (pytester.path / "page.md").write_text(
+        textwrap.dedent(
+            """
+```
+>>> saved = resource
+```
+
+```
+>>> saved is resource
+True
+```
+            """,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(
+        str(pytester.path / "page.md"),
+        "--doctest-docutils-namespace-scope=document",
+        "--doctest-docutils-namespace-items=per-block",
+    )
+
+    result.assert_outcomes(passed=2)
