@@ -1894,14 +1894,14 @@ def test_a_prompt_free_page_passes_at_every_namespace_setting(
 def test_a_prompt_free_page_collects_as_its_group(
     pytester: _pytest.pytester.Pytester,
 ) -> None:
-    """The node id a reader pastes back names the group, not a block index."""
+    """The node id a reader pastes back names the page, not a block index."""
     pytester.plugins = ["pytest_doctest_docutils"]
     _write_ini(pytester)
     (pytester.path / "page.md").write_text(TESTCODE_PAGE_MD, encoding="utf-8")
 
     items, _ = pytester.inline_genitems("page.md")
 
-    assert [item.name for item in items] == ["default"]
+    assert [item.name for item in items] == ["page.md"]
 
 
 def test_a_failing_testoutput_reports_against_its_page(
