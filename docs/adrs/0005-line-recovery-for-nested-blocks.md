@@ -46,8 +46,11 @@ mutation" is wrong.
 
 ## Direction
 
-**Raise the docutils floor instead** — but that is a support-matrix decision, not
-a pin change, and it is not this record's to make alone.
+**Raise the docutils floor instead** — but that is **support policy, not core
+architecture**. Nothing in {doc}`0001-typed-vanilla-doctest-core` depends on the
+answer: a nullable line is the honest representation either way, and the floor
+only decides how often it is `None`. This record can stay open indefinitely
+without blocking the design.
 
 docutils 0.22 fixed the underlying defect upstream: a nested block reports a real
 line, and top-level and nested blocks agree on reporting the **first** line
@@ -104,9 +107,11 @@ statement.
   documenting two behaviours for the same page.
 - Sequencing with the `gp-sphinx` cap. That release has to land first, and this
   repository does not control it.
-- Whether the Sphinx move belongs in this record or its own. Sphinx 9.1 changes
-  the default group an unargumented block joins, which is a semantics change
-  beyond line numbers.
+- Whether the Sphinx move belongs in this record or its own. Sphinx **9.0**
+  changed the fallback group for a bare, unstamped `doctest_block` from
+  `['default']` to `[doctest_test_doctest_blocks]`; directives always stamp
+  `groups`, so unargumented *directives* are unaffected. 9.x also differs in
+  fail-fast and result propagation. All of that is semantics beyond line numbers.
 - Whether tests should pin exact `(path, line)` for a bare block nested in a
   `.. note::`, a list item, a block quote and a `{tab}` directive. They should —
   they are the regression net for the floor, and this repository already has

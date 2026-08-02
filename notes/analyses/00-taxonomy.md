@@ -24,7 +24,7 @@ a different philosophy.
 |---|---|---|---|---|
 | CPython `doctest` | same (one `DocTest` per docstring) | dotted symbol path | *is* the model | none — line regex over a string |
 | `_pytest.doctest` | same (one item per `DocTest`) | `path::module.qualname` | stdlib, unchanged | none — delegates |
-| `sphinx.ext.doctest` | same (one group, one runner pass) | group name, shared by every block | stdlib, constructed per group | real doctree |
+| `sphinx.ext.doctest` | same (one group, no selectable unit) | group name, shared by every test block | stdlib; per test block, combined for setup and cleanup | real doctree |
 | Sybil | **different, unacknowledged** | positional `line:N,column:N` | stdlib `Example`, one-line `DocTest` fork | flat character spans |
 | xdoctest | same (one `DocTest` per docstring) | `Callname:N` | own, with a late bridge back | none for `.rst`/`.txt` |
 | pytest-examples | none — no implicit sharing | positional `path:start-end` | none | regex over fences |
@@ -57,16 +57,18 @@ product space is four cells:
 |  | one node id | N node ids |
 |---|---|---|
 | **one `DocTest`** | PR #87's `merged` | — (incoherent) |
-| **N `DocTest`s** | `sphinx.ext.doctest`, but with *no* ids; ADR 0001 adds the pytest identity | Sybil, PR #87's `per-block`, released `doctest_docutils` (no sharing) |
+| **N `DocTest`s** | `sphinx.ext.doctest` for its *test* phase only, and with *no* ids; ADR 0001 adds the pytest identity | Sybil, PR #87's `per-block`, released `doctest_docutils` (no sharing) |
 
 The bottom-right cell is where the silent failure lives — but only when the
 blocks share state. Released `doctest_docutils` sits there safely because its
 blocks share nothing: each gets its own copied `globs`.
 
 The bottom-left cell is where the design goes. Sphinx already *executes* that
-shape — N `DocTest`s over one group namespace — but produces no addressable unit
-for any of them, since every block shares one `DocTest.name`. Giving that shape a
-pytest identity is the contribution; the execution shape is not new.
+shape — but only for ordinary test blocks: all of a group's setup blocks are
+combined into one simulated `DocTest`, and likewise cleanup. It also produces no
+addressable unit for any of them, since every test block shares one
+`DocTest.name`. So the design is per-block in three phases where Sphinx is
+per-block in one, and the pytest identity is new either way.
 
 **Axis 3 has an empirical answer.** xdoctest is the controlled experiment for
 abandoning the stdlib object model, and it is now building the bridge back. The

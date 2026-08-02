@@ -58,11 +58,12 @@ actually belongs — a block's execution policy is uniform across its examples, 
 putting it on an `Example` subclass would both over-specify and drag the
 compatibility kernel into carrying metadata.
 
-**Nobody but ADR 0001 makes the line nullable.** Every other system either always
-has a line (because it computed the span itself) or fabricates one. With a real
-doctree there are constructs that genuinely have no recoverable line, and pytest
-has a branch for exactly that — `EXAMPLE LOCATION UNKNOWN` — which is unreachable
-unless the model can express it.
+**A nullable line is not unique to ADR 0001.** Sphinx's own `get_line_number`
+returns `None` — its docstring says "get the real line number or admit we don't
+know" — for a block whose source is a stripped docstring. What ADR 0001 adds is
+not the nullability but the *propagation*: `lineno=None` reaches pytest's
+`EXAMPLE LOCATION UNKNOWN` branch per block, without a sibling's known line
+masking it.
 
 ## What a result unit carries
 
