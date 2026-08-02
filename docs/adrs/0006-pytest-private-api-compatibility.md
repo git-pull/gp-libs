@@ -53,8 +53,11 @@ What private surface is depended on, and how does a pytest release that changes
 it fail?
 
 The current surface is `_get_checker`, `get_optionflags`,
-`_get_continue_on_failure`, `_get_report_choice`, `MultipleDoctestFailures`, and
-a `pytest.DoctestItem` subclass. `_init_runner_class` is explicitly *not* usable:
+`_get_continue_on_failure`, `_get_report_choice` and `MultipleDoctestFailures`.
+Not everything in the quarantine is equally risky: {class}`pytest.DoctestItem` is
+**public** — exported from `pytest` — so subclassing it is ordinary API use. The
+collector class filtered out of the multicall result is private, and that filter
+is the part that needs a version matrix. `_init_runner_class` is explicitly *not* usable:
 `PytestDoctestRunner` is defined inside it
 ([`_pytest/doctest.py:178-181`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L178-L181))
 and is unreachable by name, which is why the `OutcomeException` re-raise,
@@ -67,11 +70,23 @@ Quarantine every private import in one module, `pytest_doctest_docutils._compat`
 with a pinned support matrix.
 
 **Filter the built-in's collector out of the `pytest_collect_file` result, in a
-`@pytest.hookimpl(wrapper=True)`.** The directory collector consumes the
-multicall result directly, and returning a modified result from a hook wrapper is
-documented and supported. Filtering there removes the duplicate *before* the
-built-in collector parses anything, so neither the duplicate item nor its
-collection error is ever produced — which late deselection cannot achieve.
+hook wrapper.** The directory collector consumes the multicall result directly,
+and returning a modified result from a wrapper is documented and supported.
+Filtering there removes the duplicate *before* the built-in collector parses
+anything, so neither the duplicate item nor its collection error is ever produced
+— which late deselection cannot achieve.
+
+**Use the old-style `hookwrapper=True` with `outcome.force_result()`.** New-style
+`wrapper=True` is gated on **pluggy ≥ 1.2**, not on pytest 8 — it works fine
+under pytest 7 with a new enough pluggy. But pytest 7 declares only
+`pluggy>=0.12,<2.0`, so a resolver may legally install pluggy 1.0 or 1.1, where
+`wrapper=True` raises `TypeError` *while importing the plugin* — a session-wide
+abort, which this record and {doc}`0001-typed-vanilla-doctest-core` both forbid.
+Old style needs no floor at all and was verified working on both pytest 7 and 9.
+
+Whichever spelling is used, **name the minimum supported pytest**. The CI matrix
+floor is 7 and the package declares no pytest dependency, so today the support
+statement exists only in the workflow file.
 
 **Fail on an unsupported pytest only when an affected document is collected**,
 not at plugin registration. A `pytest11` plugin that raises at import takes down

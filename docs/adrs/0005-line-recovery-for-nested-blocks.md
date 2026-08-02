@@ -10,7 +10,8 @@ Date: 2026-08-02
 docutils does not report a usable line for every node, and what it reports
 differs by front-end and by version.
 
-At **docutils 0.21.2**, which this project currently pins, a bare `>>>` block
+At **docutils 0.21.2** — which this project does not pin but does resolve, via
+its Sphinx and myst-parser constraints — a bare `>>>` block
 nested in a `.. note::`, a list item, a block quote or a `{tab}` directive
 reports `line=None, source=None`. A top-level reStructuredText `doctest_block`
 reports its **last** line. A MyST fence reports its **first** line. An
@@ -43,17 +44,39 @@ so substituted classes leak into subsequent parses that did not ask for them.
 The claim that substitution is "fully scoped to one parse with no process-global
 mutation" is wrong.
 
-## Decision
+## Direction
 
-**Raise the docutils floor instead.**
+**Raise the docutils floor instead** — but that is a support-matrix decision, not
+a pin change, and it is not this record's to make alone.
 
 docutils 0.22 fixed the underlying defect upstream: a nested block reports a real
 line, and top-level and nested blocks agree on reporting the **first** line
 rather than the last. Every case this record was invented to work around is
-resolved by a floor bump, with no probe, no substitution and no fallback path.
+resolved by the floor, with no probe, no substitution and no fallback path.
 
-The cost is that docutils ≥ 0.22 requires Sphinx ≥ 9.1, so this is a coordinated
-dependency move rather than a one-line pin change.
+Getting there is three moves, and the second is upstream of this repository:
+
+1. **Raise `requires-python` to `>= 3.11`.** Sphinx 9.0 is the first release that
+   permits docutils 0.22, and it declares `requires-python >= 3.11`. Dropping 3.10
+   also touches the classifiers, the mypy and ruff target versions, and the CI
+   matrix.
+2. **Ship a `gp-sphinx` release that widens its `sphinx < 9` cap.** This is the
+   binding constraint today, and it is not in this repository. With the cap in
+   place, a resolver asked for `docutils >= 0.22` reports the requirements
+   unsatisfiable.
+3. **Then** declare `docutils >= 0.22, < 0.23`. An open-ended floor breaks the
+   moment a resolver reaches 0.23.
+
+Resolved versions per interpreter, with `docutils >= 0.22` requested:
+
+| Python | docutils | myst-parser | Sphinx |
+|---|---|---|---|
+| 3.10 | 0.23 | 0.13.6 | 3.5.3 — a degenerate backtrack, not viable |
+| 3.11 | 0.22.4 | 5.1.0 | 9.0.4 |
+| 3.12–3.14 | 0.22.4 | 5.1.0 | 9.1.0 |
+
+Today's lock resolves Sphinx 8.1.3 on Python 3.10 and 8.2.3 elsewhere, and
+neither permits docutils 0.22.
 
 ## Consequences
 
@@ -72,12 +95,18 @@ statement.
 
 ## Open
 
-- Whether to raise the floor now or support both, since 0.21.2 is what the
-  project pins today. Supporting both means keeping the normalization branch and
+- **The blocking question: does this project drop Python 3.10?** Everything else
+  here is downstream of that, and it is a support-matrix decision that outlives
+  this record. Until it is settled, "raise the floor" is a direction, not a
+  decision — which is why this record's status stays `Draft`.
+- Whether to raise the floor at all or support both, since docutils 0.21.2 is
+  what resolves today. Supporting both means keeping the normalization branch and
   documenting two behaviours for the same page.
-- Whether the Sphinx ≥ 9.1 move belongs in this record or its own. It changes the
-  default group an unargumented block joins, which is a semantics change beyond
-  line numbers.
+- Sequencing with the `gp-sphinx` cap. That release has to land first, and this
+  repository does not control it.
+- Whether the Sphinx move belongs in this record or its own. Sphinx 9.1 changes
+  the default group an unargumented block joins, which is a semantics change
+  beyond line numbers.
 - Whether tests should pin exact `(path, line)` for a bare block nested in a
   `.. note::`, a list item, a block quote and a `{tab}` directive. They should —
   they are the regression net for the floor, and this repository already has
