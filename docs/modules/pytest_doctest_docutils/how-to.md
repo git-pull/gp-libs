@@ -275,9 +275,37 @@ something the setting can hide.
 
 A namespace shares the mapping, not the lifetime of what a fixture put in it.
 Each block is its own item, so a function-scoped fixture tears down between
-blocks: an object one block bound out of that fixture is finalized before the
-next block reads it. Widen the fixture's scope when a page carries one across
-its blocks.
+blocks. The name that fixture fills is rebound fresh for the next block, but a
+name a block derived from it is not: it still holds the finalized object, and a
+finalized object usually answers rather than raising. A page reads a plausible
+wrong value — a cached attribute that looks right beside a connection that is
+already closed — with nothing in the report to say so.
+
+Give a fixture a page carries across its blocks `scope="module"`. A page is
+what module scope means here — the collector for a `.md` or `.rst` page is a
+{class}`pytest.Module`, as pytest's own text-doctest collector is — so the
+fixture sets up once for the page and tears down when the page ends, and the
+object a block saves stays the object the next block reads.
+
+Name `module` rather than reaching for anything wider. `class` has no node to
+attach to on a page, so it silently falls back to setting up per block, and
+`package` anchors to the directory holding the `conftest.py` that *defines* the
+fixture, and only when that directory is an importable package — a fixture
+defined further up resolves to the whole run however the page's own directory
+looks. Only `function`, `module` and `session` mean what they say here.
+
+Two things follow from a page being a module for scope and nothing else. A
+module-scoped fixture cannot request a function-scoped one, so reaching for
+{ref}`tmp_path <pytest:tmp_path>` stops the page with pytest's `ScopeMismatch`
+— ask for `tmp_path_factory` instead. And no
+module object stands behind a page,
+so `request.module` is `None`; a `conftest.py` shared with `.py` tests that
+reads it works on those and breaks here. `request.path` names the page.
+
+Across worker processes it is a page per worker, not a page per run. Leaving
+`-n` unadorned keeps a page whole, and so does `--dist loadfile`; asking for
+`--dist loadgroup` while every block is its own namespace groups by block
+instead, which hands one page to two workers and sets the fixture up in each.
 
 And because the blocks share one mapping, they share whatever lives in it —
 including `__future__` flags, which {mod}`doctest` derives from the namespace at

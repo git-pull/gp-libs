@@ -29,6 +29,13 @@ Then the documentation page can use the helper by name:
 add(2, 3)
 ```
 
+A helper like this one holds nothing, so how long it lives never comes up.
+Seeding a *resource* — a server, a connection, a temporary directory — is where
+it does, because the fixture's scope decides how long the object a page saved
+stays usable. See {ref}`what per-block items cost
+<pytest_doctest_docutils-per-block-costs>` before carrying one across several
+blocks of a page.
+
 ## Autouse fixtures
 
 Autouse fixtures in a visible `conftest.py` are parsed for `.rst` and `.md`
