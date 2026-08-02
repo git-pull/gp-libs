@@ -37,6 +37,7 @@ from doctest_docutils import (
     NamespaceScope,
     NamespaceScopeError,
     _ensure_directives_registered,
+    _ExecModeRunnerMixin,
     _parse_namespace_items,
     _parse_namespace_scope,
 )
@@ -784,7 +785,7 @@ def _is_doctest(
 def _init_runner_class() -> type[doctest.DocTestRunner]:
     import doctest
 
-    class PytestDoctestRunner(doctest.DebugRunner):
+    class PytestDoctestRunner(_ExecModeRunnerMixin, doctest.DebugRunner):
         """Runner to collect failures.
 
         Note that the out variable in this case is a list instead of a
@@ -983,7 +984,7 @@ def _get_runner(
     )
 
 
-class DocutilsDocTestRunner(doctest.DocTestRunner):
+class DocutilsDocTestRunner(_ExecModeRunnerMixin, doctest.DocTestRunner):
     """DocTestRunner for doctest_docutils."""
 
     def summarize(  # type: ignore

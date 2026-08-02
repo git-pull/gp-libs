@@ -9,6 +9,7 @@ import os
 import pathlib
 import re
 import sys
+import types
 import typing as t
 
 import docutils
@@ -20,8 +21,6 @@ from packaging.version import Version
 from docutils_compat import findall
 
 if t.TYPE_CHECKING:
-    import types
-
     from docutils.nodes import Node, TextElement
 
 logger = logging.getLogger(__name__)
@@ -60,6 +59,24 @@ _DEFAULT_GROUP = "default"
 #: Group name meaning "every group this document declares", as in
 #: :mod:`sphinx.ext.doctest`. It resolves only once the page has been read.
 _WILDCARD_GROUP = "*"
+
+#: Block types that keep :mod:`sphinx.ext.doctest`'s implicit ``default``
+#: group: the visible block a reader pastes and the hidden one asserting on it
+#: have to share a namespace without either of them naming a group.
+_GROUPED_BLOCK_TYPES = frozenset({"testcode", "testoutput"})
+
+#: Block types that join the implicit ``default`` group only once a page holds
+#: a ``{testcode}``. Sphinx puts an unnamed ``{testsetup}`` in that group
+#: always; gp-libs gives a page's prompt blocks namespaces of their own, and an
+#: unnamed setup has always followed them there. Widening it unconditionally
+#: would take the setup away from those blocks, so it widens only for the pages
+#: that need it — the ones written in Sphinx's prompt-free style.
+_PHASE_BLOCK_TYPES = frozenset({"testsetup", "testcleanup"})
+
+#: Matches the ``>>>`` opening an interactive example, which tells a
+#: ``{testsetup}`` written for :class:`doctest.DocTestParser` apart from one
+#: written the way :mod:`sphinx.ext.doctest` writes it.
+_PROMPT_RE = re.compile(r"^[ \t]*>>>(?:[ \t]|$)", re.MULTILINE)
 
 #: ``HIDE`` marks a prompt that rendered documentation drops and a test run
 #: keeps. It changes no output check, but a page carrying it fails to parse
@@ -262,6 +279,196 @@ def is_allowed_version(version: str, spec: str) -> bool:
     return Version(version) in SpecifierSet(spec)
 
 
+class _ExecSource(str):
+    r"""Example source that runs as a module body, not as one prompt.
+
+    :meth:`doctest.DocTestRunner.run` compiles every example in ``"single"``
+    mode, which rejects a body of more than one statement and echoes a bare
+    expression. A ``{testcode}`` body is plain Python and neither applies, so
+    it needs ``"exec"``.
+
+    The mode rides on the source because the source is the only part of an
+    example the compile call is handed: marking it here keeps the choice on
+    the data, where :func:`copy.copy` and the merge carry it along, instead of
+    on a mode flag some runner has to be holding at the right moment.
+
+    Examples
+    --------
+    >>> source = _ExecSource("value = 41\n")
+    >>> isinstance(source, str), source.splitlines()
+    (True, ['value = 41'])
+    """
+
+
+def _compile_source(
+    source: str,
+    filename: str,
+    mode: str,
+    flags: int = 0,
+    dont_inherit: bool = False,
+    optimize: int = -1,
+) -> types.CodeType:
+    r"""Compile one example, letting an :class:`_ExecSource` overrule `mode`.
+
+    Stands in for the built-in :func:`compile` inside the runner loop
+    :func:`_exec_mode_run` builds. Every other source compiles exactly as the
+    runner asked, so a ``>>>`` example keeps the echo it was written for.
+
+    Parameters
+    ----------
+    source : str
+        Example source. An :class:`_ExecSource` asked for ``"single"``
+        compiles in ``"exec"``.
+    filename : str
+        Name the compiled code reports itself under.
+    mode : str
+        Mode the caller asked for.
+    flags : int
+        ``__future__`` and compiler flags.
+    dont_inherit : bool
+        Whether to ignore the calling frame's ``__future__`` flags.
+    optimize : int
+        Optimization level.
+
+    Returns
+    -------
+    types.CodeType
+        Compiled example.
+
+    Examples
+    --------
+    >>> import contextlib, io
+    >>> def run(source):
+    ...     captured = io.StringIO()
+    ...     with contextlib.redirect_stdout(captured):
+    ...         exec(_compile_source(source, "<page>", "single"), {"value": 41})
+    ...     return captured.getvalue()
+
+    A bare expression echoes under the mode the runner asks for, and stays
+    quiet once the source says it is a ``{testcode}`` body:
+
+    >>> run("value\n")
+    '41\n'
+    >>> run(_ExecSource("value\n"))
+    ''
+
+    ``"single"`` takes one statement; a ``{testcode}`` body takes as many as
+    it likes:
+
+    >>> namespace = {}
+    >>> body = _ExecSource("first = 1\nsecond = first + 1\n")
+    >>> exec(_compile_source(body, "<page>", "single"), namespace)
+    >>> namespace["second"]
+    2
+    """
+    if mode == "single" and isinstance(source, _ExecSource):
+        mode = "exec"
+    # A variable ``mode`` widens the built-in's return type; the runner never
+    # asks for an AST, so the answer is always a code object.
+    return t.cast(
+        types.CodeType,
+        compile(source, filename, mode, flags, dont_inherit, optimize),
+    )
+
+
+def _exec_mode_run() -> types.FunctionType | None:
+    r"""Return CPython's runner loop reading :func:`_compile_source` as ``compile``.
+
+    ``DocTestRunner.__run`` hard-codes ``"single"`` and resolves ``compile``
+    as a global of :mod:`doctest`, which is why :mod:`sphinx.ext.doctest`
+    rebinds ``doctest.compile`` for the whole process. gp-libs ships as a
+    ``pytest11`` plugin loaded into every test session, so it rebinds the name
+    for one function object instead: the code object is CPython's, unread and
+    uncopied, and only the globals mapping it looks names up in differs.
+
+    The seam is two facts about a private method, so it is checked rather than
+    assumed. gp-libs is loaded into every session that has it installed, and an
+    interpreter that moved the method must not take down the test runs of people
+    who never wrote a ``{testcode}``: a missing seam leaves CPython's own loop
+    in place and logs why. What that costs is ``{testcode}`` itself, which falls
+    back to ``single`` mode and fails on any body of more than one statement —
+    so the seam is also pinned by a test, where the loud failure belongs.
+
+    Returns
+    -------
+    types.FunctionType or None
+        Copy of CPython's runner loop, still unbound. `None` where this
+        interpreter does not resolve ``compile`` the way the loop needs.
+
+    Examples
+    --------
+    >>> run = _exec_mode_run()
+    >>> run.__code__ is doctest.DocTestRunner._DocTestRunner__run.__code__
+    True
+    >>> run.__globals__["compile"] is _compile_source
+    True
+
+    :mod:`doctest` itself keeps the built-in:
+
+    >>> "compile" in vars(doctest)
+    False
+    """
+    original = getattr(doctest.DocTestRunner, "_DocTestRunner__run", None)
+    # A closure would need its cells rebuilt; a loop that stopped reading
+    # ``compile`` as a global would silently ignore the swap.
+    if (
+        original is None
+        or original.__code__.co_freevars
+        or "compile" not in original.__code__.co_names
+    ):
+        logger.error(
+            "doctest runner seam is missing; testcode blocks fall back to "
+            "single-statement mode",
+            extra={"doctest_block_type": "testcode"},
+        )
+        return None
+    return types.FunctionType(
+        original.__code__,
+        {**vars(doctest), "compile": _compile_source},
+        original.__name__,
+    )
+
+
+class _ExecModeRunnerMixin:
+    r"""Runner mixin that runs a ``{testcode}`` body the way Sphinx does.
+
+    Mix in ahead of :class:`doctest.DocTestRunner` or
+    :class:`doctest.DebugRunner`. Everything else about the run — reporting,
+    the debugger, ``SKIP``, ``FAIL_FAST`` — is CPython's own loop.
+
+    Examples
+    --------
+    >>> import io
+    >>> example = doctest.Example("value = 41\nvalue\n", "")
+    >>> example.source = _ExecSource(example.source)
+    >>> test = doctest.DocTest([example], {}, "page.md", "page.md", 0, None)
+    >>> _ExecModeRunner().run(test, out=io.StringIO().write)
+    TestResults(failed=0, attempted=1)
+
+    The stock runner rejects the same example, and says why:
+
+    >>> report = io.StringIO()
+    >>> doctest.DocTestRunner().run(test, out=report.write)
+    TestResults(failed=1, attempted=1)
+    >>> "multiple statements" in report.getvalue()
+    True
+    """
+
+    # Left unset where this interpreter has no seam, so the mixin inherits
+    # CPython's loop instead of shadowing it with nothing.
+    if (_exec_mode_run_override := _exec_mode_run()) is not None:
+        _DocTestRunner__run = _exec_mode_run_override
+    del _exec_mode_run_override
+
+
+class _ExecModeRunner(_ExecModeRunnerMixin, doctest.DocTestRunner):
+    """:class:`doctest.DocTestRunner` that honours a ``{testcode}`` body."""
+
+
+class _ExecModeDebugRunner(_ExecModeRunnerMixin, doctest.DebugRunner):
+    """:class:`doctest.DebugRunner` that honours a ``{testcode}`` body."""
+
+
 class TestDirective(Directive):
     """Base class for doctest-related directives."""
 
@@ -311,8 +518,13 @@ class TestDirective(Directive):
             node["test"] = test
         if self.name == "doctest":
             node["language"] = "pycon3"
+        elif self.name == "testcode":
+            node["language"] = "python"
+        elif self.name == "testoutput":
+            # don't try to highlight output
+            node["language"] = "none"
         node["options"] = {}
-        if self.name in ("doctest") and "options" in self.options:
+        if self.name in {"doctest", "testoutput"} and "options" in self.options:
             # parse doctest-like output comparison flags
             option_strings = self.options["options"].replace(",", " ").split()
             for option in option_strings:
@@ -331,6 +543,16 @@ class TestDirective(Directive):
                     continue
                 flag = doctest.OPTIONFLAGS_BY_NAME[option[1:]]
                 node["options"][flag] = option[0] == "+"
+        if self.name in _GROUPED_BLOCK_TYPES and "pyversion" in self.options:
+            # sphinx.ext.doctest declares :pyversion: on these directives and
+            # acts on it only for ``doctest``. Diverging either way costs more
+            # than it buys: honouring it would pass a page Sphinx fails, and
+            # rejecting it would fail a page Sphinx renders. Say so instead.
+            self.state.document.reporter.warning(
+                f"'pyversion' has no effect on '{self.name}'; "
+                "guard the block with ':skipif:' instead.",
+                line=self.lineno,
+            )
         if self.name == "doctest" and "pyversion" in self.options:
             try:
                 spec = self.options["pyversion"]
@@ -379,6 +601,38 @@ class DoctestDirective(TestDirective):
     }
 
 
+class TestcodeDirective(TestDirective):
+    """Test code directive.
+
+    Its body is plain Python a reader can select and paste: no prompt, and no
+    expected output unless a :class:`TestoutputDirective` follows it.
+    """
+
+    option_spec: t.ClassVar = {
+        "hide": directives.flag,
+        "no-trim-doctest-flags": directives.flag,
+        "pyversion": directives.unchanged_required,
+        "skipif": directives.unchanged_required,
+        "trim-doctest-flags": directives.flag,
+    }
+
+
+class TestoutputDirective(TestDirective):
+    """Test output directive.
+
+    Says what the :class:`TestcodeDirective` block above it prints.
+    """
+
+    option_spec: t.ClassVar = {
+        "hide": directives.flag,
+        "no-trim-doctest-flags": directives.flag,
+        "options": directives.unchanged,
+        "pyversion": directives.unchanged_required,
+        "skipif": directives.unchanged_required,
+        "trim-doctest-flags": directives.flag,
+    }
+
+
 class MockTabDirective(TestDirective):
     """Mock tab directive."""
 
@@ -396,6 +650,8 @@ def setup() -> dict[str, t.Any]:
     directives.register_directive("testsetup", TestsetupDirective)
     directives.register_directive("testcleanup", TestcleanupDirective)
     directives.register_directive("doctest", DoctestDirective)
+    directives.register_directive("testcode", TestcodeDirective)
+    directives.register_directive("testoutput", TestoutputDirective)
 
     # Third party mock directive: sphinx-inline-tabs @ 2022.01.02.beta11
     directives.register_directive("tab", MockTabDirective)
@@ -408,7 +664,14 @@ master = None
 
 parser = doctest.DocTestParser()
 _DIRECTIVES_READY = False
-_REQUIRED_DIRECTIVES = ("doctest", "testsetup", "testcleanup", "tab")
+_REQUIRED_DIRECTIVES = (
+    "doctest",
+    "testsetup",
+    "testcleanup",
+    "testcode",
+    "testoutput",
+    "tab",
+)
 
 
 def _directive_registry() -> dict[str, t.Any]:
@@ -427,7 +690,10 @@ def _ensure_directives_registered() -> None:
     _DIRECTIVES_READY = True
 
 
-def _node_groups(node: nodes.Element) -> list[str]:
+def _node_groups(
+    node: nodes.Element,
+    grouped_types: frozenset[str] = _GROUPED_BLOCK_TYPES,
+) -> list[str]:
     """Return every doctest group a block declares, in the order written.
 
     Only the directive forms carry a ``groups`` attribute: ``.. doctest:: name``
@@ -439,6 +705,9 @@ def _node_groups(node: nodes.Element) -> list[str]:
     ----------
     node : docutils.nodes.Element
         Node a doctest was collected from.
+    grouped_types : frozenset[str]
+        Block types whose implicit ``default`` group counts as declared. See
+        :data:`_PHASE_BLOCK_TYPES` for why a page can widen it.
 
     Returns
     -------
@@ -463,11 +732,34 @@ def _node_groups(node: nodes.Element) -> list[str]:
     []
     >>> _node_groups(nodes.doctest_block("", ""))
     []
+
+    A ``{testcode}`` keeps the ``default`` group it lands in, so the hidden
+    block asserting on a visible one reads what it bound:
+
+    >>> _node_groups(
+    ...     nodes.literal_block(
+    ...         "", "", testnodetype="testcode", groups=["default"]
+    ...     )
+    ... )
+    ['default']
+
+    A ``{testsetup}`` joins it only where the page asked, so a page of prompt
+    blocks keeps the setup it has always had:
+
+    >>> setup = nodes.literal_block(
+    ...     "", "", testnodetype="testsetup", groups=["default"]
+    ... )
+    >>> _node_groups(setup)
+    []
+    >>> _node_groups(setup, _GROUPED_BLOCK_TYPES | _PHASE_BLOCK_TYPES)
+    ['default']
     """
     groups = node.get("groups")
     if not isinstance(groups, list):
         return []
     names = [str(group).strip() for group in groups]
+    if node.get("testnodetype") in grouped_types:
+        return [name for name in names if name]
     return [name for name in names if name and name != _DEFAULT_GROUP]
 
 
@@ -618,6 +910,290 @@ def _skipif(expression: str, globs: dict[str, t.Any]) -> bool:
     # page's own examples do not have. It is evaluated while the document is
     # collected, which means ``--collect-only`` runs it too.
     return bool(eval(expression, {"sys": sys, **globs}))
+
+
+def _gated(node: nodes.Element, filename: str, globs: dict[str, t.Any]) -> bool:
+    """Return whether a block's ``:skipif:`` asks for it to be passed over.
+
+    Parameters
+    ----------
+    node : docutils.nodes.Element
+        Node a block was collected from.
+    filename : str
+        Path a failed expression is reported against.
+    globs : dict[str, typing.Any]
+        Globals the document starts with.
+
+    Returns
+    -------
+    bool
+        Whether the block is gated. A block that wrote no ``:skipif:`` is not.
+
+    Raises
+    ------
+    SkipifExpressionError
+        If the expression cannot be evaluated.
+
+    Examples
+    --------
+    >>> from docutils import nodes
+    >>> _gated(nodes.literal_block("", ""), "page.rst", {})
+    False
+    >>> _gated(nodes.literal_block("", "", skipif="True"), "page.rst", {})
+    True
+
+    A broken expression names the block it was written on:
+
+    >>> try:
+    ...     _gated(nodes.literal_block("", "", skipif="nope"), "page.rst", {})
+    ... except SkipifExpressionError as exc:
+    ...     print(exc)
+    page.rst:0: :skipif: 'nope' failed: name 'nope' is not defined
+    """
+    skipif = node.get("skipif")
+    if skipif is None:
+        return False
+    try:
+        return _skipif(skipif, globs)
+    except Exception as exc:
+        raise SkipifExpressionError(skipif, filename, _node_line(node), exc) from exc
+
+
+def _pair_testoutput(
+    block_nodes: list[nodes.Element],
+    filename: str,
+    globs: dict[str, t.Any],
+    grouped_types: frozenset[str] = _GROUPED_BLOCK_TYPES,
+) -> tuple[list[nodes.Element], dict[int, nodes.Element]]:
+    r"""Hand each ``{testoutput}`` to the ``{testcode}`` it follows.
+
+    A ``{testoutput}`` is not a block of its own: it says what an earlier block
+    prints, as in :mod:`sphinx.ext.doctest`. Pairing is tracked per group, the
+    way :meth:`sphinx.ext.doctest.TestGroup.add_code` tracks it: the output
+    joins the last block its groups saw, and only when that block is a
+    ``{testcode}`` still waiting for one. Two groups can therefore run their
+    blocks interleaved and still each get their own output, while any other
+    block of the group in between — a ``{doctest}``, a second ``{testcode}`` —
+    closes the pairing. A stray is dropped with a warning rather than collected
+    as a test that checks nothing.
+
+    A gated ``{testoutput}`` is dropped as well, which leaves its
+    ``{testcode}`` expecting no output — what :mod:`sphinx.ext.doctest` does
+    when a ``:skipif:`` takes the node out of the doctree.
+
+    Parameters
+    ----------
+    block_nodes : list[docutils.nodes.Element]
+        Every block the page holds, in document order.
+    filename : str
+        Path warnings and failed expressions are reported against.
+    globs : dict[str, typing.Any]
+        Globals the document starts with.
+    grouped_types : frozenset[str]
+        Passed through to :func:`_node_groups`.
+
+    Returns
+    -------
+    tuple[list[docutils.nodes.Element], dict[int, docutils.nodes.Element]]
+        Blocks left to collect, and the output node each ``{testcode}`` was
+        given, keyed by :func:`id`.
+
+    Examples
+    --------
+    >>> from docutils import nodes
+    >>> def block(kind, text, *groups):
+    ...     return nodes.literal_block(
+    ...         text, text, testnodetype=kind, groups=list(groups) or ["default"]
+    ...     )
+    >>> code, output = block("testcode", "print(1)"), block("testoutput", "1")
+    >>> blocks, wants = _pair_testoutput([code, output], "page.md", {})
+    >>> [held["testnodetype"] for held in blocks]
+    ['testcode']
+    >>> wants[id(code)].astext()
+    '1'
+
+    A second one has nothing left to attach to:
+
+    >>> blocks, wants = _pair_testoutput(
+    ...     [code, output, block("testoutput", "2")], "page.md", {}
+    ... )
+    >>> len(blocks), len(wants)
+    (1, 1)
+
+    Two groups can run interleaved and still each be answered:
+
+    >>> alpha = block("testcode", "print('a')", "alpha")
+    >>> beta = block("testcode", "print('b')", "beta")
+    >>> _, wants = _pair_testoutput(
+    ...     [alpha, beta, block("testoutput", "a", "alpha")], "page.md", {}
+    ... )
+    >>> wants[id(alpha)].astext(), id(beta) in wants
+    ('a', False)
+    """
+    blocks: list[nodes.Element] = []
+    wants: dict[int, nodes.Element] = {}
+    # Last block each group saw, and whether it is still open to an output.
+    # ``None`` records a group whose latest block cannot take one.
+    pending: dict[str, nodes.Element | None] = {}
+    for node in block_nodes:
+        groups = _node_groups(node, grouped_types) or [_DEFAULT_GROUP]
+        if node.get("testnodetype") != "testoutput":
+            blocks.append(node)
+            open_to_output = node.get("testnodetype") == "testcode"
+            for group in groups:
+                pending[group] = node if open_to_output else None
+            continue
+        if _gated(node, filename, globs):
+            continue
+        above = next(
+            (pending[group] for group in groups if pending.get(group) is not None),
+            None,
+        )
+        if above is not None:
+            wants[id(above)] = node
+            for group in _node_groups(above, grouped_types) or [_DEFAULT_GROUP]:
+                pending[group] = None
+        else:
+            logger.warning(
+                "testoutput block follows no testcode of its group",
+                extra={
+                    "doctest_source_file": filename,
+                    "doctest_block_type": "testoutput",
+                },
+            )
+    return blocks, wants
+
+
+def _runs_as_exec(block_type: str, source: str) -> bool:
+    r"""Report whether a block's body runs as a module body rather than prompts.
+
+    A ``{testcode}`` always does. A ``{testsetup}`` or ``{testcleanup}`` does
+    when it carries no ``>>>``, which is how :mod:`sphinx.ext.doctest` writes
+    one — Sphinx runs those bodies through the same ``exec`` its ``{testcode}``
+    uses, and rejects a prompt outright. gp-libs has always read them with
+    :class:`doctest.DocTestParser` instead, so both spellings have to work: the
+    prompt decides which.
+
+    Parameters
+    ----------
+    block_type : str
+        Block type, from the node's ``testnodetype``.
+    source : str
+        Body of the block.
+
+    Returns
+    -------
+    bool
+        Whether to build the block as one ``exec``-mode example.
+
+    Examples
+    --------
+    >>> _runs_as_exec("testcode", "value = 41")
+    True
+
+    A setup block written either way is read the way it was written:
+
+    >>> _runs_as_exec("testsetup", "base = 40")
+    True
+    >>> _runs_as_exec("testsetup", ">>> base = 40")
+    False
+
+    Nothing else changes mode, and an empty body has no statement to run:
+
+    >>> _runs_as_exec("doctest", "base = 40"), _runs_as_exec("testsetup", "  ")
+    (False, False)
+    """
+    if block_type == "testcode":
+        return True
+    if block_type not in _PHASE_BLOCK_TYPES or not source.strip():
+        return False
+    return _PROMPT_RE.search(source) is None
+
+
+def _testcode_test(
+    source: str,
+    want: str,
+    options: dict[int, bool],
+    name: str,
+    filename: str,
+    lineno: int,
+    globs: dict[str, t.Any],
+) -> doctest.DocTest:
+    r"""Return the test one ``{testcode}`` block runs as.
+
+    The block is a single example: its body is the source, the
+    ``{testoutput}`` below it is the expected output, and the source is marked
+    :class:`_ExecSource` so the runner compiles it as a module body.
+    ``<BLANKLINE>`` is off unless the page turns it back on, as in
+    :mod:`sphinx.ext.doctest` — a blank line in a ``{testoutput}`` block is
+    just a blank line.
+
+    Parameters
+    ----------
+    source : str
+        Body of the ``{testcode}`` block.
+    want : str
+        Output the block is expected to print, empty when none was given.
+    options : dict[int, bool]
+        Doctest flags from the ``{testoutput}`` block's ``:options:``.
+    name : str
+        Name the test collects under.
+    filename : str
+        Path failures are reported against.
+    lineno : int
+        Line the block sits on.
+    globs : dict[str, typing.Any]
+        Globals the namespace starts with.
+
+    Returns
+    -------
+    doctest.DocTest
+        One example, ready to merge with the rest of its namespace.
+
+    Examples
+    --------
+    >>> test = _testcode_test("print(2 + 2)", "4", {}, "page.md", "page.md", 7, {})
+    >>> test.name, test.lineno, len(test.examples)
+    ('page.md', 7, 1)
+    >>> example = test.examples[0]
+    >>> example.source, example.want
+    ('print(2 + 2)\n', '4\n')
+    >>> isinstance(example.source, _ExecSource)
+    True
+
+    A ``{testoutput}`` spelling a traceback checks the exception instead:
+
+    >>> raiser = _testcode_test(
+    ...     "raise ValueError('boom')",
+    ...     "Traceback (most recent call last):\n  ...\nValueError: boom",
+    ...     {},
+    ...     "page.md",
+    ...     "page.md",
+    ...     0,
+    ...     {},
+    ... )
+    >>> raiser.examples[0].exc_msg
+    'ValueError: boom\n'
+    """
+    # Normalized before the match so the captured message ends in the newline
+    # ``traceback.format_exception_only`` puts on the line it is checked against.
+    if want and not want.endswith("\n"):
+        want += "\n"
+    match = doctest.DocTestParser._EXCEPTION_RE.match(want)  # type: ignore[attr-defined]
+    example = doctest.Example(
+        source,
+        want,
+        exc_msg=match.group("msg") if match else None,
+        options={doctest.DONT_ACCEPT_BLANKLINE: True, **options},
+    )
+    example.source = _ExecSource(example.source)
+    # A reader is shown ``lines[example.lineno - 9 : example.lineno + 1]`` of the
+    # block and sent to ``test.lineno + example.lineno + 1``. One example holding
+    # a whole block would show its first line only and send the reader there, so
+    # the example sits on the block's last line: the report then quotes the block
+    # entire and lands inside it rather than above the failure.
+    example.lineno = max(len(source.splitlines()) - 1, 0)
+    return doctest.DocTest([example], globs, name, filename, lineno, source)
 
 
 def _merge_blocks(
@@ -1294,12 +1870,17 @@ class DocutilsDocTestFinder:
         # the page wrote them in, and a testsetup exists to be movable.
         namespaces: dict[str, dict[str, list[_CollectedBlock]]] = {}
 
-        block_nodes = list(findall(doc)(condition))
-        declared = [
-            _node_groups(node)
-            for node in block_nodes
-            if isinstance(node, nodes.Element)
+        found: list[nodes.Element] = [
+            node for node in findall(doc)(condition) if isinstance(node, nodes.Element)
         ]
+        # A page written in Sphinx's prompt-free style puts its setup in the
+        # same implicit group as its code. A page of prompt blocks keeps the
+        # namespaces it has always had, so the widening follows the testcode.
+        grouped_types = _GROUPED_BLOCK_TYPES
+        if any(node.get("testnodetype") == "testcode" for node in found):
+            grouped_types = _GROUPED_BLOCK_TYPES | _PHASE_BLOCK_TYPES
+        block_nodes, wants = _pair_testoutput(found, name, globs, grouped_types)
+        declared = [_node_groups(node, grouped_types) for node in block_nodes]
         # A block joins every group it names. ``*`` means every group the
         # document declares, so it can only be resolved once the page has been
         # read; a page whose only blocks are wildcards has no group to join, so
@@ -1353,7 +1934,6 @@ class DocutilsDocTestFinder:
             )
 
         for idx, node in enumerate(block_nodes):
-            assert isinstance(node, nodes.Element)
             block_type = str(node.get("testnodetype", node.tagname))
             lineno = _node_line(node)
             # The block's own flags, before its examples get a say. A true
@@ -1362,26 +1942,21 @@ class DocutilsDocTestFinder:
             # through the runner, which keeps the block collected, reported and
             # selectable by node id instead of vanishing from the page.
             options = dict(node.get("options") or {})
-            gated = False
-            skipif = node.get("skipif")
-            if skipif is not None:
-                try:
-                    gated = _skipif(skipif, globs)
-                except Exception as exc:
-                    raise SkipifExpressionError(skipif, name, lineno, exc) from exc
-                if gated:
-                    logger.debug(
-                        "doctest block skipped by skipif",
-                        extra={
-                            "doctest_source_file": name,
-                            "doctest_block_type": block_type,
-                        },
-                    )
+            gated = _gated(node, name, globs)
+            if gated:
+                logger.debug(
+                    "doctest block skipped by skipif",
+                    extra={
+                        "doctest_source_file": name,
+                        "doctest_block_type": block_type,
+                    },
+                )
             # ``node["test"]`` is the source before the directive trimmed
             # ``# doctest:`` flags out of the code a reader sees. Both
             # spellings have the same line count, so either positions the
             # block the same way.
             source = str(node.get("test") or node.astext())
+            output = wants.get(id(node))
             for namespace in memberships[idx]:
                 logger.debug(
                     "doctest block collected into namespace %s",
@@ -1394,16 +1969,31 @@ class DocutilsDocTestFinder:
                 # Parsed once per namespace: _merge_blocks shifts
                 # ``example.lineno`` in place, so two namespaces sharing one
                 # block's examples would shift them twice.
-                test = self._get_test(
-                    string=source,
-                    name=(
-                        namespace
-                        if self._namespace_items == "merged"
-                        else _block_name(namespace, document_name, idx)
-                    ),
-                    filename=name,
-                    globs=globs,
-                    lineno=lineno,
+                test_name = (
+                    namespace
+                    if self._namespace_items == "merged"
+                    else _block_name(namespace, document_name, idx)
+                )
+                test = (
+                    _testcode_test(
+                        source=source,
+                        want=output.astext() if output is not None else "",
+                        options=dict(output.get("options") or {})
+                        if output is not None
+                        else {},
+                        name=test_name,
+                        filename=name,
+                        lineno=lineno,
+                        globs=globs,
+                    )
+                    if _runs_as_exec(block_type, source)
+                    else self._get_test(
+                        string=source,
+                        name=test_name,
+                        filename=name,
+                        globs=globs,
+                        lineno=lineno,
+                    )
                 )
                 if options or gated:
                     for example in test.examples:
@@ -1654,9 +2244,9 @@ def testdocutils(
     runner: doctest.DebugRunner | doctest.DocTestRunner
 
     if raise_on_error:
-        runner = doctest.DebugRunner(verbose=verbose, optionflags=optionflags)
+        runner = _ExecModeDebugRunner(verbose=verbose, optionflags=optionflags)
     else:
-        runner = doctest.DocTestRunner(verbose=verbose, optionflags=optionflags)
+        runner = _ExecModeRunner(verbose=verbose, optionflags=optionflags)
 
     # A namespace laid out per block hands its tests one mapping between them,
     # which the runner would otherwise empty after running the first of them.
