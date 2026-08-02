@@ -101,14 +101,15 @@ HELLO
 ```
 
 The two blocks above share a namespace, so the second reads what the first bound.
-Every `{testcode}` and `{testoutput}` that names no group joins Sphinx's
-`default` group, which is one namespace for the page — unlike a `>>>` block,
-whose namespace the scope above decides. Name a group as the directive's
+A `{testcode}` that names no group is named for its page, because sharing the
+page is the whole point of the form — a visible block and the hidden one
+asserting on it have to meet somewhere. Name a group as the directive's
 argument, `{testcode} intro`, to keep two runs on one page apart.
 
-Because those are two different namespaces, a `{testcode}` and a `>>>` block on
-one page do not see each other's names, at any scope. Write the page one way or
-the other, or put both in a named group.
+A `>>>` block is named for its page only where the scope above says so. So at
+`--namespace-scope document` the two forms land in the same namespace and read
+each other's names, and at the default they do not. Write a page that mixes them
+at document scope, or keep each page to one form.
 
 A page written this way sets up the same way, with no prompt:
 
@@ -120,8 +121,8 @@ base = 40
 
 A `{testsetup}` and `{testcleanup}` may still be written with prompts, which is
 how the rest of these docs write them; the prompt decides how the body is read.
-A page holding a `{testcode}` puts its unnamed setup in the `default` group too,
-so the setup a prompt-free page writes reaches the code it is for.
+A page holding a `{testcode}` names its unnamed setup for the page too, so the
+setup a prompt-free page writes reaches the code it is for.
 
 That is what lets a page assert without showing its assertions. Mark a block
 `:hide:` and it runs while every builder drops it, so the reader meets only the

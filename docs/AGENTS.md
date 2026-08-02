@@ -73,8 +73,9 @@ dogfood the tool they describe; a broken example is a failing test.
 - When the block is written to be pasted, drop the prompt and fence it
   as ```` ```{testcode} ````, with ```` ```{testoutput} ```` for what it
   prints and `:hide:` for a block that asserts without rendering. A
-  page's `{testcode}` blocks share one namespace; they do not share it
-  with that page's `>>>` blocks, so pick one form per page.
+  page's `{testcode}` blocks are named for the page and share one
+  namespace; a `>>>` block joins them only at document scope, so keep
+  each page to one form unless it runs at that scope.
 - `ELLIPSIS` and `NORMALIZE_WHITESPACE` are on globally via
   `doctest_optionflags`, so variable output can elide with `...`
   without a per-example flag.
