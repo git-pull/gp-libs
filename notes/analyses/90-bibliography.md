@@ -102,9 +102,9 @@ Documentation: [`Doc/library/doctest.rst`](https://github.com/python/cpython/blo
 | `_get_asyncio_mode` | [`:222`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L222) | resolve once, query once |
 | `pytest_configure` | [`:295-301`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L295-L301) | detecting an unset default via the sentinel |
 
-## Sphinx — `v9.1.0`
+## Sphinx — `v8.2.3`
 
-[`sphinx-doc/sphinx @ v9.1.0`](https://github.com/sphinx-doc/sphinx/tree/v8.2.3) ·
+[`sphinx-doc/sphinx @ v8.2.3`](https://github.com/sphinx-doc/sphinx/tree/v8.2.3) ·
 [`sphinx/ext/doctest.py`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py)
 
 | Symbol | Anchor | Cited for |

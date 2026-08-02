@@ -24,7 +24,7 @@ docutils.nodes.Element            attributes: dict[str, Any]
 
 docutils.parsers.rst.Parser
   .state_classes                  an INSTANCE attribute, therefore substitutable
-                                  per parse with no process-global mutation
+                                  per parse — but NOT scoped in practice: see below
 
 myst_parser.parsers.docutils_.Parser(RstParser)          [v5.1.0:235]
   .settings_spec = (..., create_myst_settings_spec(), *RstParser.settings_spec)
@@ -105,16 +105,28 @@ bare language fence onto a directive name, so a project that prefers not to writ
 ## Reporter behaviour
 
 Default settings send reporter output to stderr and raise `SystemMessage` at
-`halt_level`, aborting mid-parse. Both are configurable: raising `halt_level` past
-the abort threshold and attaching an observer with `Reporter.attach_observer`
-turns messages into values. `Reporter.system_message` notifies observers for any
-level above `DEBUG` independently of `report_level`, so observation and display are
-separable — which is what makes ADR 0004's code-keyed suppression possible without
-losing the underlying record.
+`halt_level`, aborting mid-parse.
+
+Turning messages into values takes **three** settings, not one. `attach_observer`
+is *additive*: the observer receives the message and the warning stream still gets
+written. So all of `halt_level` above 4 (both to avoid the abort and because a
+halting message bypasses observer notification entirely), `report_level` at 5 or
+`warning_stream` disabled to stop the write, and the observer itself.
+
+A `system_message` carries a level and text and **nothing semantically stable** —
+no code. So a downstream that wants to suppress or promote by category has to
+*classify* the message, and cannot key on an attribute docutils does not provide.
+That is the open problem in ADR 0004.
 
 ## What it cannot do
 
 - **Scope a directive registration** to one parse, one document or one thread.
+- **Scope a `state_classes` substitution either.** `state_classes` is an instance
+  attribute, which makes substitution *look* parse-local — but a nested parse
+  builds its machine from `nested_sm_kwargs`, so a top-level substitution never
+  reaches a nested block, and `RSTState.nested_sm_cache` is a shared **class**
+  attribute that leaks substituted classes into later parses. This is why ADR 0005
+  abandoned the mechanism.
 - **Report a line for every node.** See the table above.
 - **Type its own attribute channel.** `Element.attributes` is `dict[str, Any]`, and
   typeshed's stub for `get(key, failobj: _T) -> _T` is actively wrong — it claims

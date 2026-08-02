@@ -29,7 +29,7 @@ sphinx.ext.doctest
 ADR 0001
   path ─► markup.parse_file ─► (Blocks, Diagnostics)
                                    │
-                                   ├─► project() ─► GroupTest{group, tests[], globs}
+                                   ├─► project() ─► GroupPlan{group, blocks[], seed}
                                    │     pure: no docutils, no pytest, no filesystem,
                                    │     no user code — :skipif: passes through unevaluated
                                    │
@@ -63,14 +63,14 @@ two.
 
 **At the compile call.** stdlib hard-codes `"single"`. Sphinx flips a mutable
 builder attribute and reads it through a process-global rebinding of
-`doctest.compile` that is never restored. `doctest_docutils` today clones the
+`doctest.compile` that is never restored. PR #87 proposes cloning the
 mangled loop's code object to get a private version of that rebinding. ADR 0001
 carries the mode on the example data and reads it in a loop it owns — the only one
 of the four that neither mutates process state nor copies a code object.
 
 **At the location.** stdlib computes `test.lineno + example.lineno + 1`. Sphinx
 gives every block in a group the same `DocTest.name` and pays for it by overriding
-a private method to swallow an `IndexError`. `doctest_docutils` today fabricates a
+a private method to swallow an `IndexError`. PR #87 fabricates a
 synthetic page so the arithmetic stays true across merged blocks. ADR 0001 gives
 each block its own `DocTest`, so the arithmetic is true without fabrication.
 

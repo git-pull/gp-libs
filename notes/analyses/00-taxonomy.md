@@ -9,7 +9,7 @@ a different philosophy.
 | # | Axis | Positions |
 |---|---|---|
 | 1 | **Sharing unit vs. selection unit** | same object · different objects, acknowledged · different objects, unacknowledged |
-| 2 | **Test identity** | author-declared name · symbol-derived · positional (line/column or byte range) |
+| 2 | **Test identity** | author-declared name · symbol-derived · ordinal among extracted blocks · source-coordinate-derived (line/column or byte range) |
 | 3 | **Runtime object model** | stdlib `DocTest`/`Example` · own model with a bridge · own model, no bridge |
 | 4 | **Document model** | real parse tree · flat character spans · regex over text · none |
 | 5 | **Option representation** | `int` bitmask · structured state · enum |
@@ -28,7 +28,8 @@ a different philosophy.
 | Sybil | **different, unacknowledged** | positional `line:N,column:N` | stdlib `Example`, one-line `DocTest` fork | flat character spans |
 | xdoctest | same (one `DocTest` per docstring) | `Callname:N` | own, with a late bridge back | none for `.rst`/`.txt` |
 | pytest-examples | none — no implicit sharing | positional `path:start-end` | none | regex over fences |
-| `doctest_docutils` today | configurable; `per-block` is different-and-guarded | group name, or `page.md[k]` | stdlib | real doctree |
+| `doctest_docutils` released | same object (one block, one item, isolated copied globals) | `page.md[k]` ordinal | stdlib | real doctree |
+| PR #87 (proposed) | configurable; `per-block` is different-and-guarded | group name, or `page.md[k]` | stdlib | real doctree |
 | ADR 0001 | **different, decoupled by construction** | group name, or `page.md[k]` | stdlib | real doctree |
 
 | System | 5 options | 6 extension | 7 vs. pytest doctest | 8 strictness | 9 direction |
@@ -39,7 +40,7 @@ a different philosophy.
 | Sybil | `int` | callable aliases | replace by instruction (`-p no:doctest`) | strict | read-only |
 | xdoctest | structured `TypedDict` + bridge | two registries, else fork | unregisters it | **permissive** | read-only |
 | pytest-examples | n/a | none | no collector — composes trivially | no want at all | **write-back** |
-| `doctest_docutils` today | `int` + a forked lookup | directive subclassing | blocks it, imports its privates | strict | read-only |
+| `doctest_docutils` released | `int` | directive subclassing | blocks it, imports its privates | strict | read-only |
 | ADR 0001 | `int` + registry | `Protocol` + nominal + `BlockKind` registry | **compose; require it** | strict | read-only |
 
 ## What the matrix shows
@@ -55,12 +56,17 @@ product space is four cells:
 
 |  | one node id | N node ids |
 |---|---|---|
-| **one `DocTest`** | Sphinx, `doctest_docutils` `merged` | — (incoherent) |
-| **N `DocTest`s** | *unoccupied until ADR 0001* | Sybil, `doctest_docutils` `per-block` |
+| **one `DocTest`** | PR #87's `merged` | — (incoherent) |
+| **N `DocTest`s** | `sphinx.ext.doctest`, but with *no* ids; ADR 0001 adds the pytest identity | Sybil, PR #87's `per-block`, released `doctest_docutils` (no sharing) |
 
-The bottom-right cell is where the silent failure lives. The bottom-left cell —
-per-block `DocTest`s under one item — gives per-block reporting *and* an
-unsplittable sharing unit, and no surveyed project occupies it.
+The bottom-right cell is where the silent failure lives — but only when the
+blocks share state. Released `doctest_docutils` sits there safely because its
+blocks share nothing: each gets its own copied `globs`.
+
+The bottom-left cell is where the design goes. Sphinx already *executes* that
+shape — N `DocTest`s over one group namespace — but produces no addressable unit
+for any of them, since every block shares one `DocTest.name`. Giving that shape a
+pytest identity is the contribution; the execution shape is not new.
 
 **Axis 3 has an empirical answer.** xdoctest is the controlled experiment for
 abandoning the stdlib object model, and it is now building the bridge back. The
