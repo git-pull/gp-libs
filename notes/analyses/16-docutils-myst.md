@@ -1,6 +1,6 @@
 # docutils and MyST-Parser
 
-docutils pinned at `docutils-0.22.2` (canonical repository is on SourceForge; the
+docutils pinned at `docutils-0.21.2` (canonical repository is on SourceForge; the
 GitHub copies are third-party mirrors, so anchors here name file and symbol rather
 than a permalink). MyST-Parser pinned at
 [`v5.1.0`](https://github.com/executablebooks/MyST-Parser/tree/v5.1.0).
@@ -33,7 +33,12 @@ myst_parser.parsers.docutils_.Parser(RstParser)          [v5.1.0:235]
 
 ## The two line conventions
 
-| Front-end | Construct | `.line` reports |
+**These are docutils 0.21.2 behaviours.** docutils 0.22 fixed the nested case
+upstream and made top-level and nested blocks agree on the **first** line, so any
+claim here that does not name a version is a bug in the claim. ADR 0005
+(`docs/adrs/0005-line-recovery-for-nested-blocks.md`) covers the floor question.
+
+| Front-end | Construct | `.line` reports (0.21.2) |
 |---|---|---|
 | reStructuredText | top-level `doctest_block` | its **last** line |
 | reStructuredText | any block nested in a directive, list item or block quote | `None`, with `.source` also `None` |
@@ -122,9 +127,9 @@ losing the underlying record.
   [`create_myst_settings_spec`](https://github.com/executablebooks/MyST-Parser/blob/v5.1.0/myst_parser/parsers/docutils_.py#L208) ·
   [`settings_spec`](https://github.com/executablebooks/MyST-Parser/blob/v5.1.0/myst_parser/parsers/docutils_.py#L241-L245) ·
   [`MdParserConfig`](https://github.com/executablebooks/MyST-Parser/blob/v5.1.0/myst_parser/config/main.py)
-- Sphinx's registry snapshot/rebind: [`sphinx/util/docutils.py`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/util/docutils.py) ·
-  unconditional override: [`sphinx/application.py`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/application.py)
+- Sphinx's registry snapshot/rebind: [`sphinx/util/docutils.py`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/util/docutils.py) ·
+  unconditional override: [`sphinx/application.py`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/application.py)
 - docutils: `docutils/parsers/rst/directives/__init__.py` (`_directives`),
   `docutils/parsers/rst/states.py` (`state_classes`, `doctest_block` line
   assignment), `docutils/utils/__init__.py` (`Reporter.attach_observer`,
-  `system_message`), at `docutils-0.22.2`.
+  `system_message`), at `docutils-0.21.2`.

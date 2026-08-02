@@ -67,10 +67,12 @@ abandoning the stdlib object model, and it is now building the bridge back. The
 cost of divergence is paid years later, in knobs that exist only to restore the
 default that was abandoned.
 
-**Axis 4 is decided by axis 6.** A regex cannot see `:skipif:` or a group name,
-which is why Sybil has no group concept at all and tells users to clear the
-namespace instead. If directive options are part of the product, the document
-model must be a parse tree.
+**Axis 4 is decided by host fidelity, not by lexing power.** A regex *can* parse
+directive arguments and options — Sybil's directive lexers do it. What a regex
+cannot give you is the same tree Sphinx renders from, and that is what makes a
+page behave identically under `sphinx-build` and under pytest. Sybil having no
+group concept, and telling users to clear the namespace instead, is a design
+choice rather than a limit of its lexer.
 
 **Axis 7 correlates with hostility.** Two of the surveyed projects disable
 pytest's doctest plugin — one in `pytest_configure`, one by telling users to pass

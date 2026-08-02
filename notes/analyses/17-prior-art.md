@@ -46,11 +46,16 @@ downstream test, breaking `--lf`, `--nf`, deselect files, xfail lists and CI fla
 history. For a *documentation* test runner, prose above examples is the thing that
 changes most often.
 
-**What it cannot do.** Groups. A regex cannot see a directive's options, so Sybil
-has no group concept at all and directs users to clear the namespace instead. This
-is the clearest available argument for paying the docutils dependency: if
-`:skipif:`, `:options:` and group names are part of the product, the document
-model has to be a parse tree.
+**What it does not do.** Groups. Sybil has no group concept and directs users to
+clear the namespace instead — but that is a *design choice*, not a lexing limit:
+its directive lexers do parse directive arguments and options.
+
+So the argument for paying the docutils dependency is not "a regex cannot see
+`:skipif:`". It is **host fidelity**: collecting from the same doctree Sphinx
+renders means a page behaves the same under `sphinx-build` and under pytest, and
+this project already depends on docutils regardless. Nesting and source
+attribution are not the argument either — Sybil locates a nested block exactly,
+where docutils 0.21.2 reports `None`.
 
 **Verdict on the invariant.** The non-overlap check does not survive contact with
 docutils: two `.. include::` directives naming the same file legitimately produce

@@ -19,8 +19,14 @@ narrative page needs depends on the first.
 
 |  | one node id | N node ids |
 |---|---|---|
-| **one `DocTest`** | `sphinx.ext.doctest`; `doctest_docutils` `merged` | incoherent |
-| **N `DocTest`s** | *unoccupied until ADR 0001* | Sybil; `doctest_docutils` `per-block` |
+| **one `DocTest`** | PR #87's `merged` | incoherent |
+| **N `DocTest`s** | `sphinx.ext.doctest`, but with *no* ids at all; ADR 0001 gives the shape a pytest identity | Sybil; PR #87's `per-block` |
+
+Sphinx belongs in the bottom row: it already builds one `DocTest` per block
+against one shared group namespace. Its "one node id" is really *no* id — every
+block in a group shares one `DocTest.name`, which is why `SphinxDocTestRunner`
+overrides a private stdlib method to swallow the resulting `IndexError`. So the
+execution shape is well-trodden; the contribution is making it addressable.
 
 The bottom-right cell is where the silent failure lives, and two shipped projects
 are in it.

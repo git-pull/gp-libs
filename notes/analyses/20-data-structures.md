@@ -78,8 +78,8 @@ than improving it — the three fields are then already true.
 ## Anchors
 
 - [`Example` / `DocTest` / `TestResults`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L114)
-- [`TestCode`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L235) ·
-  [`TestGroup`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L200)
+- [`TestCode`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L235) ·
+  [`TestGroup`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L200)
 - [`MultipleDoctestFailures`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L172) ·
   [`repr_failure`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L317-L344)
 - [Sybil `Region`](https://github.com/simplistix/sybil/blob/10.0.1/src/sybil/region.py) ·

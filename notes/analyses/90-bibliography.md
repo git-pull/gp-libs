@@ -20,7 +20,7 @@ used anywhere else.
 | `DocTest.__lt__` | [`:596`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L596) | compares names as text |
 | `DocTestParser` | [`:609`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L609) | the injectable parser |
 | `_EXAMPLE_RE` | [`:618`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L618) | private, used for prompt sniffing |
-| `DocTestFinder` | [`:844`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L844) | nominal type demanded by `DocTestSuite` |
+| `DocTestFinder` | [`:844`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L844) | the type typeshed names; accepted structurally at runtime |
 | `report_*` hooks | [`:1286-1314`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1286-L1314) | the four supported in-loop seams; no `report_skip` here |
 | `__run` | [`:1344`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1344) | name-mangled loop; overridable by mechanism |
 | `compile(..., "single", ...)` | [`:1400`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1400) | the hard-coded mode `{testcode}` cannot use |
@@ -31,8 +31,8 @@ used anywhere else.
 | `OutputChecker` | [`:1690`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1690) | the documented checker seam |
 | `DebugRunner` | [`:1874`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1874) | `report_*` overriding as the sanctioned loop control |
 | `testfile` | [`:2091`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L2091) | the API `testdocutils` mirrors |
-| `DocTestSuite` | [`:2467`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L2467) | demands a nominal `DocTestFinder` |
-| `DocFileSuite` | [`:2570`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L2570) | demands a nominal `DocTestParser` |
+| `DocTestSuite` | [`:2467`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L2467) | no `isinstance` on `test_finder`; sorts, so results must be real `DocTest`s |
+| `DocFileSuite` | [`:2570`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L2570) | no `isinstance` on `parser` |
 
 Documentation: [`Doc/library/doctest.rst`](https://github.com/python/cpython/blob/v3.14.2/Doc/library/doctest.rst).
 
@@ -69,7 +69,8 @@ Documentation: [`Doc/library/doctest.rst`](https://github.com/python/cpython/blo
 | `_get_continue_on_failure` | [`:410`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L410) | private helper imported today |
 | `DoctestTextfile` | [`:420-421`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L420-L421) | `obj = None` as a class attribute |
 | `_check_all_skipped` | [`:451`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L451) | fires only once the item is running |
-| `DoctestModule` / `parsefactories` | [`:500`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L500) · [`:556`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L556) | autouse fixtures from conftest |
+| `DoctestModule` / `parsefactories` | [`:500`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L500) · [`:556`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L556) | fixtures defined in the collected `.py`; **not** conftest autouse, which arrives via `FixtureManager.pytest_plugin_registered` |
+| `subtests` | [`src/_pytest/subtests.py`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/subtests.py) | builtin since 9.0; the only sanctioned sub-item outcome mechanism, and experimental |
 | `_get_checker` | [`:662`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L662) | the checker that would have to be reimplemented |
 | `_get_report_choice` | [`:703`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L703) | private helper |
 | `doctest_namespace` | [`:721`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L721) | the fixture that survives plugin blocking today |
@@ -103,27 +104,27 @@ Documentation: [`Doc/library/doctest.rst`](https://github.com/python/cpython/blo
 
 ## Sphinx — `v9.1.0`
 
-[`sphinx-doc/sphinx @ v9.1.0`](https://github.com/sphinx-doc/sphinx/tree/v9.1.0) ·
-[`sphinx/ext/doctest.py`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py)
+[`sphinx-doc/sphinx @ v9.1.0`](https://github.com/sphinx-doc/sphinx/tree/v8.2.3) ·
+[`sphinx/ext/doctest.py`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py)
 
 | Symbol | Anchor | Cited for |
 |---|---|---|
-| `is_allowed_version(spec, version)` | [`:45`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L45) | specifier first — the reverse of the local helper |
-| `TestDirective` | [`:66`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L66) | the directive base and its option handling |
-| comment nodetype rule | [`:92-93`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L92-L93) | `testsetup`/`testcleanup`/`:hide:` become `nodes.comment` |
-| `:options:` gating | [`:111`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L111) | accepted only on `doctest` and `testoutput` |
-| `TestGroup` / `add_code` | [`:200`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L200) · [`:207`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L207) | phase ordering; three silent-loss cases |
-| `TestCode` | [`:235`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L235) | the parsed unit |
-| `SphinxDocTestRunner` | [`:257`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L257) | overrides a private method to swallow an `IndexError` |
-| `DocTestBuilder` | [`:292`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L292) | builder coupling |
-| `doctest.compile` rebinding | [`:310`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L310) | process-global, never restored |
-| `test_doc` | [`:428`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L428) | group resolution and `*` |
-| gated-node drop | [`:443-444`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L443-L444) | no outcome, id or count |
-| `type = "exec"` for testcode | [`:548`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L548) | the mode flip |
+| `is_allowed_version(spec, version)` | [`:45`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L45) | specifier first — the reverse of the local helper |
+| `TestDirective` | [`:66`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L66) | the directive base and its option handling |
+| comment nodetype rule | [`:92-93`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L92-L93) | `testsetup`/`testcleanup`/`:hide:` become `nodes.comment` |
+| `:options:` gating | [`:111`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L111) | accepted only on `doctest` and `testoutput` |
+| `TestGroup` / `add_code` | [`:200`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L200) · [`:207`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L207) | phase ordering; three silent-loss cases |
+| `TestCode` | [`:235`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L235) | the parsed unit |
+| `SphinxDocTestRunner` | [`:257`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L257) | overrides a private method to swallow an `IndexError` |
+| `DocTestBuilder` | [`:292`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L292) | builder coupling |
+| `doctest.compile` rebinding | [`:310`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L310) | process-global, never restored |
+| `test_doc` | [`:428`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L428) | group resolution and `*` |
+| gated-node drop | [`:443-444`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L449-L450) | no outcome, id or count |
+| `type = "exec"` for testcode | [`:548`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L548) | the mode flip |
 
-Documentation: [`doc/usage/extensions/doctest.rst`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/doc/usage/extensions/doctest.rst).
-Registry behaviour: [`sphinx/util/docutils.py`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/util/docutils.py),
-[`sphinx/application.py`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/application.py).
+Documentation: [`doc/usage/extensions/doctest.rst`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/doc/usage/extensions/doctest.rst).
+Registry behaviour: [`sphinx/util/docutils.py`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/util/docutils.py),
+[`sphinx/application.py`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/application.py).
 
 ## MyST-Parser — `v5.1.0`
 
@@ -136,7 +137,7 @@ Registry behaviour: [`sphinx/util/docutils.py`](https://github.com/sphinx-doc/sp
 | `settings_spec` | [`parsers/docutils_.py:241-245`](https://github.com/executablebooks/MyST-Parser/blob/v5.1.0/myst_parser/parsers/docutils_.py#L241-L245) |
 | `MdParserConfig` (`myst_enable_extensions`, `myst_fence_as_directive`) | [`config/main.py`](https://github.com/executablebooks/MyST-Parser/blob/v5.1.0/myst_parser/config/main.py) |
 
-## docutils — `docutils-0.22.2`
+## docutils — `docutils-0.21.2` (the version this project pins)
 
 The canonical repository is on
 [SourceForge](https://sourceforge.net/p/docutils/code/); the GitHub copies are
