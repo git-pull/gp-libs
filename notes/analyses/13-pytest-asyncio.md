@@ -9,10 +9,18 @@ a default it needed to change without breaking anyone.
 
 ## Classification
 
-A hook-driven behaviour plugin. It contributes no collector of its own for the
-common case; it normalizes configuration into one question, answers it once, and
-then injects behaviour through pytest's existing machinery rather than owning the
-item class.
+A hook-driven behaviour plugin that **does** own its item class. It defines
+`PytestAsyncioFunction(Function)`
+([`:506`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L506))
+with four concrete subclasses — `Coroutine`, `AsyncGenerator`,
+`AsyncStaticMethod`, `AsyncHypothesisTest` — and a `pytest_pycollect_makeitem`
+hookwrapper
+([`:689-723`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L689-L723))
+that substitutes them for every collected async `Function`.
+
+That substitution-by-hookwrapper is itself the pattern worth noting: it swaps the
+item class without owning collection, so pytest still decides *what* is a test
+and the plugin only decides *how* it runs.
 
 ## Core data structures
 
@@ -23,9 +31,13 @@ PytestAsyncioSpecs              its own hookspec namespace         [:90]
 _ScopeName                      reuses pytest's scope vocabulary verbatim
 ```
 
-`Mode` inheriting `str` is a small but deliberate choice: the ini value, the CLI
-value and the internal enum are the same object, so no conversion layer exists to
-drift.
+`Mode` inherits `str`, but a conversion layer still exists and is exactly where
+drift would occur: `_get_asyncio_mode`
+([`:222-232`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L222-L232))
+reads the CLI value, falls back to the ini value, and calls `Mode(val)` inside a
+`try`, translating a `ValueError` into a {exc}`pytest.UsageError` that lists the
+valid modes. The lesson is not "no conversion" — it is that the conversion
+happens **once**, in one named function, with a good error.
 
 Declaring its own `HookspecMarker("pytest")` namespace is the interesting one. A
 third party extends pytest-asyncio by implementing a hook, not by subclassing
@@ -47,7 +59,7 @@ _get_asyncio_mode(config)  -> Mode, resolved once                  [:222]
    |
    v
 in AUTO mode: item.add_marker("asyncio")
-   |  => the rest of the plugin has exactly ONE query path
+   |  => marker presence becomes the single question downstream asks
    v
 fixture/loop resolution by scope, then pyfunc call wrapping
 ```
@@ -64,14 +76,16 @@ fixture/loop resolution by scope, then pyfunc call wrapping
 
 ## What is worth stealing
 
-**The `default=None` sentinel.** Every option is declared with `default=None`
-([`:114`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L114),
-[`:122`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L122),
-[`:140`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L140))
-rather than with its effective default. The plugin can therefore distinguish "the
-user chose the current default" from "the user has not chosen", which is what
-makes a future default change *announceable* — it warns only the second group.
-`pytest_configure` uses exactly this to warn about an unset
+**The `default=None` sentinel, used selectively.** Of the six options
+`pytest_addoption` declares
+([`:108-147`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L108-L147)),
+three carry `None` and three carry their effective default — so this is a
+technique applied where it earns its keep, not a blanket rule.
+
+It earns its keep on the options whose default the project intends to move. A
+`None` lets the plugin distinguish "the user chose the current default" from "the
+user has not chosen", which is what makes a future change *announceable* — only
+the second group is warned. `pytest_configure` does exactly that for an unset
 `asyncio_default_fixture_loop_scope`
 ([`:296-301`](https://github.com/pytest-dev/pytest-asyncio/blob/v1.4.0/pytest_asyncio/plugin.py#L296-L301)).
 
@@ -91,9 +105,15 @@ scope names verbatim. It does not invent a third word for lifetime. Compare the
 current `namespace_scope`/`namespace_items` naming, which collides with two pytest
 concepts at once.
 
-**Session-wide errors raise `pytest.UsageError`; per-item errors raise
-`ValueError`.** The severity matches the blast radius. A misspelled session
-setting should stop the session; a bad per-item value should fail that item.
+**Session-wide errors raise {exc}`pytest.UsageError`.** An invalid `asyncio_mode`
+and an invalid loop-scope ini value both raise it, and both are reached from
+session-level config in `pytest_configure`. A misspelled session setting stops the
+session, which is the right blast radius for a value that would otherwise
+mis-apply to every item.
+
+The mirror rule — per-item errors raising something narrower — is *not* something
+this plugin demonstrates cleanly, so do not cite it as precedent. Marker parsing
+is one function with one blast radius. The session half is the transferable part.
 
 ## What it cannot tell us
 

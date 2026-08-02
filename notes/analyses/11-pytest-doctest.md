@@ -16,7 +16,8 @@ replace it, and the model this project's pytest layer should resemble.
 DoctestItem(Item)          dtest: DocTest, runner: DocTestRunner, fixture_request
    |                       obj = None  (class attribute)
 DoctestTextfile(Module)    obj = None; one DocTest for the whole file
-DoctestModule(Module)      one DocTest per docstring; calls parsefactories
+DoctestModule(Module)      one DocTest per docstring; parsefactories for
+                           fixtures defined in the collected .py itself
 MultipleDoctestFailures    carries a list; the workaround for stdlib having no
                            per-example result value
 ReprFailDoctest            (ReprFileLocation, lines) pairs
@@ -26,9 +27,15 @@ ReprFailDoctest            (ReprFileLocation, lines) pairs
 ([`:421`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L421))
 is what keeps `Module` from trying to import a `.txt`/`.rst` file. Subclassing
 `Module` rather than `File` is what makes `scope="module"` fixtures resolve
-against the page — a page collector *is* the module scope. `parsefactories`
+against the page — a page collector *is* the module scope.
+
+`parsefactories`
 ([`:556`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L556))
-is what makes autouse fixtures from a visible `conftest.py` apply at all.
+is `DoctestModule`-only, and it collects fixtures defined *in the `.py` being
+collected*. It is **not** what makes conftest autouse fixtures apply — those are
+registered through `FixtureManager.pytest_plugin_registered` when the conftest is
+loaded, independently of any collector. A page collector needs no `parsefactories`
+call to see them.
 
 ## Data flow
 

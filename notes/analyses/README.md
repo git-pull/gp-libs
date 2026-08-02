@@ -31,12 +31,12 @@ What exactly does each of them require, and where do they contradict each other?
 | pytest | `pytest-dev/pytest` | `9.1.1` |
 | pytest-xdist | `pytest-dev/pytest-xdist` | `v3.8.0` |
 | pytest-asyncio | `pytest-dev/pytest-asyncio` | `v1.4.0` |
-| Sphinx | `sphinx-doc/sphinx` | `v9.1.0` |
-| MyST-Parser | `executablebooks/MyST-Parser` | `v5.1.0` |
+| Sphinx | `sphinx-doc/sphinx` | `v8.2.3` — what this project resolves. `v9.1.0` is cited only where a difference is called out |
+| MyST-Parser | `executablebooks/MyST-Parser` | `v5.1.0` on Python ≥ 3.11; `v4.0.1` below |
 | Sybil | `simplistix/sybil` | `10.0.1` |
 | xdoctest | `Erotemic/xdoctest` | `v1.3.2` |
 | typeshed | `python/typeshed` | `8c7256c` (no tags; commit reachable from trunk) |
-| docutils | SourceForge (the GitHub clones are third-party mirrors) | `docutils-0.22.2` |
+| docutils | SourceForge (the GitHub clones are third-party mirrors) | `docutils-0.21.2` |
 
 ## Files
 

@@ -1,6 +1,8 @@
 # `sphinx.ext.doctest`
 
-Pinned at [`v9.1.0`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py).
+Pinned at [`v8.2.3`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py),
+the version this project resolves. v9.1.0 changes the default group an
+unargumented block joins; nothing else below differs between the two.
 
 ## Classification
 
@@ -26,10 +28,20 @@ SphinxDocTestRunner(doctest.DocTestRunner)                     [:257]
 ```
 
 `TestGroup.tests` holds heterogeneous entries — `[code]` for a bare block,
-`[code, output]` for a paired testcode/testoutput. `add_code` is where three
-silent losses live: an orphan `testoutput` is discarded, a second `testoutput`
-*replaces* the first, and a `testcode`'s own options are dropped in favour of its
-output block's.
+`[code, output]` for a paired testcode/testoutput. `add_code` is where the silent
+losses live: an orphan `testoutput` is discarded; a `testoutput` following a
+`doctest` block is discarded, because a doctest entry has length 1 and fails the
+`len(latest_test) == 2` guard; and a second `testoutput` *replaces* the first.
+
+A fourth silent loss is in the directive rather than `add_code`: `:pyversion:` is
+in `TestcodeDirective.option_spec`
+([`:174-180`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L174-L180))
+and is then ignored, because the version gate only runs for `doctest` and
+`testoutput`.
+
+`:options:` on a `testcode` is **not** a silent loss. It is absent from
+`TestcodeDirective.option_spec` entirely, so writing it is an unknown-option
+error that drops the block — loud, and visible in the build output.
 
 ## Data flow
 
@@ -46,17 +58,20 @@ doctree
    |
 DocTestBuilder.test_doc(docname, doctree)                      [:428]
    |  for node in doctree.findall(condition):
-   |      if self.skipped(node): continue    <- GATED BLOCK IS DROPPED  [:443-444]
+   |      if self.skipped(node): continue    <- GATED BLOCK IS DROPPED  [:449-450]
    |      code = TestCode(...)
    |      "*" in groups -> add to every group
    |      else groups[name].add_code(code)
    v
 per group: ns = {}
    |  three runners: setup / test / cleanup, sharing one _fakeout
-   |  test.globs = ns  (assigned AFTER construction)
+   |  ONE doctest.DocTest PER BLOCK, each with test.globs = ns
+   |    (assigned AFTER construction, since __init__ copies)
    |  runner.run(test, out=..., clear_globs=False)
-   |  self.type flipped to "exec" for setup, cleanup, testcode   [:548, :608]
+   |  self.type flipped to "exec" for setup, cleanup, testcode   [:549, :608]
    |                     to "single" for ordinary doctests       [:580]
+   |
+   |  if setup fails -> RETURN. Cleanup does not run.            [:554-556]
    v
 six integer counters + text streamed to outdir/output.txt
 ```
@@ -65,10 +80,10 @@ six integer counters + text streamed to outdir/output.txt
 
 | Seam | Kind |
 |---|---|
-| `TestDirective` subclassing, with `option_spec` ([`:66`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L66)) | subclass |
+| `TestDirective` subclassing, with `option_spec` ([`:66`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L66)) | subclass |
 | The node attribute stamp — `testnodetype`, `groups`, `options`, `skipif`, `test` | implicit protocol |
 | `doctest_global_setup`, `doctest_global_cleanup`, `doctest_test_doctest_blocks`, `doctest_default_flags` | Sphinx confvals |
-| `is_allowed_version(spec, version)` ([`:45`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L45)) | function |
+| `is_allowed_version(spec, version)` ([`:45`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L45)) | function |
 
 The node attribute stamp is the important one, and it is undocumented. It is the
 only decoupled interface in the module: any directive that emits a
@@ -82,22 +97,29 @@ rather than trusting one's own directive classes is the only defence against
 
 | Rule | Anchor |
 |---|---|
-| `testsetup`, `testcleanup` and `:hide:` render as `nodes.comment` | [`:92-93`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L92-L93) |
-| `:options:` is accepted only on `doctest` and `testoutput` | [`:111`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L111) |
-| A gated block is dropped during collection — no outcome, id or count | [`:443-444`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L443-L444) |
-| `*` means every group the document declares; `default` means no argument was given | [`:428`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L428) onward |
-| Setup runs before tests, cleanup after, whatever order the page writes them | `TestGroup` [`:200-226`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L200-L226) |
-| `is_allowed_version` takes the **specifier first** | [`:45`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L45) |
-| `doctest.compile` is rebound process-wide and never restored | [`:310`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L310) |
+| `testsetup`, `testcleanup` and `:hide:` render as `nodes.comment` | [`:92-93`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L92-L93) |
+| `:options:` is accepted only on `doctest` and `testoutput`; on a `testcode` it is an unknown-option error, not a discard | [`:111`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L111), [`:174-180`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L174-L180) |
+| Cleanup does **not** run when setup fails — the group returns early | [`:554-556`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L554-L556) |
+| A gated block is dropped during collection — no outcome, id or count | [`:449-450`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L449-L450) |
+| `*` means every group the document declares; `default` means no argument was given | [`:428`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L428) onward |
+| Setup runs before tests, cleanup after, whatever order the page writes them | `TestGroup` [`:200-226`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L200-L226) |
+| `is_allowed_version` takes the **specifier first** | [`:45`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L45) |
+| `doctest.compile` is rebound process-wide and never restored | [`:310`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L310) |
 
 The last two are where this project deliberately diverges. The argument order was
 a real defect in the local helper. The `compile` rebinding is unavailable to a
 library that loads into every pytest session, which is the entire origin of
 ADR 0001's decision to own the per-example loop instead.
 
-The gated-block rule is the one semantic this project rejects on purpose: Sphinx's
-drop destroys the node id, the count and the `-rs` line, and pytest users
-reasonably expect a `SKIPPED` outcome with a reason.
+Two more are rejected on purpose. Sphinx's gated-block drop destroys the node id,
+the count and the `-rs` line, where pytest users reasonably expect a `SKIPPED`
+outcome with a reason. And the setup-failure short-circuit leaves a page's
+`testcleanup` unrun, which for a page that spawns a server in setup means a leak.
+
+**One thing Sphinx already does that is worth stating plainly:** it runs one
+`DocTest` *per block* against one shared group namespace. That execution shape is
+not novel to ADR 0001. What Sphinx lacks is any selectable, reportable identity
+for those blocks — they all share one `DocTest.name`, which is the defect below.
 
 ## What it cannot do
 
@@ -108,20 +130,20 @@ reasonably expect a `SKIPPED` outcome with a reason.
 - **Distinguish two blocks in one group.** Every block in a group shares
   `DocTest.name`, which is why `SphinxDocTestRunner` overrides a private stdlib
   method to swallow the resulting `IndexError`
-  ([`:257`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L257)).
+  ([`:257`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L257)).
 
 ## Anchors
 
-- [`is_allowed_version`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L45) ·
-  [`TestDirective`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L66) ·
-  [`comment nodetype rule`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L92-L93)
-- [`TestGroup`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L200) ·
-  [`add_code`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L207) ·
-  [`TestCode`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L235)
-- [`SphinxDocTestRunner`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L257) ·
-  [`DocTestBuilder`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L292) ·
-  [`doctest.compile` patch](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L310)
-- [`test_doc`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L428) ·
-  [`skipped-node drop`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L443-L444) ·
-  [`type = "exec"` for testcode](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L548)
-- [User-facing contract](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/doc/usage/extensions/doctest.rst)
+- [`is_allowed_version`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L45) ·
+  [`TestDirective`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L66) ·
+  [`comment nodetype rule`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L92-L93)
+- [`TestGroup`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L200) ·
+  [`add_code`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L207) ·
+  [`TestCode`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L235)
+- [`SphinxDocTestRunner`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L257) ·
+  [`DocTestBuilder`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L292) ·
+  [`doctest.compile` patch](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L310)
+- [`test_doc`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L428) ·
+  [`skipped-node drop`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L449-L450) ·
+  [`type = "exec"` for testcode](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L548)
+- [User-facing contract](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/doc/usage/extensions/doctest.rst)

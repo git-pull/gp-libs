@@ -108,6 +108,6 @@ group sharing state, the wrong sequence is the bug.
   [`compile(..., "single", ...)`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1400)
 - [`DoctestItem.setup`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L288-L293) ·
   [`runtest`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L295-L303)
-- [`test_doc`](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L428) ·
-  [gated-node drop](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L443-L444) ·
-  [`doctest.compile` patch](https://github.com/sphinx-doc/sphinx/blob/v9.1.0/sphinx/ext/doctest.py#L310)
+- [`test_doc`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L428) ·
+  [gated-node drop](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L449-L450) ·
+  [`doctest.compile` patch](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L310)

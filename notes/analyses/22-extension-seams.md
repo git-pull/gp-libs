@@ -7,7 +7,7 @@ ranking is not a matter of taste — each has an observed failure mode.
 
 | Mechanism | Where | Failure mode |
 |---|---|---|
-| **Nominal subclassing** — the API demands the class, not the shape | stdlib `doctest`, `sphinx.ext.doctest` directives | A structurally compatible object is rejected. `DocutilsDocTestFinder` exposes a compatible `find()` and still cannot be passed to `DocTestSuite(test_finder=...)` |
+| **Nominal subclassing** — the *type checker* demands the class, the interpreter does not | stdlib `doctest` (via typeshed), `sphinx.ext.doctest` directives | Typed callers are rejected for objects that work fine at runtime. stdlib performs no `isinstance` check on `parser` or `test_finder`; the pressure comes entirely from `doctest.pyi`. One genuine runtime edge: `DocTestSuite` sorts, and `DocTest.__lt__` returns `NotImplemented` for a non-`DocTest`, so a custom finder must return real `DocTest`s |
 | **Callable aliases** — `Evaluator = Callable[[Example], str \| None]` | Sybil | Types nothing. You cannot express "this lexer emits `source` and `arguments`", so a mismatched pairing raises `KeyError` at run time. Sybil's own source comments say the payload "could likely be a `TypedDict`" |
 | **Named registry** — a module dict plus a `register_*` function | `doctest.register_optionflag`, docutils directives, xdoctest's two facades | Process-global mutable state. Order-dependent, unscoped, and silently overwritable |
 | **`Protocol`** — structural typing | xdoctest's `StdlibExampleLike` | None inherent; but a `Protocol` alone does not satisfy a nominal consumer |
@@ -49,9 +49,14 @@ direction and is retiring `set_event_loop_policy` in favour of an explicit
 ## The nominal/structural trap, and the cheap way out
 
 Typeshed's signatures demand classes: `DocTestFinder.__init__(parser: DocTestParser
-= ...)`, `DocTestSuite(test_finder: DocTestFinder | None)`. A `Protocol` gives a
-third party structural typing; a nominal subclass keeps you passable to the
-stdlib's own builders.
+= ...)`, `DocTestSuite(test_finder: DocTestFinder | None)`. The interpreter does
+not — a duck-typed parser or finder runs fine. So a `Protocol` gives a third party
+structural typing, and a nominal subclass keeps you *type-checkable* against the
+stub.
+
+The subclass does not buy passability. That is a matter of matching the call
+signature: a finder whose `find()` takes a string first cannot be handed to
+`DocTestSuite`, which passes a module — and subclassing does not change that.
 
 Doing both costs nothing:
 
