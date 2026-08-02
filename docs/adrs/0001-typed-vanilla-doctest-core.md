@@ -285,44 +285,63 @@ pytest_doctest_docutils   collection, items, globs lifetime, reporting
 
 ### Settings and the frozen registry
 
-Settings are **faceted**, not one object every layer imports — a single shared
-`Settings` becomes a dependency magnet, and the facets have genuinely different
-consumers:
+Settings have **lifetimes**, not just precedence. "Resolve exactly once at session
+start" cannot be true of document front matter, which does not exist until that
+document is parsed. Three scopes:
 
-| Facet | Owns | Read by |
+| Scope | Owns | Resolved |
 |---|---|---|
-| `ParseSettings` | encoding, MyST extensions, front-matter policy, diagnostic promotion and suppression | `markup/` |
-| `ProjectionSettings` | `ungrouped` (`"default"` or `"block"`), wildcard resolution, name minting | `project` |
-| `RunSettings` | optionflags, `continue_on_failure`, checker selection, report style | `runner` |
+| `SessionSettings` | defaults plus normalized host configuration; the frozen registry | once, at session start |
+| `DocumentSettings` | the front-matter overlay a page is permitted to set | per document, after parsing |
+| block / example policy | directive options, then inline `# doctest:` flags | per block, at projection and run |
 
-Precedence is fixed and stated once: **per-block directive option → per-document
-front matter → host configuration (pytest ini/CLI, Sphinx `conf.py`, argparse) →
-built-in default.** Each adapter translates its host's configuration into the
-facets exactly once, at session start; no layer reads a host config object.
+Not every field shares one ladder, so the precedence is stated per axis. For
+option flags it follows Sphinx: **runner defaults → directive or output
+`:options:` → inline flags.**
 
-The **registry** is resolved and frozen alongside them, not as a separate object
-with its own lifecycle. It holds the contributed block kinds, front ends and
-execution profiles. "Frozen" means an immutable mapping built once before
-collection begins; registering afterwards is an error, not a silent late
-addition.
+Two fields move out of the core entirely. **Encoding** belongs to the source
+loader, because `DocumentParser` already receives `str`. **Report style** belongs
+to the host adapter. And wildcard resolution and name minting are *invariants*,
+not user-configurable knobs — exposing them would let a project produce node ids
+no other project can read.
 
-This is what {ref}`the collection contract <the-collection-contract>` means by
-*frozen registry*. Two consequences worth stating:
+The **registry** is resolved and frozen alongside `SessionSettings`. "Frozen"
+means an immutable mapping built once; registering afterwards is an error.
 
-- **Entry-point discovery is not inherently unsafe** under pytest-xdist. Workers
-  are fresh processes that re-run plugin loading with the same argv, so
-  entry-point resolution is identical in the controller and every worker. What
-  breaks determinism is *nondeterministic* contribution — a conftest that
-  registers conditionally on the environment — not discovery itself.
-- **Nothing here is public in v1.** Contribution happens through the host's own
-  extension point (a pytest hook, Sphinx's `setup(app)`), and the registry type
-  stays private until a caller outside the package needs it.
+**Contribution is public; the registry is not.** The stated goal is an
+extendable, pluggable core, so a small host-neutral contributor protocol ships in
+v1 — what may be contributed (front ends, block kinds, execution profiles,
+checkers), when registration closes, how duplicate names are resolved, and what
+ordering guarantees exist. Its *implementation* stays private. pytest hooks,
+Sphinx's `setup(app)`, direct library calls and — optionally — entry points all
+feed that one surface.
+
+Two hazards to name rather than assume away:
+
+- **Nested `conftest.py` files load during collection**, so "freeze before
+  collection" is too simple. Either the boundary moves later, or conftest-level
+  contribution is explicitly excluded. That is an open question in
+  {doc}`0006-pytest-private-api-compatibility`.
+- **Entry-point discovery is not identical across workers in general.** xdist
+  supports SSH and socket workers and heterogeneous environments, so "same argv,
+  same plugins" holds only for a homogeneous local run. Either state a
+  homogeneous-plugin requirement or compare a deterministic registry manifest
+  across workers. What breaks determinism is *nondeterministic contribution*, not
+  discovery as such — but heterogeneity makes that distinction load-bearing.
 
 ### Item lifecycle
 
 The custom item is load-bearing, and half-reusing {class}`pytest.DoctestItem`
 reintroduces the exact bug this design exists to avoid. The contract, stated so
 an implementer cannot get it wrong by omission:
+
+0. **The carrier.** {class}`pytest.DoctestItem` reads `self.dtest` in
+   `setup()`, `reportinfo()` and `_check_all_skipped()`, so the subclass must
+   define it even though a group holds many tests. `self.dtest` is a synthetic
+   **zero-example** `DocTest` for the group, and its `globs` **is** the canonical
+   live mapping — the same object every `RunnableBlock`'s test is given. That
+   makes the inherited `setup()` inject fixtures into exactly the right place
+   with no override of the injection itself.
 
 1. **Collection** builds one `GroupPlan` per (document, group) and one item per
    plan. An empty plan yields no item.
@@ -348,8 +367,21 @@ an implementer cannot get it wrong by omission:
    `PytestDoctestRunner` is nested inside a factory and cannot be imported.
 4. **Outcome** follows [](#the-outcome-contract): skip the item only when every
    runnable block is skipped.
-5. **`repr_failure`** is inherited unchanged. It already reads each failure's own
-   `DocTest`.
+   `runtest()` must also keep `_disable_output_capturing_for_darwin()`, which
+   the inherited implementation calls before running and which has nothing to do
+   with grouping.
+
+5. **`repr_failure`** is inherited unchanged for *failures* — it already reads
+   each failure's own `DocTest`. It does **not** render `GroupResult`, and
+   claiming it does would conflate two channels. Partial-skip detail goes to a
+   report section and the terminal summary; see [](#the-outcome-contract).
+
+6. **Reporting across processes.** The controller never sees the item — it
+   receives serialized `TestReport` dictionaries. So `pytest_runtest_makereport`
+   copies a **versioned, JSON-safe** block summary onto the report; pytest
+   serializes arbitrary report attributes and xdist reconstructs them
+   controller-side. The rich `GroupResult`, and every exception in it, stays
+   worker-local.
 
 ### Vocabulary
 
@@ -424,20 +456,33 @@ class ExpectedOutput(t.NamedTuple):
 
 
 class ProjectedBlock(t.NamedTuple):
+    """A RECIPE. Holds no `DocTest`, because a `DocTest` is mutable."""
+
     phase: Phase
-    test: doctest.DocTest  # stock objects; its own filename/lineno/docstring
-    profile: ExecutionProfile  # uniform for the block, resolved at projection
+    name: str  # the minted test name
+    source: str  # normalized executable body
+    filename: str
+    lineno: int | None
+    profile_name: str  # resolved against the frozen registry per attempt
     skipif: str | None  # UNEVALUATED; gated in run_group()
     expected: ExpectedOutput | None  # paired testoutput, itself gateable
 
 
 class GroupPlan(t.NamedTuple):
     group: str
-    blocks: tuple[ProjectedBlock, ...]  # in phase order; IMMUTABLE
+    blocks: tuple[ProjectedBlock, ...]  # in phase order; genuinely immutable
     seed: t.Mapping[str, t.Any]  # initial namespace; copied per attempt
 
 
-# --- run: one attempt ------------------------------------------------------
+# --- run: one attempt materializes fresh stdlib objects --------------------
+
+
+class RunnableBlock(t.NamedTuple):
+    """Materialized per attempt. Its `DocTest` is never retained by a plan."""
+
+    recipe: ProjectedBlock
+    test: doctest.DocTest  # fresh stock objects, built this attempt
+    runtime: ExecutionRuntime  # from the profile factory, this attempt
 
 
 class RunContext:
@@ -445,21 +490,39 @@ class RunContext:
 
     plan: GroupPlan
     globs: dict[str, t.Any]  # cleared in place and reseeded per attempt
+    runtimes: dict[str, ExecutionRuntime]  # one per profile used by the group
 
 
-class BlockResult(t.NamedTuple):
+# --- results: a discriminated union, so invalid states cannot be built -----
+
+
+class Passed(t.NamedTuple):
     block: ProjectedBlock
-    outcome: t.Literal["passed", "failed", "skipped", "error"]
-    reason: str | None  # gate expression when skipped; message when error
-    error: BaseException | None  # gate or profile failure, not a doctest one
+
+
+class Failed(t.NamedTuple):
+    block: ProjectedBlock
+    failure: doctest.DocTestFailure | doctest.UnexpectedException
+
+
+class Skipped(t.NamedTuple):
+    block: ProjectedBlock
+    reason: str  # the gate expression
+
+
+class Errored(t.NamedTuple):
+    block: ProjectedBlock
+    error: BaseException  # a gate that raised, or a runtime that would not start
+
+
+BlockResult: t.TypeAlias = Passed | Failed | Skipped | Errored
 
 
 class GroupResult(t.NamedTuple):
     group: str
     blocks: tuple[BlockResult, ...]
-    failures: tuple[doctest.DocTestFailure | doctest.UnexpectedException, ...]
     primary: BaseException | None  # what runtest() re-raises
-    secondary: tuple[BaseException, ...]  # e.g. a cleanup failure after a body failure
+    secondary: tuple[BaseException, ...]  # e.g. cleanup failing after the body
 ```
 
 `ParsedBlock` carries no `want`, because neither owner of a `want` is the parsed
@@ -471,13 +534,27 @@ was what made "projection owns pairing" untrue.
 `BlockKind` names a profile rather than holding one, so a public type never
 contains a private one. The name resolves against the frozen registry.
 
-`BlockResult.outcome` needs `"error"` because a gate that raises, or a profile
-that fails to establish, is neither a pass, a fail, nor a skip.
-`GroupResult.primary` and `.secondary` make the precedence explicit: **a body
-failure outranks a cleanup failure**, a control-flow exception
-({exc}`pytest.skip`, `xfail`, exit) outranks both, and the loser is recorded
-rather than dropped. Classifying which exceptions are control-flow is the pytest
-adapter's job, not the core's.
+**A plan holds no `DocTest`.** {class}`doctest.DocTest` is mutable — the design
+assigns `globs` to it after construction, and a run mutates that mapping — so a
+plan retaining one would not be a recipe, it would be last attempt's state. Under
+`--reruns` that is the false-green this design exists to prevent. `ProjectedBlock`
+therefore carries the *ingredients*, and `RunContext` materializes fresh stock
+`Example` and `DocTest` objects for every attempt.
+
+The same applies to a gated `testoutput`: when its gate is truthy the output is
+**absent**, not empty. Its text *and* its output-specific options both disappear,
+which is what Sphinx does, and which a pre-built `want=""` with retained options
+would get wrong.
+
+**Results are a discriminated union**, not one record with nullable fields, so
+"passed with an exception attached" is unrepresentable rather than merely
+unlikely. `Errored` exists because a gate that raises, or a runtime that will not
+start, is none of pass, fail or skip.
+
+`GroupResult.primary` and `.secondary` make precedence explicit: **a control-flow
+exception outranks a body failure, which outranks a cleanup failure**, and the
+loser is recorded rather than dropped. Classifying which exceptions are
+control-flow is the pytest adapter's job, not the core's.
 
 `Block.line` being nullable is load-bearing, not defensive. A bare `>>>` block
 nested in a `.. note::`, a list item or a block quote reports `line=None,
@@ -510,16 +587,27 @@ evaluates it against the live group mapping, after fixture injection and after
 earlier blocks have run. That is more useful — a gate can consult a fixture — and
 it is not what `sphinx-build` does. Recorded rather than hidden.
 
-`ExecutionProfile` is a **private** protocol carrying compile mode, extra compile
-flags, and an optional per-group context manager. It is not a `Literal["single",
-"exec"]`, because a second execution policy already exists in this repository:
-[PR #59](https://github.com/git-pull/gp-libs/pull/59) adds top-level `await`,
-which needs `ast.PyCF_ALLOW_TOP_LEVEL_AWAIT` and an event-loop lifetime that a
-mode string cannot express. The profile's context manager is what `run_group()`
-enters, so that lifetime is served without overriding `run()` and stdlib's
-save-and-restore `finally` stays inherited. It stays private until a caller
-outside the package needs it; PR #59 is the in-repo caller that justifies it
-existing at all.
+**`ExecutionProfile` is an immutable factory; `ExecutionRuntime` is per attempt.**
+A group can mix prompt, `exec` and async blocks, so there is no single per-group
+profile. The profile is chosen per block and names a factory; `RunContext` creates
+one runtime *per distinct profile* the group uses, and blocks sharing a profile
+share its runtime. An async runtime therefore owns one event loop for the whole
+group, which is what lets awaited state cross block boundaries.
+
+It is not a `Literal["single", "exec"]`, because a second execution policy already
+exists in this repository: [PR #59](https://github.com/git-pull/gp-libs/pull/59)
+adds top-level `await`, which needs `ast.PyCF_ALLOW_TOP_LEVEL_AWAIT` and an
+event-loop lifetime a mode string cannot express. The runtime's context manager is
+what `run_group()` enters, so that lifetime is served without overriding `run()`
+and stdlib's save-and-restore `finally` stays inherited.
+
+**The ordinary lane does not use the owned loop at all.** For prompt-form blocks —
+the overwhelming majority — the runner is a plain reporter subclass over CPython's
+*untouched* per-example loop. `_DocTestRunner__run` is invoked only for extended
+profiles: `exec` bodies, top-level await, and whatever comes next. Ordinary
+doctests are then compatible **by construction** rather than by differential
+testing, and {doc}`0002-runner-conformance-across-cpython`'s harness shrinks to
+guarding the extended lane.
 
 **Which docutils node classes a kind may arrive as is a front-end concern, not a
 `BlockKind` field.** `testsetup`, `testcleanup` and any `:hide:` block are
@@ -560,6 +648,24 @@ layer that never changes what is constructed.
   reintroduce the standalone-versus-Sphinx divergence it exists to prevent.
   Standalone reST and MyST use both halves; a Sphinx extension calls only the
   extractor, on the doctree it already resolved.
+
+  **`DocumentParser` is not a {class}`doctest.DocTestParser`.** The two
+  signatures are incompatible — stdlib's is `parse(self, string, name='<string>')`
+  returning alternating `str` and `Example`, and `get_doctest` depends on exactly
+  that
+  ([`Lib/doctest.py:657`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L657),
+  [`:696`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L696)).
+  So there are three lanes, not one:
+
+  | Lane | Contract |
+  |---|---|
+  | plain text and strings | the exact `DocTestParser` contract, unmodified |
+  | reST / MyST | `DocumentParser` → doctree → `extract_blocks` |
+  | Python objects | a `DocTestFinder`-shaped adapter |
+
+  Anything promising `DocFileSuite(parser=...)` compatibility is a separate
+  stdlib-shaped façade over the first lane, not the markup lane wearing a
+  stdlib name.
 
   This is not a Sphinx builder. A builder owns discovery, an `env`, an `outdir`
   and a reporting format; an extractor is a pure function from a doctree to
