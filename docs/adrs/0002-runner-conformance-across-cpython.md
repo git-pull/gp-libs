@@ -62,10 +62,31 @@ incremented *before* the `SKIP` check, so a skip that wrongly executes moves
 neither counter — it is invisible to both the tuple and to `summarize()` at zero
 failures, and only the `report_*` text distinguishes it.
 
-The exec-mode case has no stock counterpart to compare against: a stock runner
-raises `SyntaxError: multiple statements found` on a multi-statement body. It is
-asserted against a recorded expectation instead, and that asymmetry is the point
-— it is the one behaviour this runner exists to add.
+The exec-mode case is the one the two runners are *meant* to disagree on, and it
+still compares against stock. `compile()` raises on a multi-statement body, but
+that call sits inside the loop's own `try`
+([`Lib/doctest.py:1398-1408`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1398-L1408)),
+so a stock {class}`doctest.DocTestRunner` catches the `SyntaxError` and records
+it as an unexpected exception rather than propagating it: one
+`report_unexpected_exception` call, `TestResults(failed=1, attempted=1)`, and
+`_stats` at `(1, 1, 0)`. Only {class}`doctest.DebugRunner` — and pytest's runner
+beneath it — converts that into a raise, as
+{exc}`doctest.UnexpectedException`. So the case is asserted as a pair: stock
+records the failure, this runner records a pass. A regression that silently
+reverts to `"single"` mode shows up as the two converging.
+
+**What else belongs in the matrix, and what does not.** Add `report_*` hook
+events — the only channel that distinguishes a skip which wrongly *executed*,
+since `attempted` increments before the `SKIP` check and neither counter moves —
+and repeated runs of one test, which exercise accumulator arithmetic across
+calls.
+
+Cross-block `FAIL_FAST` and cleanup aggregation stay out. Both are properties of
+`run_group()` rather than of the per-example loop, so a stock runner offers
+nothing to compare them against; they belong to
+{doc}`0001-typed-vanilla-doctest-core`'s item-lifecycle tests. A
+{exc}`pytest.skip` raised inside an example and a debugger exit are likewise
+pytest-layer concerns, testable only through a pytest session.
 
 Version handling is by capability probe, never by version comparison, so a
 backport, a vendored interpreter or a fork behaves correctly rather than by
