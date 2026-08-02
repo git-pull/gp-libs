@@ -48,6 +48,13 @@ continuously, without a `sys.version_info` ladder?
 A differential conformance harness, run in CI on every supported interpreter,
 gating the build step that lands the runner.
 
+**Scoped to the extended lane.** {doc}`0001-typed-vanilla-doctest-core` runs
+ordinary prompt blocks on CPython's untouched per-example loop, so those need no
+differential proof — they *are* the reference. The owned `__run` is invoked only
+for `exec` bodies, top-level await and future profiles, and that is what this
+harness guards. It is a smaller obligation than an unconditionally owned loop,
+and it is the reason owning the loop is affordable at all.
+
 A fixed case matrix — pass, fail, unexpected exception, `SyntaxError`, all
 examples skipped, partially skipped, `FAIL_FAST`, `REPORT_ONLY_FIRST_FAILURE`,
 `IGNORE_EXCEPTION_DETAIL`, and an exec-mode body — is run through both this

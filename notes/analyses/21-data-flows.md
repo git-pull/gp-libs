@@ -64,8 +64,9 @@ two.
 **At the compile call.** stdlib hard-codes `"single"`. Sphinx flips a mutable
 builder attribute and reads it through a process-global rebinding of
 `doctest.compile` that is never restored. PR #87 proposes cloning the
-mangled loop's code object to get a private version of that rebinding. ADR 0001
-carries the mode on the example data and reads it in a loop it owns — the only one
+mangled loop's code object to get a private version of that rebinding. ADR 0001 puts the policy on the projected *block*, materializes a runtime per
+profile, and reads it in a loop it owns — and only for extended profiles, since
+ordinary prompt blocks run on CPython's untouched loop — the only one
 of the four that neither mutates process state nor copies a code object.
 
 **At the location.** stdlib computes `test.lineno + example.lineno + 1`. Sphinx

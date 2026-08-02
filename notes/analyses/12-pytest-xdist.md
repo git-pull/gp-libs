@@ -20,11 +20,19 @@ controller                              worker (one per process)
     collection:      list[str]               <- the agreed id list
 ```
 
-The controller's entire model of the suite is a list of node-id strings that
-arrived from a worker. It has no items, no marks, no fixtures and no knowledge of
-what any test does. A plugin that needs "these tests share state" therefore cannot
-tell the controller so directly — it can only encode the fact *into the node id*
-or infer it from string shape.
+The controller's entire model of the suite **during scheduling** is a list of
+node-id strings that arrived from a worker. It has no items, no marks, no fixtures
+and no knowledge of what any test does. A plugin that needs "these tests share
+state" therefore cannot tell the controller so directly — it can only encode the
+fact *into the node id* or infer it from string shape.
+
+**Reporting is a separate channel with a different shape.** After execution the
+controller receives serialized `TestReport` dictionaries, and pytest serializes
+arbitrary extra attributes on a report, which xdist reconstructs controller-side.
+So a worker *can* ship structured per-block detail to the controller — as
+JSON-safe data on the report, never as an object hanging off the item. Confusing
+the two channels is what makes a controller-side summary look impossible when it
+is not.
 
 ## Data flow
 

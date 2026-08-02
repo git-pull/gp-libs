@@ -22,11 +22,13 @@ narrative page needs depends on the first.
 | **one `DocTest`** | PR #87's `merged` | incoherent |
 | **N `DocTest`s** | `sphinx.ext.doctest`, but with *no* ids at all; ADR 0001 gives the shape a pytest identity | Sybil; PR #87's `per-block` |
 
-Sphinx belongs in the bottom row: it already builds one `DocTest` per block
-against one shared group namespace. Its "one node id" is really *no* id — every
-block in a group shares one `DocTest.name`, which is why `SphinxDocTestRunner`
-overrides a private stdlib method to swallow the resulting `IndexError`. So the
-execution shape is well-trodden; the contribution is making it addressable.
+Sphinx belongs in the bottom row, with a qualification: it builds one `DocTest`
+per *ordinary test* block against one shared group namespace, while combining all
+setup blocks into one simulated `DocTest` and all cleanup into another. Its "one
+node id" is really *no* id — every test block in a group shares one
+`DocTest.name`, which is why `SphinxDocTestRunner` overrides a private stdlib
+method to swallow the resulting `IndexError`. So the execution shape is partly
+well-trodden; the contribution is making it addressable.
 
 The bottom-right cell is where the silent failure lives, and two shipped projects
 are in it.
@@ -35,9 +37,9 @@ Sybil is there **unacknowledged**: one `Document.namespace` shared by reference,
 one pytest item per region. `pytest -k` on an example whose predecessor bound a
 name raises `NameError`, and nothing in its documentation says so.
 
-`doctest_docutils`'s `per-block` mode is there **acknowledged and guarded** — the
-guards are the xdist scheduler substitution, the scheduler refusal, and the
-run-twice refusal. Those guards are the reason `_worker_count`, `_shared_page`,
+PR #87's proposed `per-block` mode would sit there **acknowledged and guarded** —
+the guards being an xdist scheduler substitution, a scheduler refusal and a
+run-twice refusal. It has not shipped; {doc}`ADR 0003 <../../docs/adrs/0003-rejecting-per-block-items>` rejects the shape. Those guards are the reason `_worker_count`, `_shared_page`,
 `_is_page` and `_splitting_scheduler` exist at all.
 
 The bottom-left cell gives per-block reporting *and* an unsplittable sharing unit,
@@ -53,10 +55,12 @@ structural, not incidental:
 - The controller never collects, so it cannot ask "which items share state" — it
   sees node-id strings and nothing else. Any protection must be *inferred from
   string shape* or *encoded into the id*.
-- The only affinity primitive is
+- The only affinity primitive *inside the shipped schedulers* is
   [`_split_scope(nodeid) -> str`](https://github.com/pytest-dev/pytest-xdist/blob/v3.8.0/src/xdist/scheduler/loadscope.py#L284).
-  `load` and `worksteal` have no scope concept at any layer, so under a user-typed
-  `--dist load` the options are refuse, substitute, or do not need protecting.
+  A plugin may substitute a whole `Scheduling` via `pytest_xdist_make_scheduler`,
+  but that still reasons only over node-id strings. `load` and `worksteal` have no
+  scope concept at any layer, so under a user-typed `--dist load` the options are
+  refuse, substitute, or do not need protecting.
 - `xdist_group` is applied
   [worker-side](https://github.com/pytest-dev/pytest-xdist/blob/v3.8.0/src/xdist/remote.py#L245-L254)
   and only when the worker's own `--dist` is literally `loadgroup`. A
@@ -76,12 +80,7 @@ Sybil's
 [`line:{line},column:{column}`](https://github.com/simplistix/sybil/blob/10.0.1/src/sybil/sybil.py#L155-L157)
 and pytest-examples' `path:start-end`.
 
-An **ordinal among the extracted blocks** is a different thing and is fine. It is
-not a source coordinate: `page.md[3]` is unchanged by a paragraph inserted above
-it, which is exactly the edit that renames a `line:N` id. Released
-`doctest_docutils` names its tests that way already, and the rule preserves it.
-
-For a *documentation* test runner this is indefensible, because prose above
+For a *documentation* test runner that is indefensible, because prose above
 examples is the thing that changes most often. Adding a sentence renames every
 downstream test, which breaks `--lf`, `--nf`, checked-in deselect files, xfail
 lists and CI flake history. pytest-examples compounds it: the same string is the
@@ -90,6 +89,11 @@ dedupe key for its write-back, so an identity collision becomes file corruption.
 The rule: **author-declared name first, stable ordinal as fallback, and the
 fallback shape invariant across configuration.** The test to apply is concrete —
 adding a sentence to a page must rename zero tests.
+
+An **ordinal among the extracted blocks** is not a source coordinate and is fine:
+`page.md[3]` is unchanged by a paragraph inserted above it, which is exactly the
+edit that renames a `line:N` id. Released `doctest_docutils` names its tests that
+way already, and the rule preserves it.
 
 Two corollaries:
 
