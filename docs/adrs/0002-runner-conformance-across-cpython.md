@@ -50,9 +50,22 @@ gating the build step that lands the runner.
 
 A fixed case matrix — pass, fail, unexpected exception, `SyntaxError`, all
 examples skipped, partially skipped, `FAIL_FAST`, `REPORT_ONLY_FIRST_FAILURE`,
-`IGNORE_EXCEPTION_DETAIL` — is run through both this runner and a stock
-{class}`doctest.DocTestRunner`, asserting equality of `TestResults`, the captured
-`report_*` text, `summarize()` output, and the accumulator contents.
+`IGNORE_EXCEPTION_DETAIL`, and an exec-mode body — is run through both this
+runner and a stock {class}`doctest.DocTestRunner`, asserting the captured
+`report_*` text, `summarize()` output, the accumulator contents, and the result
+as `(failed, attempted, skipped)`.
+
+**Assert the triple, not `TestResults` equality.** `TestResults` is a two-field
+namedtuple carrying `skipped` off-tuple, so `==` compares only two of the three
+values and a skip-count regression passes silently. `attempted` is also
+incremented *before* the `SKIP` check, so a skip that wrongly executes moves
+neither counter — it is invisible to both the tuple and to `summarize()` at zero
+failures, and only the `report_*` text distinguishes it.
+
+The exec-mode case has no stock counterpart to compare against: a stock runner
+raises `SyntaxError: multiple statements found` on a multi-statement body. It is
+asserted against a recorded expectation instead, and that asymmetry is the point
+— it is the one behaviour this runner exists to add.
 
 Version handling is by capability probe, never by version comparison, so a
 backport, a vendored interpreter or a fork behaves correctly rather than by
