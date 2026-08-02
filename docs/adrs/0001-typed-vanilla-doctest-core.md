@@ -98,12 +98,19 @@ One {class}`pytest.Item` per (document, group). Inside it, a tuple of per-block
 `DocTest`s run in phase order against one live `globs` mapping that never leaves
 the item.
 
-The execution shape is not new: `sphinx.ext.doctest` already runs several
-`DocTest`s against one shared group namespace. What is new is giving that shape a
-**pytest identity**. Sphinx produces no selectable, reportable unit for a group —
-every block in it shares one `DocTest.name`, which is why `SphinxDocTestRunner`
-overrides a private stdlib method to swallow the resulting `IndexError`. Mapping
-the group onto one {class}`pytest.Item` is the contribution.
+The execution shape is partly precedented. `sphinx.ext.doctest` runs several
+`DocTest`s against one shared group namespace — but only for the *test* phase.
+All of a group's `testsetup` blocks are combined into a **single** simulated
+`DocTest` named `f"{group.name} (setup code)"`, and likewise cleanup; only
+`group.tests` is one `DocTest` per block
+([`sphinx/ext/doctest.py:525-556`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L525-L556)).
+
+So this design is per-block in all three phases where Sphinx is per-block in one,
+and — more importantly — Sphinx produces no selectable, reportable unit for any
+of them: every ordinary test block in a group shares one `DocTest.name`, which is
+why `SphinxDocTestRunner` overrides a private stdlib method to swallow the
+resulting `IndexError`. Mapping the group onto one {class}`pytest.Item` while
+each block keeps its own identity is the contribution.
 
 What that buys, for free and with no override of `repr_failure` or `reportinfo`:
 per-block failure locations, per-block gutters, and per-block "location unknown".
@@ -250,7 +257,8 @@ settings            one frozen Settings, resolved once   <- leaf; everything rea
    |
 blocks              inert data: Block, BlockKind, Phase, Diagnostic, Example
    |                (stdlib imports only)
-markup/             _rst, _myst, _text, _python -> (blocks, diagnostics)
+markup/             DocumentParser: _rst, _myst -> doctree
+   |                extract_blocks(doctree) -> (parsed blocks, diagnostics)
    |
 project             grouping, pairing, phase order, naming -> GroupPlan
    |
@@ -264,8 +272,8 @@ pytest_doctest_docutils   collection, items, globs lifetime, reporting
 
 | Layer | Owns | Must not know |
 |---|---|---|
-| `settings` | One frozen `Settings` resolved once, with `None` sentinels at the resolve boundary so a future default change is announceable | pytest's `Config`, argparse, ini format, Sphinx's `app`. The host extracts; this resolves |
-| `blocks` | `Block`, `BlockKind` registry, `Phase`, `Diagnostic`, `PlannedBlock`, `GroupPlan`, `ExecutionProfile`, `Example(doctest.Example)` | docutils, MyST, Sphinx, pytest, xdist, the filesystem. Stdlib imports only, enforced by an `import-linter` contract |
+| `settings` | Three immutable facets — `ParseSettings`, `ProjectionSettings`, `RunSettings` — plus the **frozen registry**, resolved together exactly once per session. `None` sentinels at the resolve boundary make a future default change announceable | pytest's `Config`, argparse, ini format, Sphinx's `app`. The host extracts; this resolves |
+| `blocks` | `ParsedBlock`, `ParsedOutput`, `BlockKind`, `Phase`, `Diagnostic`, `ProjectedBlock`, `GroupPlan`, `RunContext`, `ExecutionProfile`, the result types. **No stdlib subclasses.** | docutils, MyST, Sphinx, pytest, xdist, the filesystem. Stdlib imports only, enforced by an `import-linter` contract |
 | `markup/` | Text → `(blocks, diagnostics)`. **The whole docutils vocabulary**: which node classes each kind may arrive as, the `BlockAttributes` stamp, line-number recovery and its per-front-end meaning, `.. include::` attribution, `nodes.comment` traversal, reporter capture, idempotent directive registration, per-kind `option_spec` | Groups as a runtime concept, `DocTest`, pytest, pairing |
 | `project` | The **only** place grouping exists: `*` expansion, anonymous naming, phase order, `testcode`/`testoutput` pairing, option defaults, name minting. A pure function | docutils, pytest, the filesystem, whether anything will run. Evaluates no user code |
 | `runner` | `_DocTestRunner__run`; option merge, `SKIP`-after-merge, `FAIL_FAST`, `report_*` dispatch, version shims. `run_group()` owns phase sequencing, run-time `:skipif:`, the profile's context manager, and the `try`/`finally` guaranteeing `testcleanup` | docutils, markup, pytest. Never overrides `run()` |
@@ -274,6 +282,41 @@ pytest_doctest_docutils   collection, items, globs lifetime, reporting
 `pytest_doctest_docutils._compat` is the only module that imports
 `_pytest.doctest`, behind a pinned support matrix. See
 {doc}`0006-pytest-private-api-compatibility`.
+
+### Settings and the frozen registry
+
+Settings are **faceted**, not one object every layer imports — a single shared
+`Settings` becomes a dependency magnet, and the facets have genuinely different
+consumers:
+
+| Facet | Owns | Read by |
+|---|---|---|
+| `ParseSettings` | encoding, MyST extensions, front-matter policy, diagnostic promotion and suppression | `markup/` |
+| `ProjectionSettings` | `ungrouped` (`"default"` or `"block"`), wildcard resolution, name minting | `project` |
+| `RunSettings` | optionflags, `continue_on_failure`, checker selection, report style | `runner` |
+
+Precedence is fixed and stated once: **per-block directive option → per-document
+front matter → host configuration (pytest ini/CLI, Sphinx `conf.py`, argparse) →
+built-in default.** Each adapter translates its host's configuration into the
+facets exactly once, at session start; no layer reads a host config object.
+
+The **registry** is resolved and frozen alongside them, not as a separate object
+with its own lifecycle. It holds the contributed block kinds, front ends and
+execution profiles. "Frozen" means an immutable mapping built once before
+collection begins; registering afterwards is an error, not a silent late
+addition.
+
+This is what {ref}`the collection contract <the-collection-contract>` means by
+*frozen registry*. Two consequences worth stating:
+
+- **Entry-point discovery is not inherently unsafe** under pytest-xdist. Workers
+  are fresh processes that re-run plugin loading with the same argv, so
+  entry-point resolution is identical in the controller and every worker. What
+  breaks determinism is *nondeterministic* contribution — a conftest that
+  registers conditionally on the environment — not discovery itself.
+- **Nothing here is public in v1.** Contribution happens through the host's own
+  extension point (a pytest hook, Sphinx's `setup(app)`), and the registry type
+  stays private until a caller outside the package needs it.
 
 ### Item lifecycle
 
@@ -319,7 +362,7 @@ referents. Each term below is decided once and used only that way.
 | `globs` | the dict examples exec in; [`DocTest.__init__` stores a **copy**](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L565) | — | assigned to `test.globs` after construction, run with `clear_globs=False` | Keep `globs` for the mapping |
 | namespace | — | [`doctest_namespace`](https://github.com/pytest-dev/pytest/blob/9.1.1/src/_pytest/doctest.py#L721) means *injected names* | — | **Not** used for the sharing unit; pytest owns the word |
 | group | — | `xdist_group` is a *scheduling* affinity marker ([`remote.py:245-254`](https://github.com/pytest-dev/pytest-xdist/blob/v3.8.0/src/xdist/remote.py#L245-L254)) | the author-facing bucket: `.. doctest:: intro`, `default`, `*` | Adopt `group` for the sharing unit. The xdist affinity key is *derived*, never the group name |
-| scope | — | the fixture-lifetime ladder | — | Reserved for pytest. The block-vs-document axis becomes `share` |
+| scope | — | the fixture-lifetime ladder | — | Reserved for pytest. The real question is what an *unlabelled* block joins, so the setting is `ungrouped = "default" | "block"`, not a `share` axis |
 | test / item / block | `DocTest`, `Example` | `Item` | [`TestCode`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L235) is the parsed unit | Three nouns: `Example` (stdlib), `Block` (parsed), `DocTest` (runnable) |
 | skip | the `SKIP` flag, short-circuiting before `report_start` | a reported outcome with a reason, **at item granularity** | [drops the node entirely](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L449-L450) | doctest's mechanism (set `SKIP`, never drop the node); pytest's outcome where the granularity allows it — see [](#the-outcome-contract). Sphinx's drop is deliberately rejected |
 | directive | inline `# doctest: +FLAG` | — | a docutils directive with an `option_spec` | Reserved for the docutils meaning. doctest's form is "inline flags" |
@@ -336,10 +379,12 @@ class Phase(enum.IntEnum):
     CLEANUP = 2
 
 
-class Block(t.NamedTuple):
+# --- parsed: inert, produced by extraction, owns no semantics -------------
+
+
+class ParsedBlock(t.NamedTuple):
     kind: str  # registered BlockKind name
-    source: str  # dedented body, verbatim
-    want: str | None  # from a paired testoutput
+    source: str  # dedented body, verbatim author text
     path: pathlib.Path  # the file the text lives in, not the collected document
     line: int | None  # None when docutils could not recover one
     position: int  # 0-based document pre-order index; the naming key
@@ -349,44 +394,90 @@ class Block(t.NamedTuple):
     hidden: bool
 
 
+class ParsedOutput(t.NamedTuple):
+    """A `testoutput` body. Not a block: it never runs."""
+
+    text: str
+    path: pathlib.Path
+    line: int | None
+    position: int
+    groups: tuple[str, ...]
+    options: t.Mapping[int, bool]
+    skipif: str | None  # a gated output means its testcode expects nothing
+
+
 class BlockKind(t.NamedTuple):
     name: str
     phase: Phase
-    profile: ExecutionProfile  # how a body of this kind is compiled and run
+    profile_name: str  # resolved against the frozen registry, not held here
     pairs_with: str | None
     grouped: bool
 
 
-class PlannedBlock(t.NamedTuple):
+# --- projected: one per block, with everything the runner needs ------------
+
+
+class ExpectedOutput(t.NamedTuple):
+    text: str
+    options: t.Mapping[int, bool]
+    skipif: str | None  # when truthy at run time, `want` becomes ""
+
+
+class ProjectedBlock(t.NamedTuple):
     phase: Phase
-    skipif: str | None  # UNEVALUATED; gated in run_group(), not at collection
-    test: doctest.DocTest  # one block, its own filename/lineno/docstring
+    test: doctest.DocTest  # stock objects; its own filename/lineno/docstring
+    profile: ExecutionProfile  # uniform for the block, resolved at projection
+    skipif: str | None  # UNEVALUATED; gated in run_group()
+    expected: ExpectedOutput | None  # paired testoutput, itself gateable
 
 
 class GroupPlan(t.NamedTuple):
     group: str
-    blocks: tuple[PlannedBlock, ...]  # in phase order; IMMUTABLE
+    blocks: tuple[ProjectedBlock, ...]  # in phase order; IMMUTABLE
     seed: t.Mapping[str, t.Any]  # initial namespace; copied per attempt
 
 
-class GroupRun:
+# --- run: one attempt ------------------------------------------------------
+
+
+class RunContext:
     """One execution attempt. Owns the live mapping; a plan never does."""
 
     plan: GroupPlan
-    globs: dict[str, t.Any]  # cleared and reseeded per attempt
+    globs: dict[str, t.Any]  # cleared in place and reseeded per attempt
 
 
 class BlockResult(t.NamedTuple):
-    block: PlannedBlock
-    outcome: t.Literal["passed", "failed", "skipped"]
-    reason: str | None  # the gate expression, when skipped
+    block: ProjectedBlock
+    outcome: t.Literal["passed", "failed", "skipped", "error"]
+    reason: str | None  # gate expression when skipped; message when error
+    error: BaseException | None  # gate or profile failure, not a doctest one
 
 
 class GroupResult(t.NamedTuple):
     group: str
     blocks: tuple[BlockResult, ...]
     failures: tuple[doctest.DocTestFailure | doctest.UnexpectedException, ...]
+    primary: BaseException | None  # what runtest() re-raises
+    secondary: tuple[BaseException, ...]  # e.g. a cleanup failure after a body failure
 ```
+
+`ParsedBlock` carries no `want`, because neither owner of a `want` is the parsed
+block: for a prompt-form block it is *inside* `source` and
+{class}`doctest.DocTestParser` extracts it at projection, and for a
+`testcode`/`testoutput` pair it is a separate `ParsedOutput`. Conflating the two
+was what made "projection owns pairing" untrue.
+
+`BlockKind` names a profile rather than holding one, so a public type never
+contains a private one. The name resolves against the frozen registry.
+
+`BlockResult.outcome` needs `"error"` because a gate that raises, or a profile
+that fails to establish, is neither a pass, a fail, nor a skip.
+`GroupResult.primary` and `.secondary` make the precedence explicit: **a body
+failure outranks a cleanup failure**, a control-flow exception
+({exc}`pytest.skip`, `xfail`, exit) outranks both, and the loser is recorded
+rather than dropped. Classifying which exceptions are control-flow is the pytest
+adapter's job, not the core's.
 
 `Block.line` being nullable is load-bearing, not defensive. A bare `>>>` block
 nested in a `.. note::`, a list item or a block quote reports `line=None,
@@ -444,8 +535,44 @@ docutils into a layer declared stdlib-only.
 The runtime objects are stdlib's, unconditionally. Precision lives in a parallel
 layer that never changes what is constructed.
 
+- **Parsing and extraction are two seams, not one.** A single
+  `Frontend.parse(text, path)` cannot serve Sphinx, because a Sphinx extension
+  already *has* a doctree and a raw re-parse is not the same tree. So:
+
+  ```python
+  class DocumentParser(t.Protocol):
+      """Text -> doctree. Plural implementations: _rst, _myst, third-party."""
+
+      suffixes: t.ClassVar[frozenset[str]]
+
+      def parse(
+          self, text: str, path: pathlib.Path, *, settings: ParseSettings
+      ) -> tuple[nodes.document, tuple[Diagnostic, ...]]: ...
+
+
+  def extract_blocks(
+      doctree: nodes.document, *, settings: ParseSettings
+  ) -> ParseResult: ...
+  ```
+
+  `extract_blocks` is deliberately a plain function, not a `Protocol`: exactly
+  one extractor is the *point* of the split, and a second implementation would
+  reintroduce the standalone-versus-Sphinx divergence it exists to prevent.
+  Standalone reST and MyST use both halves; a Sphinx extension calls only the
+  extractor, on the doctree it already resolved.
+
+  This is not a Sphinx builder. A builder owns discovery, an `env`, an `outdir`
+  and a reporting format; an extractor is a pure function from a doctree to
+  blocks, and {doc}`0001-typed-vanilla-doctest-core`'s rejection of a builder
+  stands.
+
+- **Python object discovery is not a front end.** Finding doctests in a module's
+  docstrings takes an *object*, not `(text, path)`, and stdlib already has the
+  right shape for it. It is a {class}`doctest.DocTestFinder`-shaped adapter, and
+  putting a `_python` module in `markup/` was a category error.
+
 - **`Protocol` for the seams, nominal subclassing for type-checkability.**
-  `Frontend` is a `Protocol` so a third party can supply one structurally. The
+  `DocumentParser` is a `Protocol` so a third party can supply one structurally. The
   shipped parser *also* subclasses {class}`doctest.DocTestParser` — not because
   the interpreter requires it (stdlib `doctest` performs no `isinstance` check on
   `parser` or `test_finder`; a duck-typed object works at runtime) but because
@@ -483,7 +610,7 @@ cited. The full derivation is in `notes/analyses/`.
 |---|---|
 | A failure's file line is `test.lineno + example.lineno + 1`; `Example.lineno` is 0-based within the containing string | [`doctest.py:1344`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1344) |
 | `DocTest.__init__` **copies** the globs mapping, so a shared mapping must be assigned after construction and run with `clear_globs=False` | [`doctest.py:565`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L565) |
-| Never sort collected tests by name: `__lt__` compares names as text, and a name carries its position as text, so `page.md[10]` sorts before `page.md[1]` | [`doctest.py:596`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L596) |
+| Never sort collected tests. `__lt__` compares `(name, filename, lineno, id(self))`; `name` leads, so a name carrying its position as text sorts `page.md[10]` before `page.md[1]` however correct `lineno` is. `filename` and `lineno` only break ties among equal names | [`doctest.py:596-603`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L596-L603) |
 | The per-example loop is name-mangled; the supported in-loop seams are the four `report_*` methods and the injected checker | [`doctest.py:1286-1314`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1286-L1314) |
 | `run()` mutates global interpreter state for its duration and restores in `finally`; it is neither reentrant nor thread-safe | [`doctest.py:1534-1573`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1534-L1573) |
 | Each example compiles under `"<doctest %s[%d]>"` in `"single"` mode with `dont_inherit=True`; `"exec"` suppresses expression echo, emptying every `want` | [`doctest.py:1400`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1400) |
@@ -560,41 +687,31 @@ that rebuild reuses the same `Example` objects. Metadata the runner does *not*
 need — groups, wildcards, pairing — never touches a stdlib object and dies in the
 projection layer.
 
-*Price:* the subclass must restore equality, because
-{meth}`doctest.Example.__eq__` gates on **exact type identity**
-([`Lib/doctest.py:518`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L518)) —
-a bare subclass compares unequal to a stock `Example` with identical fields, in
-both directions, while hashing the same. So the subclass overrides `__eq__` with
-an {func}`isinstance` check and re-binds `__hash__` explicitly; Python's
-reflected-operand rule then makes equality symmetric again:
+*Price:* **none of it goes on {class}`doctest.Example`.** An earlier draft put
+compile mode on an `Example` subclass, which fails twice.
+{meth}`doctest.Example.__eq__` gates on exact type identity
+([`Lib/doctest.py:518`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L518)),
+so a bare subclass is unequal to a stock `Example` with identical fields in both
+directions while hashing the same. Restoring equality with an {func}`isinstance`
+override then over-corrects: two *unrelated* subclasses compare equal to each
+other, and to any third party's bare subclass.
 
 ```{doctest}
 >>> import doctest
->>> class Tagged(doctest.Example):
-...     def __eq__(self, other):
-...         if not isinstance(other, doctest.Example):
-...             return NotImplemented
-...         return (self.source, self.want, self.lineno, self.indent,
-...                 self.options, self.exc_msg) == (
-...                other.source, other.want, other.lineno, other.indent,
-...                other.options, other.exc_msg)
-...     __hash__ = doctest.Example.__hash__
->>> plain, tagged = doctest.Example("1\n", "1\n"), Tagged("1\n", "1\n")
->>> tagged == plain, plain == tagged, tagged in [plain]
-(True, True, True)
-
-Without the override, a bare subclass is unequal both ways:
-
->>> class Bare(doctest.Example): pass
->>> bare = Bare("1\n", "1\n")
->>> bare == plain, plain == bare
-(False, False)
+>>> def tagged(name):
+...     ns = {"__eq__": lambda s, o: isinstance(o, doctest.Example)
+...           and s.source == o.source, "__hash__": doctest.Example.__hash__}
+...     return type(name, (doctest.Example,), ns)
+>>> Exec, Await = tagged("Exec"), tagged("Await")
+>>> Exec("1\n", "1\n") == Await("1\n", "1\n")
+True
 ```
 
-The alternative — setting the attribute on a *stock* `Example` with no subclass
-at all — is equality-safe by construction and equally durable. It is rejected
-only because it forfeits the typed surface; if the subclass ever proves
-troublesome, that is the fallback.
+A block's execution policy is **uniform across its examples**, so it belongs on
+`ProjectedBlock`, not on the examples. The runner establishes an *active
+execution request* immediately before delegating to stdlib `run()` and clears it
+in a `finally`; `_DocTestRunner__run` reads it. Stock `Example` objects stay
+stock, and nothing in the compatibility kernel is subclassed for metadata at all.
 
 **Node-id granularity versus shared state.** *Position:* decouple them — N
 `DocTest`s under one node id. *Price:* selecting a group runs all its blocks;
@@ -613,15 +730,16 @@ collection evaluates no *author-supplied* Python — `:skipif:` is carried throu
 unevaluated and run in `runtest()`. *Price:* `--collect-only` no longer shows
 which blocks will skip.
 
+(the-collection-contract)=
+
 Collection is **not** a pure function of (bytes, argv, ini), and claiming so
 would be wrong on four counts: `.. include::` reads transitive files, docutils
 directive implementations execute during parsing, the directive registry is
 process-global, and MyST plugins change the tree. The defensible contract is
 determinism over **complete source closure + normalized settings + frozen
-registry**. Deferring the author's gate removes the largest divergence risk; it
-does not make xdist divergence structurally impossible, and the
-{doc}`registry freeze <0006-pytest-private-api-compatibility>` is what closes the
-rest.
+registry** — all three defined above. Deferring the author's gate removes the
+largest divergence risk; it does not make xdist divergence structurally
+impossible.
 
 **Sphinx compatibility versus silent-loss behaviours.** Sphinx silently discards
 an orphan `testoutput`, silently discards a `testoutput` following a `doctest`
