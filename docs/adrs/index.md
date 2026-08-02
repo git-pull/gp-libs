@@ -25,3 +25,14 @@ tag, or a commit reachable from that project's trunk where it publishes no tags.
 Line anchors are only used on a pinned ref, because they are meaningless without
 one, and a `blob/master` link rots silently — the file moves, lines shift, and
 the anchor lands on unrelated code while still resolving.
+
+```{toctree}
+:maxdepth: 1
+
+0001-typed-vanilla-doctest-core
+0002-runner-conformance-across-cpython
+0003-retiring-per-block-namespace-items
+0004-diagnostics-as-data
+0005-line-recovery-for-nested-blocks
+0006-pytest-private-api-compatibility
+```
