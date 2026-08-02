@@ -31,7 +31,7 @@ the anchor lands on unrelated code while still resolving.
 
 0001-typed-vanilla-doctest-core
 0002-runner-conformance-across-cpython
-0003-retiring-per-block-namespace-items
+0003-rejecting-per-block-items
 0004-diagnostics-as-data
 0005-line-recovery-for-nested-blocks
 0006-pytest-private-api-compatibility
