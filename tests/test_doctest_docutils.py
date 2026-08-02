@@ -2521,7 +2521,7 @@ def test_a_page_without_a_prompt_collects() -> None:
     """
     tests = doctest_docutils.DocutilsDocTestFinder().find(TESTCODE_PAGE_MD, "page.md")
 
-    assert [(test.name, len(test.examples)) for test in tests] == [("default", 3)]
+    assert [(test.name, len(test.examples)) for test in tests] == [("page.md", 3)]
 
 
 def test_a_page_without_a_prompt_passes(tmp_path: pathlib.Path) -> None:
@@ -2662,10 +2662,10 @@ def test_a_stray_testoutput_is_dropped(caplog: pytest.LogCaptureFixture) -> None
 
 
 TESTCODE_NAMESPACE_FIXTURES = [
-    ("block-merged", "block", "merged", ["default"]),
-    ("document-merged", "document", "merged", ["default"]),
-    ("block-per-block", "block", "per-block", ["default[0]", "default[1]"]),
-    ("document-per-block", "document", "per-block", ["default[0]", "default[1]"]),
+    ("block-merged", "block", "merged", ["page.md"]),
+    ("document-merged", "document", "merged", ["page.md"]),
+    ("block-per-block", "block", "per-block", ["page.md[0]", "page.md[1]"]),
+    ("document-per-block", "document", "per-block", ["page.md[0]", "page.md[1]"]),
 ]
 
 
@@ -2674,17 +2674,19 @@ TESTCODE_NAMESPACE_FIXTURES = [
     TESTCODE_NAMESPACE_FIXTURES,
     ids=[fixture[0] for fixture in TESTCODE_NAMESPACE_FIXTURES],
 )
-def test_testcode_shares_its_group_at_every_setting(
+def test_testcode_shares_its_page_at_every_setting(
     test_id: str,
     scope: str,
     items: str,
     names: list[str],
 ) -> None:
-    """A ``{testcode}`` keeps the ``default`` group whatever the scope says.
+    """A ``{testcode}`` shares its page whatever the scope says.
 
-    The scope names the namespace of a block that declared *no* group; a
-    ``{testcode}`` always declares one, so the visible block and the hidden
-    one asserting on it stay together.
+    The scope names the namespace of a block that declared no group; a
+    ``{testcode}`` is written so the visible block and the hidden one
+    asserting on it stay together, which is the page. It is named for the
+    page rather than for Sphinx's ``default``, so the id reads like every
+    other one this finder hands out.
     """
     page = "```{testcode}\nvalue = 41\n```\n\n```{testcode}\nassert value == 41\n```\n"
 
@@ -2694,6 +2696,90 @@ def test_testcode_shares_its_group_at_every_setting(
     )
 
     assert [test.name for test in finder.find(page, "page.md")] == names
+
+
+MIXED_FORMS_MD = textwrap.dedent(
+    """
+    ```
+    >>> base = 40
+    ```
+
+    ```{testcode}
+    print(base + 2)
+    ```
+
+    ```{testoutput}
+    42
+    ```
+    """,
+)
+
+
+def test_document_scope_joins_both_forms(tmp_path: pathlib.Path) -> None:
+    """At document scope a ``{testcode}`` reads what a prompt block bound.
+
+    Both forms are named for the page there, which is the one namespace
+    :mod:`sphinx.ext.doctest` gives every block that declares no group.
+    """
+    finder = doctest_docutils.DocutilsDocTestFinder(namespace_scope="document")
+
+    assert [test.name for test in finder.find(MIXED_FORMS_MD, "page.md")] == ["page.md"]
+    assert _run_page(
+        tmp_path,
+        MIXED_FORMS_MD,
+        namespace_scope="document",
+    ) == doctest.TestResults(0, 2)
+
+
+def test_block_scope_keeps_both_forms_apart() -> None:
+    """At block scope a prompt block is its own namespace, as it always was.
+
+    Only the prompt-free blocks share, so the page collects two tests and the
+    ``{testcode}`` cannot read the prompt block's name.
+    """
+    finder = doctest_docutils.DocutilsDocTestFinder()
+
+    assert [test.name for test in finder.find(MIXED_FORMS_MD, "page.md")] == [
+        "page.md[0]",
+        "page.md",
+    ]
+
+
+def test_a_second_testoutput_replaces_the_first(
+    tmp_path: pathlib.Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The last answer wins, as in Sphinx, and the page hears about it.
+
+    :meth:`sphinx.ext.doctest.TestGroup.add_code` replaces the output a
+    ``{testcode}`` already had, so a page reads the same here as it builds
+    there. Saying so is the part Sphinx leaves out.
+    """
+    page = textwrap.dedent(
+        """
+        ```{testcode}
+        print("second")
+        ```
+
+        ```{testoutput}
+        first
+        ```
+
+        ```{testoutput}
+        second
+        ```
+        """,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="doctest_docutils"):
+        results = _run_page(tmp_path, page)
+
+    assert results == doctest.TestResults(0, 1)
+    assert [
+        record.message
+        for record in caplog.records
+        if hasattr(record, "doctest_block_type")
+    ] == ["testoutput block replaces the one above it"]
 
 
 def test_skipif_gates_a_testcode(tmp_path: pathlib.Path) -> None:
