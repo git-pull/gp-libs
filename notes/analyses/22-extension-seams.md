@@ -90,14 +90,14 @@ needs it. Applied to the candidates that came up:
 | `Frontend` protocol | **Yes.** Four implementations ship on day one (rST, MyST, text, Python docstrings) |
 | `ExecutionProfile` (private) | **Yes, private.** [PR #59](https://github.com/git-pull/gp-libs/pull/59) adds top-level `await` — a second execution policy a `Literal["single", "exec"]` cannot express. Stays private until an out-of-tree caller exists |
 | A per-example observer protocol | **No.** pytest gets failures through `report_*` and `MultipleDoctestFailures`; the CLI uses `summarize()`. No third consumer |
-| A registry *object* with builders, digests and manifests | **No.** Two module-level dicts and two `register_*` functions do the same work |
-| Entry-point plugin discovery | **No.** Not until a caller outside the package exists. It also breaks xdist's collection-purity requirement, since discovery is an import side effect rather than a function of (files, argv, ini) |
+| A registry *object* with builders, digests and manifests | **No object, but there is a freeze.** The contributed block kinds, front ends and profiles are resolved into an immutable mapping alongside the frozen `Settings` facets, before collection begins; registering after that is an error. That is what ADR 0001's collection contract means by *frozen registry* — not a class with its own lifecycle |
+| Entry-point plugin discovery | **Not in v1**, for want of a caller outside the package — *not* because it breaks xdist. Workers are fresh processes that re-run plugin loading with the same argv, so entry-point resolution is identical everywhere. What breaks determinism is nondeterministic *contribution*, such as a conftest registering conditionally on the environment |
 
-That last row is worth keeping in mind generally: **any registry populated by
-import side effects is in tension with
-[`12-pytest-xdist.md`](12-pytest-xdist.md)'s requirement** that every worker
-collect identical ids in identical order. A registry whose contents depend on
-which conftest happened to be imported is not a pure function of the inputs.
+The distinction those two rows turn on is worth stating once: **discovery is not
+the hazard, nondeterminism is.** A registry populated identically in every process
+satisfies [`12-pytest-xdist.md`](12-pytest-xdist.md)'s identical-collection
+requirement no matter how it was populated; a registry whose contents depend on
+which conftest happened to run, or on the environment, does not.
 
 ## Anchors
 

@@ -115,10 +115,12 @@ output is rendered back into the source file.
 
 - **Emitting the canonical form instead of parsing it collapses check-mode and
   update-mode into one code path.** That is a real structural insight.
-- **Absolute byte offsets plus an invertible dedent scalar** are exactly what a
-  data model needs to rewrite source. Read-only tools discard the indent; keeping
-  it is the difference between "we could add `--update-examples` later" and "we
-  would have to redesign the data model first". Two int fields.
+- **Absolute source offsets plus a recorded indent** are most of what a data model
+  needs to rewrite source. They are Python *string* indices, not byte offsets, and
+  a single indent scalar does not invert a dedent in general — a block whose lines
+  carry differing leading whitespace, or a tab, does not round-trip. Keeping the
+  offsets is still the difference between "we could add `--update-examples` later"
+  and "we would have to redesign the data model first".
 - **It composes with pytest by contributing no collector at all.** Examples are
   `parametrize` params, so marks, `-k`, fixtures and xfail all work unmodified.
   This is the cheapest correct integration in the entire survey.

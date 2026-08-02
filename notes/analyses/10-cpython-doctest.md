@@ -28,10 +28,13 @@ Passing a shared dict through the constructor has no effect whatsoever. A shared
 mapping must be assigned to `test.globs` after construction, and the runner must
 be given `clear_globs=False` or it empties the mapping in its `finally`.
 
-**`__lt__` compares names as text**
-([`:596`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L596)).
-Any name carrying a position as text sorts `[10]` before `[1]`. This fails
-silently: every test passes, in the wrong order.
+**`__lt__` compares `(name, filename, lineno, id(self))`**
+([`:596-603`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L596-L603)).
+`name` leads, so any name carrying a position as text sorts `[10]` before `[1]`
+however correct `lineno` is; the later terms only break ties among equal names.
+This fails silently: every test passes, in the wrong order. Released gp-libs hits
+it — `find()` calls `tests.sort()` over blocks named `page.md[k]`, so an
+eleven-block page runs its eleventh block second.
 
 **`TestResults` carries `skipped` outside the tuple**
 ([`:114`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L114)),
@@ -44,7 +47,7 @@ unpack in the ecosystem, including `doctest._test()` itself.
 ```text
 source string
    |  DocTestParser.parse       -> list[str | Example], alternating,
-   |                               reconstructing the input exactly
+   |                               covering the NORMALIZED input
    |  DocTestParser.get_doctest -> DocTest
    v
 DocTestFinder.find(obj)         -> list[DocTest]

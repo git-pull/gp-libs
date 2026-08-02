@@ -98,9 +98,10 @@ plain ```` ```python ```` fence is only picked up by a prompt sniff, and the
 line-length guard and MyST transforms never run. Those omissions become a decision
 rather than an accident once the front-end owns its own configuration.
 
-`myst_fence_as_directive` is also the answer to a real user request: it maps a
-bare language fence onto a directive name, so a project that prefers not to write
-`{testcode}` can still have its ```` ```python ```` blocks collected.
+`myst_fence_as_directive` is narrower than it sounds. It runs the fence through
+the directive of the **same name**, so a ```` ```python ```` fence looks for a
+directive called `python`. It does not rename `python` to `testcode`; a project
+wanting that must register a `python` directive or alias itself.
 
 ## Reporter behaviour
 
