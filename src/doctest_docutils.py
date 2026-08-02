@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import doctest
-import linecache
 import logging
 import os
 import pathlib
-import pprint
 import re
 import sys
+import types
 import typing as t
 
 import docutils
@@ -21,8 +21,6 @@ from packaging.version import Version
 from docutils_compat import findall
 
 if t.TYPE_CHECKING:
-    import types
-
     from docutils.nodes import Node, TextElement
 
 logger = logging.getLogger(__name__)
@@ -33,6 +31,234 @@ blankline_re = re.compile(r"^\s*<BLANKLINE>", re.MULTILINE)
 # https://github.com/sphinx-doc/sphinx/commit/ad0c343d3
 # Allow optional leading whitespace before doctest directive comments.
 doctestopt_re = re.compile(r"[ \t]*#\s*doctest:.+$", re.MULTILINE)
+
+#: How wide a namespace the blocks of one document share when they name no
+#: group.
+NamespaceScope = t.Literal["block", "document"]
+
+#: Accepted :data:`NamespaceScope` names, narrowest first.
+NAMESPACE_SCOPES: tuple[NamespaceScope, ...] = ("block", "document")
+
+#: Scope used when a caller names none: every ungrouped block starts empty.
+DEFAULT_NAMESPACE_SCOPE: NamespaceScope = "block"
+
+#: Whether the blocks of one namespace become a single test or stay one test
+#: each, sharing the globals mapping between them.
+NamespaceItems = t.Literal["merged", "per-block"]
+
+#: Accepted :data:`NamespaceItems` names, fewest tests first.
+NAMESPACE_ITEMS: tuple[NamespaceItems, ...] = ("merged", "per-block")
+
+#: Layout used when a caller names none: a namespace is one test.
+DEFAULT_NAMESPACE_ITEMS: NamespaceItems = "merged"
+
+#: Group a ``.. doctest::`` written without an argument lands in, as in
+#: :mod:`sphinx.ext.doctest`. It means the author named no group.
+_DEFAULT_GROUP = "default"
+
+#: Group name meaning "every group this document declares", as in
+#: :mod:`sphinx.ext.doctest`. It resolves only once the page has been read.
+_WILDCARD_GROUP = "*"
+
+#: Block types that keep :mod:`sphinx.ext.doctest`'s implicit ``default``
+#: group: the visible block a reader pastes and the hidden one asserting on it
+#: have to share a namespace without either of them naming a group.
+_GROUPED_BLOCK_TYPES = frozenset({"testcode", "testoutput"})
+
+#: Block types that join the implicit ``default`` group only once a page holds
+#: a ``{testcode}``. Sphinx puts an unnamed ``{testsetup}`` in that group
+#: always; gp-libs gives a page's prompt blocks namespaces of their own, and an
+#: unnamed setup has always followed them there. Widening it unconditionally
+#: would take the setup away from those blocks, so it widens only for the pages
+#: that need it — the ones written in Sphinx's prompt-free style.
+_PHASE_BLOCK_TYPES = frozenset({"testsetup", "testcleanup"})
+
+#: Matches the ``>>>`` opening an interactive example, which tells a
+#: ``{testsetup}`` written for :class:`doctest.DocTestParser` apart from one
+#: written the way :mod:`sphinx.ext.doctest` writes it.
+_PROMPT_RE = re.compile(r"^[ \t]*>>>(?:[ \t]|$)", re.MULTILINE)
+
+#: ``HIDE`` marks a prompt that rendered documentation drops and a test run
+#: keeps. It changes no output check, but a page carrying it fails to parse
+#: wherever the name is unregistered, so registration happens on import rather
+#: than at any one entry point's setup: ``python -m doctest_docutils`` reaches
+#: no further than this module, and pytest's own ``DoctestModule`` parses .py
+#: docstrings without ever consulting the plugin's flag lookup.
+_HIDE_FLAG = doctest.register_optionflag("HIDE")
+
+
+class NamespaceScopeError(ValueError):
+    """Raised when a namespace scope is not one of :data:`NAMESPACE_SCOPES`.
+
+    Examples
+    --------
+    >>> print(NamespaceScopeError("per-file"))
+    Unknown namespace scope: 'per-file'. Expected one of: block, document
+    """
+
+    def __init__(self, value: str) -> None:
+        super().__init__(
+            f"Unknown namespace scope: {value!r}. "
+            f"Expected one of: {', '.join(NAMESPACE_SCOPES)}",
+        )
+
+
+class NamespaceItemsError(ValueError):
+    """Raised when a namespace layout is not one of :data:`NAMESPACE_ITEMS`.
+
+    Examples
+    --------
+    >>> print(NamespaceItemsError("one-each"))
+    Unknown namespace items: 'one-each'. Expected one of: merged, per-block
+    """
+
+    def __init__(self, value: str) -> None:
+        super().__init__(
+            f"Unknown namespace items: {value!r}. "
+            f"Expected one of: {', '.join(NAMESPACE_ITEMS)}",
+        )
+
+
+class NamespaceNameCollisionError(ValueError):
+    """Raised when a declared group takes a name the page generates for itself.
+
+    A page generates names of its own: for a block that declares no group —
+    the page itself at ``"document"`` scope, the page and the block's position
+    at ``"block"`` scope — and for a gated block lifted out of the namespace
+    it was declared in. A group spelling one of those asks for a name the page
+    has already given away, and the two would run as one: state crossing the
+    partition the author drew, under a single node id. Neither meaning can be
+    kept over the other, so the page stops rather than merging them quietly.
+
+    Parameters
+    ----------
+    group : str
+        Group the page declared.
+    document_name : str
+        Base name of the document, without its directory.
+    generated_for : str
+        What the page generates the same name for.
+
+    Examples
+    --------
+    >>> print(
+    ...     NamespaceNameCollisionError(
+    ...         "page.rst", "page.rst", "a block declaring none at 'document' scope"
+    ...     )
+    ... )
+    page.rst: group 'page.rst' takes the name this page generates for a block
+    declaring none at 'document' scope, so the two would share state and one
+    node id. Rename the group.
+
+    A gated block lifted out of its group is named the same way, so a group
+    can take that name too:
+
+    >>> print(
+    ...     NamespaceNameCollisionError(
+    ...         "alpha[1]", "page.rst", "a block lifted out of 'alpha'"
+    ...     )
+    ... )
+    page.rst: group 'alpha[1]' takes the name this page generates for a block
+    lifted out of 'alpha', so the two would share state and one node id.
+    Rename the group.
+    """
+
+    def __init__(self, group: str, document_name: str, generated_for: str) -> None:
+        super().__init__(
+            f"{document_name}: group {group!r} takes the name this page"
+            f" generates for {generated_for}, so the two would share state and"
+            " one node id. Rename the group.",
+        )
+
+
+class SkipifExpressionError(ValueError):
+    """Raised when a block's ``:skipif:`` expression cannot be evaluated.
+
+    Examples
+    --------
+    >>> error = NameError("name 'platform' is not defined")
+    >>> print(SkipifExpressionError("platform.system()", "page.rst", 4, error))
+    page.rst:4: :skipif: 'platform.system()' failed: name 'platform' is not defined
+    """
+
+    def __init__(
+        self,
+        expression: str,
+        filename: str,
+        line: int,
+        error: BaseException,
+    ) -> None:
+        super().__init__(
+            f"{filename}:{line}: :skipif: {expression!r} failed: {error}",
+        )
+
+
+def _parse_namespace_scope(value: str) -> NamespaceScope:
+    """Return `value` as a :data:`NamespaceScope`, rejecting anything else.
+
+    Parameters
+    ----------
+    value : str
+        Scope name to validate.
+
+    Returns
+    -------
+    NamespaceScope
+        The scope, unchanged.
+
+    Raises
+    ------
+    NamespaceScopeError
+        If `value` names no known scope.
+
+    Examples
+    --------
+    >>> _parse_namespace_scope("document")
+    'document'
+
+    >>> try:
+    ...     _parse_namespace_scope("per-file")
+    ... except NamespaceScopeError as exc:
+    ...     print(exc)
+    Unknown namespace scope: 'per-file'. Expected one of: block, document
+    """
+    if value not in NAMESPACE_SCOPES:
+        raise NamespaceScopeError(value)
+    return value
+
+
+def _parse_namespace_items(value: str) -> NamespaceItems:
+    """Return `value` as a :data:`NamespaceItems`, rejecting anything else.
+
+    Parameters
+    ----------
+    value : str
+        Layout name to validate.
+
+    Returns
+    -------
+    NamespaceItems
+        The layout, unchanged.
+
+    Raises
+    ------
+    NamespaceItemsError
+        If `value` names no known layout.
+
+    Examples
+    --------
+    >>> _parse_namespace_items("per-block")
+    'per-block'
+
+    >>> try:
+    ...     _parse_namespace_items("one-each")
+    ... except NamespaceItemsError as exc:
+    ...     print(exc)
+    Unknown namespace items: 'one-each'. Expected one of: merged, per-block
+    """
+    if value not in NAMESPACE_ITEMS:
+        raise NamespaceItemsError(value)
+    return value
 
 
 def is_allowed_version(version: str, spec: str) -> bool:
@@ -51,6 +277,196 @@ def is_allowed_version(version: str, spec: str) -> bool:
     True
     """
     return Version(version) in SpecifierSet(spec)
+
+
+class _ExecSource(str):
+    r"""Example source that runs as a module body, not as one prompt.
+
+    :meth:`doctest.DocTestRunner.run` compiles every example in ``"single"``
+    mode, which rejects a body of more than one statement and echoes a bare
+    expression. A ``{testcode}`` body is plain Python and neither applies, so
+    it needs ``"exec"``.
+
+    The mode rides on the source because the source is the only part of an
+    example the compile call is handed: marking it here keeps the choice on
+    the data, where :func:`copy.copy` and the merge carry it along, instead of
+    on a mode flag some runner has to be holding at the right moment.
+
+    Examples
+    --------
+    >>> source = _ExecSource("value = 41\n")
+    >>> isinstance(source, str), source.splitlines()
+    (True, ['value = 41'])
+    """
+
+
+def _compile_source(
+    source: str,
+    filename: str,
+    mode: str,
+    flags: int = 0,
+    dont_inherit: bool = False,
+    optimize: int = -1,
+) -> types.CodeType:
+    r"""Compile one example, letting an :class:`_ExecSource` overrule `mode`.
+
+    Stands in for the built-in :func:`compile` inside the runner loop
+    :func:`_exec_mode_run` builds. Every other source compiles exactly as the
+    runner asked, so a ``>>>`` example keeps the echo it was written for.
+
+    Parameters
+    ----------
+    source : str
+        Example source. An :class:`_ExecSource` asked for ``"single"``
+        compiles in ``"exec"``.
+    filename : str
+        Name the compiled code reports itself under.
+    mode : str
+        Mode the caller asked for.
+    flags : int
+        ``__future__`` and compiler flags.
+    dont_inherit : bool
+        Whether to ignore the calling frame's ``__future__`` flags.
+    optimize : int
+        Optimization level.
+
+    Returns
+    -------
+    types.CodeType
+        Compiled example.
+
+    Examples
+    --------
+    >>> import contextlib, io
+    >>> def run(source):
+    ...     captured = io.StringIO()
+    ...     with contextlib.redirect_stdout(captured):
+    ...         exec(_compile_source(source, "<page>", "single"), {"value": 41})
+    ...     return captured.getvalue()
+
+    A bare expression echoes under the mode the runner asks for, and stays
+    quiet once the source says it is a ``{testcode}`` body:
+
+    >>> run("value\n")
+    '41\n'
+    >>> run(_ExecSource("value\n"))
+    ''
+
+    ``"single"`` takes one statement; a ``{testcode}`` body takes as many as
+    it likes:
+
+    >>> namespace = {}
+    >>> body = _ExecSource("first = 1\nsecond = first + 1\n")
+    >>> exec(_compile_source(body, "<page>", "single"), namespace)
+    >>> namespace["second"]
+    2
+    """
+    if mode == "single" and isinstance(source, _ExecSource):
+        mode = "exec"
+    # A variable ``mode`` widens the built-in's return type; the runner never
+    # asks for an AST, so the answer is always a code object.
+    return t.cast(
+        types.CodeType,
+        compile(source, filename, mode, flags, dont_inherit, optimize),
+    )
+
+
+def _exec_mode_run() -> types.FunctionType | None:
+    r"""Return CPython's runner loop reading :func:`_compile_source` as ``compile``.
+
+    ``DocTestRunner.__run`` hard-codes ``"single"`` and resolves ``compile``
+    as a global of :mod:`doctest`, which is why :mod:`sphinx.ext.doctest`
+    rebinds ``doctest.compile`` for the whole process. gp-libs ships as a
+    ``pytest11`` plugin loaded into every test session, so it rebinds the name
+    for one function object instead: the code object is CPython's, unread and
+    uncopied, and only the globals mapping it looks names up in differs.
+
+    The seam is two facts about a private method, so it is checked rather than
+    assumed. gp-libs is loaded into every session that has it installed, and an
+    interpreter that moved the method must not take down the test runs of people
+    who never wrote a ``{testcode}``: a missing seam leaves CPython's own loop
+    in place and logs why. What that costs is ``{testcode}`` itself, which falls
+    back to ``single`` mode and fails on any body of more than one statement —
+    so the seam is also pinned by a test, where the loud failure belongs.
+
+    Returns
+    -------
+    types.FunctionType or None
+        Copy of CPython's runner loop, still unbound. `None` where this
+        interpreter does not resolve ``compile`` the way the loop needs.
+
+    Examples
+    --------
+    >>> run = _exec_mode_run()
+    >>> run.__code__ is doctest.DocTestRunner._DocTestRunner__run.__code__
+    True
+    >>> run.__globals__["compile"] is _compile_source
+    True
+
+    :mod:`doctest` itself keeps the built-in:
+
+    >>> "compile" in vars(doctest)
+    False
+    """
+    original = getattr(doctest.DocTestRunner, "_DocTestRunner__run", None)
+    # A closure would need its cells rebuilt; a loop that stopped reading
+    # ``compile`` as a global would silently ignore the swap.
+    if (
+        original is None
+        or original.__code__.co_freevars
+        or "compile" not in original.__code__.co_names
+    ):
+        logger.error(
+            "doctest runner seam is missing; testcode blocks fall back to "
+            "single-statement mode",
+            extra={"doctest_block_type": "testcode"},
+        )
+        return None
+    return types.FunctionType(
+        original.__code__,
+        {**vars(doctest), "compile": _compile_source},
+        original.__name__,
+    )
+
+
+class _ExecModeRunnerMixin:
+    r"""Runner mixin that runs a ``{testcode}`` body the way Sphinx does.
+
+    Mix in ahead of :class:`doctest.DocTestRunner` or
+    :class:`doctest.DebugRunner`. Everything else about the run — reporting,
+    the debugger, ``SKIP``, ``FAIL_FAST`` — is CPython's own loop.
+
+    Examples
+    --------
+    >>> import io
+    >>> example = doctest.Example("value = 41\nvalue\n", "")
+    >>> example.source = _ExecSource(example.source)
+    >>> test = doctest.DocTest([example], {}, "page.md", "page.md", 0, None)
+    >>> _ExecModeRunner().run(test, out=io.StringIO().write)
+    TestResults(failed=0, attempted=1)
+
+    The stock runner rejects the same example, and says why:
+
+    >>> report = io.StringIO()
+    >>> doctest.DocTestRunner().run(test, out=report.write)
+    TestResults(failed=1, attempted=1)
+    >>> "multiple statements" in report.getvalue()
+    True
+    """
+
+    # Left unset where this interpreter has no seam, so the mixin inherits
+    # CPython's loop instead of shadowing it with nothing.
+    if (_exec_mode_run_override := _exec_mode_run()) is not None:
+        _DocTestRunner__run = _exec_mode_run_override
+    del _exec_mode_run_override
+
+
+class _ExecModeRunner(_ExecModeRunnerMixin, doctest.DocTestRunner):
+    """:class:`doctest.DocTestRunner` that honours a ``{testcode}`` body."""
+
+
+class _ExecModeDebugRunner(_ExecModeRunnerMixin, doctest.DebugRunner):
+    """:class:`doctest.DebugRunner` that honours a ``{testcode}`` body."""
 
 
 class TestDirective(Directive):
@@ -76,7 +492,6 @@ class TestDirective(Directive):
         code = "\n".join(self.content)
         test = None
 
-        logger.debug(f"directive run: self.name {self.name}")
         if self.name == "doctest":
             if "<BLANKLINE>" in code:
                 # convert <BLANKLINE>s to ordinary blank lines for presentation
@@ -95,7 +510,7 @@ class TestDirective(Directive):
         if self.arguments:
             groups = [x.strip() for x in self.arguments[0].split(",")]
         else:
-            groups = ["default"]
+            groups = [_DEFAULT_GROUP]
         node = nodetype(code, code, testnodetype=self.name, groups=groups)
         self.set_source_info(node)
         if test is not None:
@@ -103,8 +518,13 @@ class TestDirective(Directive):
             node["test"] = test
         if self.name == "doctest":
             node["language"] = "pycon3"
+        elif self.name == "testcode":
+            node["language"] = "python"
+        elif self.name == "testoutput":
+            # don't try to highlight output
+            node["language"] = "none"
         node["options"] = {}
-        if self.name in ("doctest") and "options" in self.options:
+        if self.name in {"doctest", "testoutput"} and "options" in self.options:
             # parse doctest-like output comparison flags
             option_strings = self.options["options"].replace(",", " ").split()
             for option in option_strings:
@@ -123,11 +543,23 @@ class TestDirective(Directive):
                     continue
                 flag = doctest.OPTIONFLAGS_BY_NAME[option[1:]]
                 node["options"][flag] = option[0] == "+"
+        if self.name in _GROUPED_BLOCK_TYPES and "pyversion" in self.options:
+            # sphinx.ext.doctest declares :pyversion: on these directives and
+            # acts on it only for ``doctest``. Diverging either way costs more
+            # than it buys: honouring it would pass a page Sphinx fails, and
+            # rejecting it would fail a page Sphinx renders. Say so instead.
+            self.state.document.reporter.warning(
+                f"'pyversion' has no effect on '{self.name}'; "
+                "guard the block with ':skipif:' instead.",
+                line=self.lineno,
+            )
         if self.name == "doctest" and "pyversion" in self.options:
             try:
                 spec = self.options["pyversion"]
                 python_version = ".".join([str(v) for v in sys.version_info[:3]])
-                if not is_allowed_version(spec, python_version):
+                # Sphinx, which this was ported from, spells the signature
+                # (spec, version); gp-libs reversed it. The version goes first.
+                if not is_allowed_version(python_version, spec):
                     flag = doctest.OPTIONFLAGS_BY_NAME["SKIP"]
                     node["options"][flag] = True  # Skip the test
             except InvalidSpecifier:
@@ -141,6 +573,7 @@ class TestDirective(Directive):
             node["trim_flags"] = True
         elif "no-trim-doctest-flags" in self.options:
             node["trim_flags"] = False
+        logger.debug("parsed directive", extra={"doctest_block_type": self.name})
         return [node]
 
 
@@ -168,6 +601,38 @@ class DoctestDirective(TestDirective):
     }
 
 
+class TestcodeDirective(TestDirective):
+    """Test code directive.
+
+    Its body is plain Python a reader can select and paste: no prompt, and no
+    expected output unless a :class:`TestoutputDirective` follows it.
+    """
+
+    option_spec: t.ClassVar = {
+        "hide": directives.flag,
+        "no-trim-doctest-flags": directives.flag,
+        "pyversion": directives.unchanged_required,
+        "skipif": directives.unchanged_required,
+        "trim-doctest-flags": directives.flag,
+    }
+
+
+class TestoutputDirective(TestDirective):
+    """Test output directive.
+
+    Says what the :class:`TestcodeDirective` block above it prints.
+    """
+
+    option_spec: t.ClassVar = {
+        "hide": directives.flag,
+        "no-trim-doctest-flags": directives.flag,
+        "options": directives.unchanged,
+        "pyversion": directives.unchanged_required,
+        "skipif": directives.unchanged_required,
+        "trim-doctest-flags": directives.flag,
+    }
+
+
 class MockTabDirective(TestDirective):
     """Mock tab directive."""
 
@@ -185,6 +650,8 @@ def setup() -> dict[str, t.Any]:
     directives.register_directive("testsetup", TestsetupDirective)
     directives.register_directive("testcleanup", TestcleanupDirective)
     directives.register_directive("doctest", DoctestDirective)
+    directives.register_directive("testcode", TestcodeDirective)
+    directives.register_directive("testoutput", TestoutputDirective)
 
     # Third party mock directive: sphinx-inline-tabs @ 2022.01.02.beta11
     directives.register_directive("tab", MockTabDirective)
@@ -197,7 +664,14 @@ master = None
 
 parser = doctest.DocTestParser()
 _DIRECTIVES_READY = False
-_REQUIRED_DIRECTIVES = ("doctest", "testsetup", "testcleanup", "tab")
+_REQUIRED_DIRECTIVES = (
+    "doctest",
+    "testsetup",
+    "testcleanup",
+    "testcode",
+    "testoutput",
+    "tab",
+)
 
 
 def _directive_registry() -> dict[str, t.Any]:
@@ -216,6 +690,921 @@ def _ensure_directives_registered() -> None:
     _DIRECTIVES_READY = True
 
 
+def _node_groups(node: nodes.Element) -> list[str]:
+    """Return every doctest group a block declares, in the order written.
+
+    Only the directive forms carry a ``groups`` attribute: ``.. doctest:: name``
+    in reStructuredText and the ``{doctest} name`` fence in Markdown. Declaring
+    a group is the author asking blocks to share a namespace, so it holds at
+    every :data:`NamespaceScope`.
+
+    ``default`` is the group a directive lands in when its author wrote no
+    argument, so it names nothing the author chose. A block that wants it is
+    asking for its page, which :func:`_page_scoped` answers.
+
+    Parameters
+    ----------
+    node : docutils.nodes.Element
+        Node a doctest was collected from.
+
+    Returns
+    -------
+    list[str]
+        Group names, empty for a block that named none.
+
+    Examples
+    --------
+    >>> from docutils import nodes
+    >>> _node_groups(nodes.literal_block("", "", groups=["intro"]))
+    ['intro']
+
+    A comma list names every group the block joins:
+
+    >>> _node_groups(nodes.literal_block("", "", groups=["alpha", "beta"]))
+    ['alpha', 'beta']
+
+    A directive written without an argument names no group, and a plain fence
+    or a reStructuredText doctest block has nowhere to write one:
+
+    >>> _node_groups(nodes.literal_block("", "", groups=["default"]))
+    []
+    >>> _node_groups(nodes.doctest_block("", ""))
+    []
+
+    A ``{testcode}`` is read the same way, whatever it lands in:
+
+    >>> _node_groups(
+    ...     nodes.literal_block(
+    ...         "", "", testnodetype="testcode", groups=["default"]
+    ...     )
+    ... )
+    []
+    """
+    groups = node.get("groups")
+    if not isinstance(groups, list):
+        return []
+    names = [str(group).strip() for group in groups]
+    return [name for name in names if name and name != _DEFAULT_GROUP]
+
+
+def _page_scoped(node: nodes.Element, grouped_types: frozenset[str]) -> bool:
+    """Say whether a block shares its page whatever the scope says.
+
+    A ``{testcode}`` exists so a visible block and the ``:hide:`` block
+    asserting on it read one namespace, which is the page. Sphinx spells that
+    the ``default`` group; here it is the name an ungrouped block already
+    carries at ``"document"`` scope, so the two forms meet on one page instead
+    of on a name no author wrote.
+
+    Parameters
+    ----------
+    node : docutils.nodes.Element
+        Node a doctest was collected from.
+    grouped_types : frozenset[str]
+        Block types that share their page. See :data:`_PHASE_BLOCK_TYPES` for
+        why a page can widen it.
+
+    Returns
+    -------
+    bool
+        `True` when the block shares its page.
+
+    Examples
+    --------
+    >>> from docutils import nodes
+    >>> code = nodes.literal_block("", "", testnodetype="testcode")
+    >>> _page_scoped(code, _GROUPED_BLOCK_TYPES)
+    True
+
+    A prompt block keeps the scope the run asked for:
+
+    >>> _page_scoped(nodes.doctest_block("", ""), _GROUPED_BLOCK_TYPES)
+    False
+
+    A ``{testsetup}`` shares the page only where the page asked:
+
+    >>> setup = nodes.literal_block("", "", testnodetype="testsetup")
+    >>> _page_scoped(setup, _GROUPED_BLOCK_TYPES)
+    False
+    >>> _page_scoped(setup, _GROUPED_BLOCK_TYPES | _PHASE_BLOCK_TYPES)
+    True
+    """
+    return node.get("testnodetype") in grouped_types
+
+
+def _namespace_name(
+    group: str | None,
+    scope: NamespaceScope,
+    document_name: str,
+    index: int,
+) -> str:
+    """Return the name of the namespace a block runs in.
+
+    The name is also the key blocks merge under and the pytest node id they
+    collect as, so two blocks share a namespace exactly when they share a name.
+
+    Parameters
+    ----------
+    group : str or None
+        Group the block declared, from :func:`_node_groups`.
+    scope : NamespaceScope
+        Scope chosen for blocks that declared no group.
+    document_name : str
+        Base name of the document, without its directory.
+    index : int
+        Position of the block in the document, counted from zero.
+
+    Returns
+    -------
+    str
+        Namespace name.
+
+    Examples
+    --------
+    A declared group names its own namespace at every scope:
+
+    >>> _namespace_name("intro", "block", "page.md", 0)
+    'intro'
+    >>> _namespace_name("intro", "document", "page.md", 0)
+    'intro'
+
+    A block that declared none is named for its position, or for the page when
+    the document shares one namespace:
+
+    >>> _namespace_name(None, "block", "page.md", 3)
+    'page.md[3]'
+    >>> _namespace_name(None, "document", "page.md", 3)
+    'page.md'
+    """
+    if group is not None:
+        return group
+    if scope == "document":
+        return document_name
+    return f"{document_name}[{index}]"
+
+
+def _node_line(node: nodes.Element) -> int:
+    """Return the file line a block reports itself against.
+
+    docutils leaves ``line`` unset on a doctest block nested inside a
+    directive, a list item, or a block quote. The node holding it still carries
+    one, which puts the block within a few lines of its prompts instead of at
+    the top of the page.
+
+    Parameters
+    ----------
+    node : docutils.nodes.Element
+        Node the block was collected from.
+
+    Returns
+    -------
+    int
+        Line to position and report the block against, ``0`` when nothing up
+        the tree carries one.
+
+    Examples
+    --------
+    >>> from docutils import nodes
+    >>> block = nodes.doctest_block("", "")
+    >>> block.line = 6
+    >>> _node_line(block)
+    6
+
+    A block the parser left unpositioned borrows the line of whatever holds it:
+
+    >>> nested = nodes.doctest_block("", "")
+    >>> admonition = nodes.note("", nested)
+    >>> admonition.line = 7
+    >>> _node_line(nested)
+    7
+
+    >>> _node_line(nodes.doctest_block("", ""))
+    0
+    """
+    current: Node | None = node
+    while current is not None:
+        if current.line:
+            return int(current.line)
+        current = current.parent
+    return 0
+
+
+def _skipif(expression: str, globs: dict[str, t.Any]) -> bool:
+    """Return whether a block's ``:skipif:`` expression asks to skip the block.
+
+    The expression is Python source read from the document and **evaluated**,
+    the contract :mod:`sphinx.ext.doctest` documents. It sees a copy of the
+    globals the document starts with — the `globs` handed to
+    :meth:`DocutilsDocTestFinder.find` — and nothing the page's own examples
+    bound, because it is answered while the page is being read, before any of
+    them run.
+
+    Sphinx seeds that namespace from its ``doctest_global_setup`` setting;
+    gp-libs has no such setting, so it binds :mod:`sys` instead unless the
+    document bound the name itself. Without it the option could not answer the
+    two questions it is written for, the Python version and the platform.
+
+    Parameters
+    ----------
+    expression : str
+        Python expression from the directive's ``:skipif:`` option.
+    globs : dict[str, typing.Any]
+        Globals the document starts with.
+
+    Returns
+    -------
+    bool
+        Whether the block's examples are marked :data:`doctest.SKIP`.
+
+    Examples
+    --------
+    >>> _skipif("True", {})
+    True
+    >>> _skipif("False", {})
+    False
+
+    :mod:`sys` answers for the interpreter running the page:
+
+    >>> _skipif("sys.version_info < (3, 10)", {})
+    False
+
+    The document's starting globals are in scope, and win:
+
+    >>> _skipif("greeting == 'hello'", {"greeting": "hello"})
+    True
+    """
+    # eval is the option's contract, not an oversight: sphinx.ext.doctest
+    # defines :skipif: as a Python expression. The expression comes from a
+    # document the project already runs as tests, so it grants no reach the
+    # page's own examples do not have. It is evaluated while the document is
+    # collected, which means ``--collect-only`` runs it too.
+    return bool(eval(expression, {"sys": sys, **globs}))
+
+
+def _gated(node: nodes.Element, filename: str, globs: dict[str, t.Any]) -> bool:
+    """Return whether a block's ``:skipif:`` asks for it to be passed over.
+
+    Parameters
+    ----------
+    node : docutils.nodes.Element
+        Node a block was collected from.
+    filename : str
+        Path a failed expression is reported against.
+    globs : dict[str, typing.Any]
+        Globals the document starts with.
+
+    Returns
+    -------
+    bool
+        Whether the block is gated. A block that wrote no ``:skipif:`` is not.
+
+    Raises
+    ------
+    SkipifExpressionError
+        If the expression cannot be evaluated.
+
+    Examples
+    --------
+    >>> from docutils import nodes
+    >>> _gated(nodes.literal_block("", ""), "page.rst", {})
+    False
+    >>> _gated(nodes.literal_block("", "", skipif="True"), "page.rst", {})
+    True
+
+    A broken expression names the block it was written on:
+
+    >>> try:
+    ...     _gated(nodes.literal_block("", "", skipif="nope"), "page.rst", {})
+    ... except SkipifExpressionError as exc:
+    ...     print(exc)
+    page.rst:0: :skipif: 'nope' failed: name 'nope' is not defined
+    """
+    skipif = node.get("skipif")
+    if skipif is None:
+        return False
+    try:
+        return _skipif(skipif, globs)
+    except Exception as exc:
+        raise SkipifExpressionError(skipif, filename, _node_line(node), exc) from exc
+
+
+def _pair_testoutput(
+    block_nodes: list[nodes.Element],
+    filename: str,
+    globs: dict[str, t.Any],
+) -> tuple[list[nodes.Element], dict[int, nodes.Element]]:
+    r"""Hand each ``{testoutput}`` to the ``{testcode}`` it follows.
+
+    A ``{testoutput}`` is not a block of its own: it says what an earlier block
+    prints, as in :mod:`sphinx.ext.doctest`. Pairing is tracked per group, the
+    way :meth:`sphinx.ext.doctest.TestGroup.add_code` tracks it: the output
+    joins the last block its groups saw, and only when that block is a
+    ``{testcode}`` still waiting for one. Two groups can therefore run their
+    blocks interleaved and still each get their own output, while any other
+    block of the group in between — a ``{doctest}``, a second ``{testcode}`` —
+    closes the pairing. A stray is dropped with a warning rather than collected
+    as a test that checks nothing.
+
+    A second ``{testoutput}`` for one ``{testcode}`` replaces the first, as
+    :mod:`sphinx.ext.doctest` does, so a page reads the same here as it builds
+    there. Unlike Sphinx it says so: the page kept two answers to one question
+    and only one of them ran.
+
+    A gated ``{testoutput}`` is dropped as well, which leaves its
+    ``{testcode}`` expecting no output — what :mod:`sphinx.ext.doctest` does
+    when a ``:skipif:`` takes the node out of the doctree.
+
+    Parameters
+    ----------
+    block_nodes : list[docutils.nodes.Element]
+        Every block the page holds, in document order.
+    filename : str
+        Path warnings and failed expressions are reported against.
+    globs : dict[str, typing.Any]
+        Globals the document starts with.
+
+    Returns
+    -------
+    tuple[list[docutils.nodes.Element], dict[int, docutils.nodes.Element]]
+        Blocks left to collect, and the output node each ``{testcode}`` was
+        given, keyed by :func:`id`.
+
+    Examples
+    --------
+    >>> from docutils import nodes
+    >>> def block(kind, text, *groups):
+    ...     return nodes.literal_block(
+    ...         text, text, testnodetype=kind, groups=list(groups) or ["default"]
+    ...     )
+    >>> code, output = block("testcode", "print(1)"), block("testoutput", "1")
+    >>> blocks, wants = _pair_testoutput([code, output], "page.md", {})
+    >>> [held["testnodetype"] for held in blocks]
+    ['testcode']
+    >>> wants[id(code)].astext()
+    '1'
+
+    A second one replaces the first, and the page hears about it:
+
+    >>> blocks, wants = _pair_testoutput(
+    ...     [code, output, block("testoutput", "2")], "page.md", {}
+    ... )
+    >>> len(blocks), wants[id(code)].astext()
+    (1, '2')
+
+    An intervening block closes the pairing, so a later output is a stray:
+
+    >>> _, wants = _pair_testoutput(
+    ...     [code, block("doctest", ">>> 1\n1"), block("testoutput", "2")],
+    ...     "page.md",
+    ...     {},
+    ... )
+    >>> wants
+    {}
+
+    Two groups can run interleaved and still each be answered:
+
+    >>> alpha = block("testcode", "print('a')", "alpha")
+    >>> beta = block("testcode", "print('b')", "beta")
+    >>> _, wants = _pair_testoutput(
+    ...     [alpha, beta, block("testoutput", "a", "alpha")], "page.md", {}
+    ... )
+    >>> wants[id(alpha)].astext(), id(beta) in wants
+    ('a', False)
+    """
+    blocks: list[nodes.Element] = []
+    wants: dict[int, nodes.Element] = {}
+    # Last block each group saw, and whether it is still open to an output.
+    # ``None`` records a group whose latest block cannot take one.
+    pending: dict[str, nodes.Element | None] = {}
+    for node in block_nodes:
+        groups = _node_groups(node) or [_DEFAULT_GROUP]
+        if node.get("testnodetype") != "testoutput":
+            blocks.append(node)
+            open_to_output = node.get("testnodetype") == "testcode"
+            for group in groups:
+                pending[group] = node if open_to_output else None
+            continue
+        if _gated(node, filename, globs):
+            continue
+        above = next(
+            (pending[group] for group in groups if pending.get(group) is not None),
+            None,
+        )
+        if above is None:
+            logger.warning(
+                "testoutput block follows no testcode of its group",
+                extra={
+                    "doctest_source_file": filename,
+                    "doctest_block_type": "testoutput",
+                },
+            )
+            continue
+        if id(above) in wants:
+            logger.warning(
+                "testoutput block replaces the one above it",
+                extra={
+                    "doctest_source_file": filename,
+                    "doctest_block_type": "testoutput",
+                },
+            )
+        # Left open, so a third replaces the second, as sphinx.ext.doctest does.
+        wants[id(above)] = node
+    return blocks, wants
+
+
+def _runs_as_exec(block_type: str, source: str) -> bool:
+    r"""Report whether a block's body runs as a module body rather than prompts.
+
+    A ``{testcode}`` always does. A ``{testsetup}`` or ``{testcleanup}`` does
+    when it carries no ``>>>``, which is how :mod:`sphinx.ext.doctest` writes
+    one — Sphinx runs those bodies through the same ``exec`` its ``{testcode}``
+    uses, and rejects a prompt outright. gp-libs has always read them with
+    :class:`doctest.DocTestParser` instead, so both spellings have to work: the
+    prompt decides which.
+
+    Parameters
+    ----------
+    block_type : str
+        Block type, from the node's ``testnodetype``.
+    source : str
+        Body of the block.
+
+    Returns
+    -------
+    bool
+        Whether to build the block as one ``exec``-mode example.
+
+    Examples
+    --------
+    >>> _runs_as_exec("testcode", "value = 41")
+    True
+
+    A setup block written either way is read the way it was written:
+
+    >>> _runs_as_exec("testsetup", "base = 40")
+    True
+    >>> _runs_as_exec("testsetup", ">>> base = 40")
+    False
+
+    Nothing else changes mode, and an empty body has no statement to run:
+
+    >>> _runs_as_exec("doctest", "base = 40"), _runs_as_exec("testsetup", "  ")
+    (False, False)
+    """
+    if block_type == "testcode":
+        return True
+    if block_type not in _PHASE_BLOCK_TYPES or not source.strip():
+        return False
+    return _PROMPT_RE.search(source) is None
+
+
+def _testcode_test(
+    source: str,
+    want: str,
+    options: dict[int, bool],
+    name: str,
+    filename: str,
+    lineno: int,
+    globs: dict[str, t.Any],
+) -> doctest.DocTest:
+    r"""Return the test one ``{testcode}`` block runs as.
+
+    The block is a single example: its body is the source, the
+    ``{testoutput}`` below it is the expected output, and the source is marked
+    :class:`_ExecSource` so the runner compiles it as a module body.
+    ``<BLANKLINE>`` is off unless the page turns it back on, as in
+    :mod:`sphinx.ext.doctest` — a blank line in a ``{testoutput}`` block is
+    just a blank line.
+
+    Parameters
+    ----------
+    source : str
+        Body of the ``{testcode}`` block.
+    want : str
+        Output the block is expected to print, empty when none was given.
+    options : dict[int, bool]
+        Doctest flags from the ``{testoutput}`` block's ``:options:``.
+    name : str
+        Name the test collects under.
+    filename : str
+        Path failures are reported against.
+    lineno : int
+        Line the block sits on.
+    globs : dict[str, typing.Any]
+        Globals the namespace starts with.
+
+    Returns
+    -------
+    doctest.DocTest
+        One example, ready to merge with the rest of its namespace.
+
+    Examples
+    --------
+    >>> test = _testcode_test("print(2 + 2)", "4", {}, "page.md", "page.md", 7, {})
+    >>> test.name, test.lineno, len(test.examples)
+    ('page.md', 7, 1)
+    >>> example = test.examples[0]
+    >>> example.source, example.want
+    ('print(2 + 2)\n', '4\n')
+    >>> isinstance(example.source, _ExecSource)
+    True
+
+    A ``{testoutput}`` spelling a traceback checks the exception instead:
+
+    >>> raiser = _testcode_test(
+    ...     "raise ValueError('boom')",
+    ...     "Traceback (most recent call last):\n  ...\nValueError: boom",
+    ...     {},
+    ...     "page.md",
+    ...     "page.md",
+    ...     0,
+    ...     {},
+    ... )
+    >>> raiser.examples[0].exc_msg
+    'ValueError: boom\n'
+    """
+    # Normalized before the match so the captured message ends in the newline
+    # ``traceback.format_exception_only`` puts on the line it is checked against.
+    if want and not want.endswith("\n"):
+        want += "\n"
+    match = doctest.DocTestParser._EXCEPTION_RE.match(want)  # type: ignore[attr-defined]
+    example = doctest.Example(
+        source,
+        want,
+        exc_msg=match.group("msg") if match else None,
+        options={doctest.DONT_ACCEPT_BLANKLINE: True, **options},
+    )
+    example.source = _ExecSource(example.source)
+    # A reader is shown ``lines[example.lineno - 9 : example.lineno + 1]`` of the
+    # block and sent to ``test.lineno + example.lineno + 1``. One example holding
+    # a whole block would show its first line only and send the reader there, so
+    # the example sits on the block's last line: the report then quotes the block
+    # entire and lands inside it rather than above the failure.
+    example.lineno = max(len(source.splitlines()) - 1, 0)
+    return doctest.DocTest([example], globs, name, filename, lineno, source)
+
+
+def _merge_blocks(
+    blocks: list[doctest.DocTest],
+    name: str,
+    filename: str,
+    globs: dict[str, t.Any],
+    keep: list[doctest.DocTest] | None = None,
+) -> doctest.DocTest:
+    r"""Merge one namespace's blocks into a single test.
+
+    Each block keeps the line docutils reported for it, with blank lines
+    standing in for the prose between two blocks, so a merged example reports
+    the line it reports on its own and the ``%03d`` gutter of a failure still
+    counts up to the failing ``>>>``.
+
+    A block the lines above already reach follows them instead. Two blocks can
+    claim overlapping lines: an ``.. include::`` numbers its nodes against the
+    included file, and a reStructuredText doctest block reports its *last*
+    line, so its examples already report lines further down the page than the
+    block occupies. An included block can therefore hold the lowest line number
+    of the namespace and anchor the merged test on the included file's
+    coordinates, which pads the page's own blocks out to their distance from
+    it.
+
+    Parameters
+    ----------
+    blocks : list[doctest.DocTest]
+        Blocks of one namespace, each parsed on its own, in the order they run.
+        Each kept block's ``example.lineno`` is shifted **in place**, so no
+        block may be merged twice while `keep` holds it — which is why
+        :meth:`DocutilsDocTestFinder._find` leaves a lifted block out of `keep`
+        before merging that block on its own.
+    name : str
+        Namespace name, which becomes the test name.
+    filename : str
+        Path failures are reported against.
+    globs : dict[str, typing.Any]
+        Globals the namespace starts with.
+    keep : list[doctest.DocTest] or None
+        Blocks whose examples the merged test runs, compared by identity.
+        `None`, the default, keeps every block. A block left out still
+        contributes its source and its spacing, so the blocks around it report
+        the lines they reported before and a failure's gutter still shows what
+        was passed over — only its examples are dropped.
+
+    Returns
+    -------
+    doctest.DocTest
+        One test, holding the examples of every block in `keep`, laid out
+        across the page the blocks came from.
+
+    Examples
+    --------
+    Two blocks six lines apart keep that distance, and each example reports the
+    line its prompt sits on:
+
+    >>> parser = doctest.DocTestParser()
+    >>> def block(line, source):
+    ...     return parser.get_doctest(source, {}, "page.md", "page.md", line)
+    >>> merged = _merge_blocks(
+    ...     [block(3, ">>> greeting = 'hello'"),
+    ...      block(9, ">>> greeting.upper()\n'HELLO'")],
+    ...     "page.md",
+    ...     "page.md",
+    ...     {},
+    ... )
+    >>> merged.name, merged.lineno
+    ('page.md', 3)
+    >>> merged.docstring.splitlines()
+    [">>> greeting = 'hello'", '', '', '', '', '', '>>> greeting.upper()', "'HELLO'"]
+    >>> [merged.lineno + example.lineno + 1 for example in merged.examples]
+    [4, 10]
+
+    A block whose line the one above already covers is appended after it:
+
+    >>> merged = _merge_blocks(
+    ...     [block(3, ">>> one = 1\n>>> two = 2\n>>> three = 3"),
+    ...      block(4, ">>> one + two")],
+    ...     "page.md",
+    ...     "page.md",
+    ...     {},
+    ... )
+    >>> merged.docstring.splitlines()
+    ['>>> one = 1', '>>> two = 2', '>>> three = 3', '>>> one + two']
+    """
+    # Laid out by where each block sits on the page, but run in the order
+    # given: a namespace hands its blocks over as setup, tests, cleanup, which
+    # is rarely the order a reader meets them. Anchoring the text on the caller
+    # ordering would report every example against whichever block happened to
+    # come first in that sequence.
+    in_page_order = sorted(blocks, key=lambda block: block.lineno or 0)
+    origin = in_page_order[0].lineno or 0
+    lines: list[str] = []
+    offsets: dict[int, int] = {}
+    for block in in_page_order:
+        offset = max((block.lineno or 0) - origin, len(lines))
+        lines.extend([""] * (offset - len(lines)))
+        lines.extend((block.docstring or "").splitlines())
+        offsets[id(block)] = offset
+    examples: list[doctest.Example] = []
+    for block in blocks:
+        # A dropped block still pads and still shows its source, so the blocks
+        # after it keep the lines they reported before and a failure's gutter
+        # still shows what was passed over. Its examples are left out entirely:
+        # whoever takes them next positions them itself.
+        if keep is not None and not any(block is kept for kept in keep):
+            continue
+        for example in block.examples:
+            # Positioned on a copy, so merging reads its blocks rather than
+            # consuming them: a block may be merged again — into a second group
+            # it named, or on its own once lifted — and still report the line it
+            # sits on. ``options`` is copied too, since a shallow copy would
+            # hand both merges the same mutable mapping.
+            shifted = copy.copy(example)
+            shifted.options = dict(example.options)
+            shifted.lineno += offsets[id(block)]
+            examples.append(shifted)
+    return doctest.DocTest(
+        examples,
+        globs,
+        name,
+        filename,
+        origin,
+        "\n".join(lines),
+    )
+
+
+class _CollectedBlock(t.NamedTuple):
+    """One block of a page, parsed against one namespace.
+
+    Attributes
+    ----------
+    position : int
+        Where the block sits in the document, counted from zero. It is the
+        number a block's name carries at ``"block"`` scope, and the number a
+        block lifted out of its namespace is named for. Spelled ``position``
+        rather than ``index`` because a :class:`tuple` already has an
+        ``index``.
+    block_type : str
+        ``doctest``, ``testsetup``, ``testcleanup``, or the node's tag name.
+    test : doctest.DocTest
+        The block's examples, with its directive options already merged in.
+    """
+
+    position: int
+    block_type: str
+    test: doctest.DocTest
+
+
+def _all_examples_skipped(test: doctest.DocTest) -> bool:
+    r"""Return whether every example of `test` carries :data:`doctest.SKIP`.
+
+    This is the question ``_pytest.doctest._check_all_skipped`` asks of an item
+    before running it, and the answer decides whether pytest reports the item
+    ``SKIPPED``. Asking it of a single block says whether that block would
+    report, were it an item of its own.
+
+    A block holding no examples answers ``False``: there is nothing in it to
+    skip, and nothing for a reader to be told about.
+
+    Parameters
+    ----------
+    test : doctest.DocTest
+        Examples of one block.
+
+    Returns
+    -------
+    bool
+        Whether none of the block's examples is left to run.
+
+    Examples
+    --------
+    >>> parser = doctest.DocTestParser()
+    >>> def block(source):
+    ...     return parser.get_doctest(source, {}, "page.rst", "page.rst", 0)
+
+    >>> _all_examples_skipped(block(">>> 1 / 0  # doctest: +SKIP\n"))
+    True
+    >>> _all_examples_skipped(block(">>> 2 + 2\n4\n"))
+    False
+
+    A block only half of whose examples are gated still has one to run:
+
+    >>> _all_examples_skipped(
+    ...     block(">>> 1 / 0  # doctest: +SKIP\n>>> 2 + 2\n4\n")
+    ... )
+    False
+
+    >>> _all_examples_skipped(block("Prose, and no prompts at all.\n"))
+    False
+    """
+    return bool(test.examples) and all(
+        example.options.get(doctest.SKIP, False) for example in test.examples
+    )
+
+
+def _split_skipped_blocks(
+    blocks: list[_CollectedBlock],
+) -> tuple[list[_CollectedBlock], list[_CollectedBlock]]:
+    r"""Split a namespace's blocks into the ones it keeps and the ones it lifts out.
+
+    A block whose every example is skipped binds nothing, so the namespace
+    reaches the same state with it or without it. Merged in, though, it is
+    silent: pytest reports a namespace skipped only when *no* example in it is
+    left to run, so one gated block among running ones reports as a pass.
+    Lifting it back out gives it an item of its own, which reports.
+
+    A namespace with nothing left to run keeps every block, so it reports
+    skipped once as a namespace rather than once per block.
+
+    Parameters
+    ----------
+    blocks : list[_CollectedBlock]
+        Every block of one namespace, in the order it runs.
+
+    Returns
+    -------
+    tuple[list[_CollectedBlock], list[_CollectedBlock]]
+        Blocks the namespace keeps, and blocks that become items of their own.
+        The first is never empty: the namespace lifts a block out only when
+        another one is left to run.
+
+    Examples
+    --------
+    >>> parser = doctest.DocTestParser()
+    >>> def block(index, source):
+    ...     return _CollectedBlock(
+    ...         index,
+    ...         "doctest",
+    ...         parser.get_doctest(source, {}, "page.rst", "page.rst", index),
+    ...     )
+
+    The gated block of a namespace that still runs is lifted out:
+
+    >>> kept, lifted = _split_skipped_blocks([
+    ...     block(0, ">>> value = 1\n"),
+    ...     block(1, ">>> value = 999  # doctest: +SKIP\n"),
+    ...     block(2, ">>> value\n1\n"),
+    ... ])
+    >>> [held.position for held in kept], [held.position for held in lifted]
+    ([0, 2], [1])
+
+    A namespace with nothing left to run keeps its blocks, so the one item it
+    collects as reports skipped once:
+
+    >>> kept, lifted = _split_skipped_blocks([
+    ...     block(0, ">>> 1 / 0  # doctest: +SKIP\n"),
+    ...     block(1, ">>> 2 / 0  # doctest: +SKIP\n"),
+    ... ])
+    >>> [held.position for held in kept], [held.position for held in lifted]
+    ([0, 1], [])
+    """
+    runnable = any(
+        not example.options.get(doctest.SKIP, False)
+        for held in blocks
+        for example in held.test.examples
+    )
+    if not runnable:
+        return list(blocks), []
+    return (
+        [held for held in blocks if not _all_examples_skipped(held.test)],
+        [held for held in blocks if _all_examples_skipped(held.test)],
+    )
+
+
+def _lifted_name(namespace: str, position: int) -> str:
+    """Return the name a block lifted out of `namespace` collects under.
+
+    It is the namespace's own name with the block's document position, the
+    same ``name[n]`` shape a block that names no group already carries at
+    ``"block"`` scope. So a gated block reads the same in ``--collect-only``
+    and answers to the same node id whether the page shares a namespace or
+    not, and it cannot collide with the namespace it came out of.
+
+    Parameters
+    ----------
+    namespace : str
+        Namespace the block was lifted out of.
+    position : int
+        Where the block sits in the document, counted from zero.
+
+    Returns
+    -------
+    str
+        Name for the block's own test.
+
+    Examples
+    --------
+    >>> _lifted_name("intro", 3)
+    'intro[3]'
+
+    A page sharing one namespace names its blocks as ``"block"`` scope would:
+
+    >>> _lifted_name("page.md", 3)
+    'page.md[3]'
+    """
+    return f"{namespace}[{position}]"
+
+
+def _block_name(namespace: str, document_name: str, position: int) -> str:
+    """Return the name one block collects under when its namespace keeps it apart.
+
+    A namespace laid out ``"per-block"`` is many tests, so each needs a name.
+    It is the namespace's own name with the block's document position — the
+    same ``name[n]`` shape :func:`_lifted_name` gives a gated block — so the
+    node id a reader pastes back to pytest does not move with the layout. A
+    namespace already named for this one block adds nothing.
+
+    Parameters
+    ----------
+    namespace : str
+        Namespace the block runs in.
+    document_name : str
+        Base name of the document, without its directory.
+    position : int
+        Where the block sits in the document, counted from zero.
+
+    Returns
+    -------
+    str
+        Name for the block's own test.
+
+    Examples
+    --------
+    A group numbers its blocks by where they sit on the page:
+
+    >>> _block_name("intro", "page.md", 1)
+    'intro[1]'
+
+    A page sharing one namespace numbers them the same way:
+
+    >>> _block_name("page.md", "page.md", 1)
+    'page.md[1]'
+
+    A block that has a namespace to itself already carries the number:
+
+    >>> _block_name("page.md[1]", "page.md", 1)
+    'page.md[1]'
+    """
+    if namespace == _namespace_name(None, "block", document_name, position):
+        return namespace
+    return _lifted_name(namespace, position)
+
+
+class _CollectedTest(t.NamedTuple):
+    """One test a page collected, and the namespace it was collected into.
+
+    Attributes
+    ----------
+    namespace : str
+        Namespace the test's examples run against. Under
+        :data:`NAMESPACE_ITEMS` ``"per-block"`` a namespace's tests hold one
+        globals mapping between them, which makes the namespace the unit a
+        caller distributing tests across processes cannot split.
+    test : doctest.DocTest
+        Examples, ready to run.
+    """
+
+    namespace: str
+    test: doctest.DocTest
+
+
 class DocTestFinderNameDoesNotExist(ValueError):
     """Raised with doctest lookup name not provided."""
 
@@ -227,17 +1616,71 @@ class DocTestFinderNameDoesNotExist(ValueError):
 
 
 class DocutilsDocTestFinder:
-    """DocTestFinder for doctest-docutils.
+    r"""DocTestFinder for doctest-docutils.
 
     Class used to extract the DocTests relevant to a docutils file. Doctests are
     extracted from the following directive types: doctest_block (doctest),
     DocTestDirective. Myst-parser is also supported for parsing markdown files.
+
+    Blocks that name the same group — ``.. doctest:: intro`` in
+    reStructuredText, ``{doctest} intro`` in Markdown — are one test, so a name
+    bound in the group's first block is still bound in its last. Blocks that
+    name no group get a namespace each unless `namespace_scope` widens them to
+    the page.
+
+    A block whose every example is skipped is the exception: it binds nothing,
+    so it comes back as a test of its own, named for its namespace and for
+    where it sits on the page, and reports as the skip it is instead of
+    vanishing into a namespace that runs.
+
+    Examples
+    --------
+    Two blocks in group ``intro`` come back as one test named for the group:
+
+    >>> page = "\n".join([
+    ...     "```{doctest} intro",
+    ...     ">>> greeting = 'hello'",
+    ...     "```",
+    ...     "",
+    ...     "Narrative prose between the blocks.",
+    ...     "",
+    ...     "```{doctest} intro",
+    ...     ">>> greeting.upper()",
+    ...     "'HELLO'",
+    ...     "```",
+    ... ])
+    >>> tests = DocutilsDocTestFinder().find(page, "page.md")
+    >>> [(test.name, len(test.examples)) for test in tests]
+    [('intro', 2)]
+
+    A gated block between them is its own test, named for where it sits:
+
+    >>> gated = page.replace(
+    ...     "Narrative prose between the blocks.",
+    ...     "```{doctest} intro\n>>> greeting = 'nope'  # doctest: +SKIP\n```",
+    ... )
+    >>> [(test.name, len(test.examples)) for test in
+    ...  DocutilsDocTestFinder().find(gated, "page.md")]
+    [('intro', 2), ('intro[1]', 1)]
+
+    `namespace_items` decides whether that sharing costs the blocks their own
+    tests. Under ``"per-block"`` the group is two tests again, holding one
+    globals mapping between them:
+
+    >>> per_block = DocutilsDocTestFinder(namespace_items="per-block")
+    >>> tests = per_block.find(page, "page.md")
+    >>> [(test.name, len(test.examples)) for test in tests]
+    [('intro[0]', 1), ('intro[1]', 1)]
+    >>> tests[0].globs is tests[1].globs
+    True
     """
 
     def __init__(
         self,
         verbose: bool = False,
         parser: doctest.DocTestParser = parser,
+        namespace_scope: NamespaceScope = DEFAULT_NAMESPACE_SCOPE,
+        namespace_items: NamespaceItems = DEFAULT_NAMESPACE_ITEMS,
     ) -> None:
         """Create a new doctest finder.
 
@@ -245,10 +1688,33 @@ class DocutilsDocTestFinder:
         to create new DocTest objects (or objects that implement the same interface as
         DocTest).  The signature for this factory function should match the signature
         of the DocTest constructor.
+
+        Parameters
+        ----------
+        verbose : bool
+            Log each document as it is searched.
+        parser : doctest.DocTestParser
+            Parser that turns a block's source into a :class:`doctest.DocTest`.
+        namespace_scope : NamespaceScope
+            Namespace a block that names no group runs in: ``"block"`` gives it
+            one of its own, ``"document"`` shares one across the page.
+        namespace_items : NamespaceItems
+            What a namespace comes back as: ``"merged"`` gives one test holding
+            every block's examples, ``"per-block"`` gives one test per block,
+            each handed the namespace's globals mapping rather than a copy.
+
+        Raises
+        ------
+        NamespaceScopeError
+            If `namespace_scope` names no known scope.
+        NamespaceItemsError
+            If `namespace_items` names no known layout.
         """
         _ensure_directives_registered()
         self._parser = parser
         self._verbose = verbose
+        self._namespace_scope = _parse_namespace_scope(namespace_scope)
+        self._namespace_items = _parse_namespace_items(namespace_items)
 
     def find(
         self,
@@ -257,25 +1723,109 @@ class DocutilsDocTestFinder:
         globs: dict[str, t.Any] | None = None,
         extraglobs: dict[str, t.Any] | None = None,
     ) -> list[doctest.DocTest]:
-        """Return list of the DocTests defined by given string (its parsed directives).
+        r"""Return list of the DocTests defined by given string (its parsed directives).
 
-        The globals for each DocTest is formed by combining `globs` and `extraglobs`
-        (bindings in `extraglobs` override bindings in `globs`).  A new copy of the
-        globals dictionary is created for each DocTest.  If `globs` is not specified,
+        One DocTest comes back per namespace, plus one for each fully skipped
+        block a running namespace lifted out: the blocks that share a namespace
+        are merged into one, and the rest stand alone. The globals for each
+        DocTest is formed by combining `globs` and `extraglobs` (bindings in
+        `extraglobs` override bindings in `globs`).  A new copy of the globals
+        dictionary is created for each DocTest.  If `globs` is not specified,
         then it defaults to the module's `__dict__`, if specified, or {} otherwise.
         If `extraglobs` is not specified, then it defaults to {}.
+
+        A finder built with `namespace_items` ``"per-block"`` merges nothing:
+        one DocTest comes back per block, and the blocks of one namespace are
+        handed that namespace's globals rather than a copy each, so a caller
+        running them has to pass ``clear_globs=False``.
+
+        Namespaces come back in the order a reader meets the first block of
+        each, and a namespace's own tests in setup, test, cleanup order — which
+        is document order exactly when no two namespaces interleave.
+
+        Examples
+        --------
+        >>> page = "\n".join(f"```python\n>>> {n}\n{n}\n```\n" for n in range(11))
+        >>> [test.name for test in DocutilsDocTestFinder().find(page, "page.md")][-2:]
+        ['page.md[9]', 'page.md[10]']
+
+        A test is named for the page it came from, never for the path it was
+        collected under, so its pytest node id reads the same on every machine:
+
+        >>> finder = DocutilsDocTestFinder()
+        >>> [test.name for test in finder.find(">>> 2 + 2\n4\n", "docs/page.rst")]
+        ['page.rst[0]']
+
+        A page sharing one namespace names a gated block the same way ``block``
+        scope would, so the node id that selects it does not move with the
+        scope:
+
+        >>> page = "\n".join([
+        ...     "```python", ">>> value = 1", "```", "",
+        ...     "```python", ">>> value = 999  # doctest: +SKIP", "```", "",
+        ...     "```python", ">>> value", "1", "```",
+        ... ])
+        >>> shared = DocutilsDocTestFinder(namespace_scope="document")
+        >>> [test.name for test in shared.find(page, "page.md")]
+        ['page.md', 'page.md[1]']
+        >>> [test.name for test in DocutilsDocTestFinder().find(page, "page.md")]
+        ['page.md[0]', 'page.md[1]', 'page.md[2]']
+        """
+        return [
+            collected.test
+            for collected in self._collect(string, name, globs, extraglobs)
+        ]
+
+    def _collect(
+        self,
+        string: str,
+        name: str | None = None,
+        globs: dict[str, t.Any] | None = None,
+        extraglobs: dict[str, t.Any] | None = None,
+    ) -> list[_CollectedTest]:
+        r"""Return every test a page holds, each beside the namespace it runs in.
+
+        :meth:`find` is this without the namespaces. A caller that has to keep
+        one namespace's tests together needs the name they share: under
+        :data:`NAMESPACE_ITEMS` ``"per-block"`` they hold one globals mapping
+        between them, and a mapping is a Python object, so it does not cross
+        processes.
+
+        Parameters
+        ----------
+        string : str
+            Page source.
+        name : str or None
+            Path the page was read from, whose suffix picks the parser.
+        globs : dict[str, typing.Any] or None
+            Globals every namespace starts from.
+        extraglobs : dict[str, typing.Any] or None
+            Globals overriding `globs`.
+
+        Returns
+        -------
+        list[_CollectedTest]
+            Tests, each naming its namespace, namespaces in the order a reader
+            meets the first block of each and a namespace's own tests in setup,
+            test, cleanup order.
+
+        Examples
+        --------
+        >>> page = "\n".join([
+        ...     "```{doctest} intro", ">>> greeting = 'hello'", "```", "",
+        ...     "```python", ">>> 2 + 2", "4", "```",
+        ... ])
+        >>> finder = DocutilsDocTestFinder(namespace_items="per-block")
+        >>> [(held.namespace, held.test.name) for held in finder._collect(
+        ...     page, "page.md"
+        ... )]
+        [('intro', 'intro[0]'), ('page.md[1]', 'page.md[1]')]
         """
         # If name was not specified, then extract it from the string.
         if name is None:
             name = getattr(string, "__name__", None)
             if name is None:
                 raise DocTestFinderNameDoesNotExist(string=string)
-
-        # No access to a loader, so assume it's a normal
-        # filesystem path
-        source_lines = linecache.getlines(name) or None
-        if not source_lines:
-            source_lines = None
 
         # Initialize globals, and merge in extraglobs.
         globs = {} if globs is None else globs.copy()
@@ -284,54 +1834,32 @@ class DocutilsDocTestFinder:
         if "__name__" not in globs:
             globs["__name__"] = "__main__"  # provide a default module name
 
-        tests: list[doctest.DocTest] = []
+        tests: list[_CollectedTest] = []
         source_path: pathlib.Path | None = (
             pathlib.Path(name) if name is not None else None
         )
-        self._find(tests, string, name, source_lines, globs, {}, source_path)
-        # Sort the tests by alpha order of names, for consistency in
-        # verbose-mode output.  This was a feature of doctest in Pythons
-        # <= 2.3 that got lost by accident in 2.4.  It was repaired in
-        # 2.4.4 and 2.5.
-        tests.sort()
+        self._find(tests, string, name, globs, {}, source_path)
+        # ``_find`` appends in document-traversal order; leave it that way.
+        # ``DocTest.__lt__`` compares names, and a name carries its block index
+        # as text, so sorting runs ``page.md[10]`` ahead of ``page.md[1]``.
         return tests
 
     def _find(
         self,
-        tests: list[doctest.DocTest],
+        tests: list[_CollectedTest],
         string: str,
         name: str,
-        source_lines: list[str] | None,
         globs: dict[str, t.Any],
         seen: dict[int, int],
         source_path: pathlib.Path | None = None,
     ) -> None:
         """Find tests for the given string, and add them to `tests`."""
-        if self._verbose:
-            logger.info(f"Finding tests in {name}")
-
         # If we've already processed this string, then ignore it.
         if id(string) in seen:
             return
         seen[id(string)] = 1
 
-        # Find a test for this string, and add it to the list of tests.
-        logger.debug(
-            "_find({})".format(
-                pprint.pformat(
-                    {
-                        "tests": tests,
-                        "string": string,
-                        "name": name,
-                        "source_lines": source_lines,
-                        "globs": globs,
-                        "seen": seen,
-                    },
-                ),
-            ),
-        )
         ext = pathlib.Path(name).suffix
-        logger.debug(f"parse, ext: {ext}")
         if ext == ".md":
             import myst_parser.parsers.docutils_
             from myst_parser.config.main import MdParserConfig
@@ -382,24 +1910,258 @@ class DocutilsDocTestFinder:
                 or isinstance(node, nodes.doctest_block)
             )
 
-        for idx, node in enumerate(findall(doc)(condition)):
-            logger.debug(f"() node: {node.astext()}")
-            assert isinstance(node, nodes.Element)
-            test_name = node.get("groups")
-            if isinstance(test_name, list):
-                test_name = test_name[0]
-            if test_name is None or test_name == "default":
-                test_name = f"{name}[{idx}]"
-            logger.debug(f"() node: {test_name}")
-            test = self._get_test(
-                string=node.astext(),
-                name=test_name,
-                filename=name,
-                globs=globs,
-                source_lines=[str(node.line)],
+        document_name = pathlib.Path(name).name
+        # Namespaces keep insertion order, so the merged tests come back in the
+        # order the reader meets each namespace's first block. Each holds its
+        # setup, test, and cleanup blocks apart: sphinx.ext.doctest runs a
+        # group's setup before its tests and its cleanup after, whatever order
+        # the page wrote them in, and a testsetup exists to be movable.
+        namespaces: dict[str, dict[str, list[_CollectedBlock]]] = {}
+
+        found: list[nodes.Element] = [
+            node for node in findall(doc)(condition) if isinstance(node, nodes.Element)
+        ]
+        # A page written in Sphinx's prompt-free style puts its setup in the
+        # same implicit group as its code. A page of prompt blocks keeps the
+        # namespaces it has always had, so the widening follows the testcode.
+        grouped_types = _GROUPED_BLOCK_TYPES
+        if any(node.get("testnodetype") == "testcode" for node in found):
+            grouped_types = _GROUPED_BLOCK_TYPES | _PHASE_BLOCK_TYPES
+        block_nodes, wants = _pair_testoutput(found, name, globs)
+        declared = [_node_groups(node) for node in block_nodes]
+        # A prompt-free block shares its page, so it is named for the page the
+        # way an ungrouped block already is at document scope. That is what
+        # lets the two forms meet there instead of on a name no author wrote.
+        scopes: list[NamespaceScope] = [
+            "document" if _page_scoped(node, grouped_types) else self._namespace_scope
+            for node in block_nodes
+        ]
+
+        def generated_name(idx: int) -> str:
+            return _namespace_name(None, scopes[idx], document_name, idx)
+
+        # A block joins every group it names. ``*`` means every group the
+        # document declares, so it can only be resolved once the page has been
+        # read; a page whose only blocks are wildcards has no group to join, so
+        # each keeps its own namespace.
+        memberships: list[list[str]] = [
+            [] if _WILDCARD_GROUP in groups else (groups or [generated_name(idx)])
+            for idx, groups in enumerate(declared)
+        ]
+        ordered: list[str] = []
+        for names in memberships:
+            for candidate in names:
+                if candidate not in ordered:
+                    ordered.append(candidate)
+        for idx, groups in enumerate(declared):
+            if _WILDCARD_GROUP in groups:
+                memberships[idx] = list(ordered) or [generated_name(idx)]
+
+        # A generated name and a declared one are the same string to everything
+        # downstream: the namespace mapping keys on it and the test is named
+        # for it. So a page that spells both has to say which it meant, and
+        # cannot. Checked against the names actually generated, not the shape
+        # they take, so a group named for a page whose blocks all declare one
+        # is left alone. A page of nothing but wildcards declares no name to
+        # collide with, which is why the fallback above needs no check.
+        generated = {
+            generated_name(idx) for idx, groups in enumerate(declared) if not groups
+        }
+        for group in sorted(
+            {name for groups in declared for name in groups} & generated,
+        ):
+            raise NamespaceNameCollisionError(
+                group,
+                document_name,
+                f"a block declaring none at {self._namespace_scope!r} scope",
             )
-            if test is not None:
-                tests.append(test)
+
+        for idx, node in enumerate(block_nodes):
+            block_type = str(node.get("testnodetype", node.tagname))
+            lineno = _node_line(node)
+            # The block's own flags, before its examples get a say. A true
+            # ``:skipif:`` joins them as ``+SKIP``: one spelling of "do not run
+            # this" that a reader can predict from the other, and one path
+            # through the runner, which keeps the block collected, reported and
+            # selectable by node id instead of vanishing from the page.
+            options = dict(node.get("options") or {})
+            gated = _gated(node, name, globs)
+            if gated:
+                logger.debug(
+                    "doctest block skipped by skipif",
+                    extra={
+                        "doctest_source_file": name,
+                        "doctest_block_type": block_type,
+                    },
+                )
+            # ``node["test"]`` is the source before the directive trimmed
+            # ``# doctest:`` flags out of the code a reader sees. Both
+            # spellings have the same line count, so either positions the
+            # block the same way.
+            source = str(node.get("test") or node.astext())
+            output = wants.get(id(node))
+            for namespace in memberships[idx]:
+                logger.debug(
+                    "doctest block collected into namespace %s",
+                    namespace,
+                    extra={
+                        "doctest_source_file": name,
+                        "doctest_block_type": block_type,
+                    },
+                )
+                # Parsed once per namespace: _merge_blocks shifts
+                # ``example.lineno`` in place, so two namespaces sharing one
+                # block's examples would shift them twice.
+                test_name = (
+                    namespace
+                    if self._namespace_items == "merged"
+                    else _block_name(namespace, document_name, idx)
+                )
+                test = (
+                    _testcode_test(
+                        source=source,
+                        want=output.astext() if output is not None else "",
+                        options=dict(output.get("options") or {})
+                        if output is not None
+                        else {},
+                        name=test_name,
+                        filename=name,
+                        lineno=lineno,
+                        globs=globs,
+                    )
+                    if _runs_as_exec(block_type, source)
+                    else self._get_test(
+                        string=source,
+                        name=test_name,
+                        filename=name,
+                        globs=globs,
+                        lineno=lineno,
+                    )
+                )
+                if options or gated:
+                    for example in test.examples:
+                        # A directive's ``:options:`` set the block's defaults;
+                        # an example's own inline flags win, as in
+                        # sphinx.ext.doctest.
+                        merged = dict(options)
+                        merged.update(example.options)
+                        if gated:
+                            # A ``:skipif:`` is a gate, not a default.
+                            # sphinx.ext.doctest drops the block before its
+                            # source is ever read, so nothing written inside it
+                            # can turn the gate off — and an example that did
+                            # would run on exactly the interpreter or platform
+                            # the condition was guarding against.
+                            merged[doctest.SKIP] = True
+                        example.options = merged
+                phases = namespaces.setdefault(
+                    namespace,
+                    {"testsetup": [], "test": [], "testcleanup": []},
+                )
+                phases[block_type if block_type in phases else "test"].append(
+                    _CollectedBlock(idx, block_type, test),
+                )
+
+        # Anchored on the document position of the first block each test holds,
+        # so the tests come back in the order a reader meets them. A namespace
+        # anchors where it now starts, which is where it started before if it
+        # lifted nothing out. Ties — one block joining two groups — keep the
+        # order the page declared them in, which a stable sort preserves.
+        anchored: list[tuple[int, int, _CollectedTest]] = []
+        for namespace, phases in namespaces.items():
+            in_phase_order = [
+                *phases["testsetup"],
+                *phases["test"],
+                *phases["testcleanup"],
+            ]
+            if self._namespace_items == "per-block":
+                # One mapping for the namespace, handed to every block of it.
+                # ``DocTest.__init__`` copies the globals it is given, so the
+                # mapping is assigned afterwards, as sphinx.ext.doctest does;
+                # whoever runs these tests has to leave it uncleared for the
+                # sharing to reach the block below.
+                shared = dict(globs)
+                anchor = min(held.position for held in in_phase_order)
+                for order, held in enumerate(in_phase_order):
+                    held.test.globs = shared
+                    anchored.append(
+                        (
+                            # The namespace anchors as a whole, and its blocks
+                            # keep phase order inside it: a testsetup written
+                            # at the foot of the page still runs first.
+                            anchor,
+                            order,
+                            _CollectedTest(namespace, held.test),
+                        ),
+                    )
+                continue
+            kept, lifted = _split_skipped_blocks(in_phase_order)
+            anchored.append(
+                (
+                    # Every block anchors its namespace, lifted or not, so
+                    # lifting the first one cannot let another namespace
+                    # declared below it collect first.
+                    min(held.position for held in in_phase_order),
+                    # Ties with a block this namespace lifted break toward the
+                    # block: it sits at that line, the namespace resumes later.
+                    min(held.position for held in kept),
+                    # Merged over every block, so the padding a lifted block
+                    # contributed stays and the blocks after it keep the lines
+                    # they reported before it was lifted.
+                    _CollectedTest(
+                        namespace,
+                        _merge_blocks(
+                            [held.test for held in in_phase_order],
+                            namespace,
+                            name,
+                            globs,
+                            keep=[held.test for held in kept],
+                        ),
+                    ),
+                ),
+            )
+            for held in lifted:
+                lifted_name = _lifted_name(namespace, held.position)
+                # Lifting generates a name the same way declaring a group
+                # does, so it can land on one the page already declared.
+                if lifted_name in namespaces:
+                    raise NamespaceNameCollisionError(
+                        lifted_name,
+                        document_name,
+                        f"a block lifted out of {namespace!r}",
+                    )
+                logger.debug(
+                    "skipped doctest block lifted out of namespace %s as %s",
+                    namespace,
+                    lifted_name,
+                    extra={
+                        "doctest_source_file": name,
+                        "doctest_block_type": held.block_type,
+                    },
+                )
+                anchored.append(
+                    (
+                        held.position,
+                        held.position,
+                        _CollectedTest(
+                            namespace,
+                            _merge_blocks([held.test], lifted_name, name, globs),
+                        ),
+                    ),
+                )
+        anchored.sort(key=lambda entry: (entry[0], entry[1]))
+        tests.extend(collected for _, _, collected in anchored)
+        logger.debug(
+            "parsed document into %d test(s)",
+            len(anchored),
+            extra={"doctest_source_file": name},
+        )
+        if self._verbose:
+            logger.info(
+                "found %d test(s)",
+                len(anchored),
+                extra={"doctest_source_file": name},
+            )
 
     def _get_test(
         self,
@@ -407,12 +2169,9 @@ class DocutilsDocTestFinder:
         name: str,
         filename: str,
         globs: dict[str, t.Any],
-        source_lines: list[str],
+        lineno: int,
     ) -> doctest.DocTest:
-        """Return a DocTest for given string, or return None."""
-        lineno = int(source_lines[0])
-
-        # Return a DocTest for this string.
+        """Return a DocTest for one block's source."""
         return self._parser.get_doctest(string, globs, name, filename, lineno)
 
 
@@ -438,10 +2197,60 @@ def testdocutils(
     raise_on_error: bool = False,
     parser: doctest.DocTestParser = parser,
     encoding: str | None = None,
+    namespace_scope: NamespaceScope = DEFAULT_NAMESPACE_SCOPE,
+    namespace_items: NamespaceItems = DEFAULT_NAMESPACE_ITEMS,
 ) -> doctest.TestResults:
-    """Docutils-based test entrypoint.
+    r"""Docutils-based test entrypoint.
 
     Based on doctest.testfile at python 3.10
+
+    Parameters
+    ----------
+    namespace_scope : NamespaceScope
+        Namespace the blocks that name no group run in. See
+        :class:`DocutilsDocTestFinder`; the other parameters follow
+        :func:`doctest.testfile`.
+    namespace_items : NamespaceItems
+        Whether a namespace runs as one test or as one test per block. Running
+        a file has no scheduler to split the blocks across, so ``"per-block"``
+        shares state here as it does in a serial pytest run.
+
+    Returns
+    -------
+    doctest.TestResults
+        Failed examples, and examples attempted.
+
+    Examples
+    --------
+    A page whose second block reads a name the first one bound fails while each
+    block keeps its own namespace, and passes once the page shares one:
+
+    >>> import contextlib, io, pathlib, tempfile
+    >>> directory = tempfile.TemporaryDirectory()
+    >>> page = pathlib.Path(directory.name) / "page.rst"
+    >>> _ = page.write_text(
+    ...     ">>> greeting = 'hello'\n\n>>> greeting.upper()\n'HELLO'\n",
+    ...     encoding="utf-8",
+    ... )
+
+    >>> def run(**kwargs):
+    ...     with contextlib.redirect_stdout(io.StringIO()):
+    ...         return testdocutils(
+    ...             str(page), module_relative=False, report=False, **kwargs
+    ...         )
+
+    >>> run()
+    TestResults(failed=1, attempted=2)
+
+    >>> run(namespace_scope="document")
+    TestResults(failed=0, attempted=2)
+
+    Keeping each block a test of its own shares the page just the same:
+
+    >>> run(namespace_scope="document", namespace_items="per-block")
+    TestResults(failed=0, attempted=2)
+
+    >>> directory.cleanup()
     """
     global master
 
@@ -470,17 +2279,23 @@ def testdocutils(
         globs["__name__"] = "__main__"
 
     # Find, parse, and run all tests in the given module.
-    finder = DocutilsDocTestFinder()
+    finder = DocutilsDocTestFinder(
+        namespace_scope=namespace_scope,
+        namespace_items=namespace_items,
+    )
 
     runner: doctest.DebugRunner | doctest.DocTestRunner
 
     if raise_on_error:
-        runner = doctest.DebugRunner(verbose=verbose, optionflags=optionflags)
+        runner = _ExecModeDebugRunner(verbose=verbose, optionflags=optionflags)
     else:
-        runner = doctest.DocTestRunner(verbose=verbose, optionflags=optionflags)
+        runner = _ExecModeRunner(verbose=verbose, optionflags=optionflags)
 
+    # A namespace laid out per block hands its tests one mapping between them,
+    # which the runner would otherwise empty after running the first of them.
+    clear_globs = namespace_items != "per-block"
     for test in finder.find(text, filename, globs=globs, extraglobs=extraglobs):
-        runner.run(test)
+        runner.run(test, clear_globs=clear_globs)
 
     if report:
         runner.summarize()
@@ -544,6 +2359,28 @@ def _test() -> int:
         action="store_true",
         help=("Force parsing using docutils (reStructuredText, markdown)"),
     )
+    p.add_argument(
+        "--namespace-scope",
+        action="store",
+        choices=NAMESPACE_SCOPES,
+        default=DEFAULT_NAMESPACE_SCOPE,
+        help=(
+            "namespace the blocks that name no group run in: block (default,"
+            " one each) or document (one for the page); blocks that name a"
+            " group always share that group's namespace"
+        ),
+    )
+    p.add_argument(
+        "--namespace-items",
+        action="store",
+        choices=NAMESPACE_ITEMS,
+        default=DEFAULT_NAMESPACE_ITEMS,
+        help=(
+            "what a namespace runs as: merged (default, one item holding every"
+            " block of it) or per-block (one item per block, sharing the"
+            " namespace between them)"
+        ),
+    )
     p.add_argument("file", nargs="+", help="file containing the tests to run")
     args = p.parse_args()
 
@@ -569,6 +2406,8 @@ def _test() -> int:
                 module_relative=False,
                 verbose=verbose,
                 optionflags=options,
+                namespace_scope=args.namespace_scope,
+                namespace_items=args.namespace_items,
             )
         elif filename.endswith(".py"):
             # It is a module -- insert its dir into sys.path and try to
