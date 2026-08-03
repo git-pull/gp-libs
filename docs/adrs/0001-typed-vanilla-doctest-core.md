@@ -326,8 +326,8 @@ registration timing is a separate decision; the core contract does not import a
 pytest hook or a Sphinx application.
 
 The direct, pytest and Sphinx lifecycles, including the xdist consistency check,
-are specified separately so this record does not mistake a host bootstrap policy
-for a core dependency.
+are specified in {doc}`0007-host-plugin-registration-lifecycle` so this record
+does not mistake a host bootstrap policy for a core dependency.
 
 ### Item lifecycle
 
@@ -484,7 +484,6 @@ class ParsedOutput(t.NamedTuple):
 
 
 class BlockKind(t.NamedTuple):
-    name: str
     phase: Phase
     profile_name: str  # resolved against the frozen registry, not held here
     pairs_with: str | None
@@ -615,7 +614,8 @@ removing expected output cannot rename every later test. Both `:skipif:` and
 either gate.
 
 `BlockKind` names a profile rather than holding one, so a public type never
-contains a private one. The name resolves against the frozen registry.
+contains a private implementation. The profile name and the block kind's own
+registration name resolve against the frozen registry.
 
 **A plan holds no `DocTest`.** {class}`doctest.DocTest` is mutable — the design
 assigns `globs` to it after construction, and a run mutates that mapping — so a
@@ -870,11 +870,11 @@ several different strengths.
 
 **The Sphinx promise is narrow, and this record narrows it deliberately.** What is
 offered is an *extractor over a Sphinx-resolved doctree* — a pure function from a
-doctree to blocks, callable from an extension. A full Sphinx host would need an
-execution lifecycle and a result channel that neither this record nor
-{doc}`0006-pytest-private-api-compatibility` defines, and inventing one would be
-the builder that [](#alternatives-rejected) turns down. Until someone specifies
-that adapter, the record promises doctree consumption and nothing more.
+doctree to blocks, callable from an extension.
+{doc}`0007-host-plugin-registration-lifecycle` defines how Sphinx extensions
+contribute capabilities, but not a Sphinx execution lifecycle or result channel.
+Inventing those would be the builder that [](#alternatives-rejected) turns down.
+The record promises doctree consumption and nothing more.
 
 ## Constraints
 
@@ -1194,13 +1194,15 @@ the narrow default set in {doc}`0004-diagnostics-as-data`.
 
 ## Relationship to other ADRs
 
-This ADR fixes the architecture. Five decisions it defers get their own records:
+This ADR fixes the architecture. Six decisions it defers get their own records:
 {doc}`0002-runner-conformance-across-cpython` (how the owned loop is proven
 equivalent), {doc}`0003-rejecting-per-block-items` (why shared per-block items
 are rejected), {doc}`0004-diagnostics-as-data` (what is reported and what is
-suppressed),
-{doc}`0005-line-recovery-for-nested-blocks` (the optional last step), and
-{doc}`0006-pytest-private-api-compatibility` (the quarantine and its matrix).
+suppressed), {doc}`0005-line-recovery-for-nested-blocks` (the optional last
+step), {doc}`0006-pytest-private-api-compatibility` (the quarantine and its
+matrix), and
+{doc}`0007-host-plugin-registration-lifecycle` (host registration and freeze
+points).
 
 ## Final position
 

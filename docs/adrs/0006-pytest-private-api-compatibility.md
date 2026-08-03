@@ -99,61 +99,9 @@ symbol, and it names the document that triggered it.
 CI carries a job pinned to the minimum supported pytest and one tracking its
 prerelease.
 
-### The registry freeze lifecycle
-
-{doc}`0001-typed-vanilla-doctest-core` depends on a frozen registry and leaves the
-lifecycle here. This is it.
-
-```python
-class Contributor(t.Protocol):
-    """What a plugin implements to extend the core."""
-
-    def contribute(self, registrar: Registrar) -> None: ...
-
-
-class Registrar(t.Protocol):
-    def add_block_kind(self, kind: BlockKind, *, replace: bool = False) -> None: ...
-    def add_document_parser(
-        self, parser: DocumentParser, *, replace: bool = False
-    ) -> None: ...
-    def add_execution_profile(
-        self, profile: ExecutionProfile, *, replace: bool = False
-    ) -> None: ...
-    def add_output_checker(
-        self, name: str, factory: CheckerFactory, *, replace: bool = False
-    ) -> None: ...
-
-
-def build_registry(contributors: t.Sequence[Contributor]) -> Registry: ...
-```
-
-**Duplicate names are an error unless `replace=True`.** Silent last-writer-wins is
-what makes the docutils directive table a recurring bug source, and this registry
-does not repeat it. Contribution order is: built-ins, then installed plugins in
-`pluginmanager` registration order, then explicit contributors — deterministic
-under a given plugin set.
-
-**Freeze points, per host:**
-
-| Host | Contributors accepted | Frozen at |
-|---|---|---|
-| direct API | whatever the caller passes to `build_registry` | on return |
-| pytest | built-ins, installed plugins, explicit contributors, and **initial/root conftests only** | `pytest_sessionstart` |
-| Sphinx | extensions, via `setup(app)` | after extension setup, before reading |
-
-**Nested conftests may not contribute.** They load during collection, after the
-freeze, and a registry that grows while collection runs cannot be the same in
-every worker. Registration from a nested conftest is an error naming the file —
-not a silent late addition. Fixtures and ordinary pytest hooks in nested conftests
-are unaffected; this is only about block kinds, parsers, profiles and checkers.
-
-**Workers compare a manifest, not node ids.** Matching collection is not
-sufficient: two workers can collect identical ids while resolving the same profile
-name to different code. So the controller ships a deterministic registry
-manifest — sorted `(kind, name, provider, version)` tuples — through worker
-configuration, and a worker whose manifest differs fails the session with both
-manifests in the message. This is what makes heterogeneous xdist (SSH, socket,
-mixed environments) safe rather than assumed-homogeneous.
+Registry construction is not a pytest-private-API concern. The host-neutral
+contract, pytest hookspec, Sphinx adapter and xdist manifest are specified in
+{doc}`0007-host-plugin-registration-lifecycle`.
 
 ## Open
 
