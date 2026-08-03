@@ -10,7 +10,7 @@ The disagreements are entirely about which of those four are the same object.
 |---|---|---|---|---|
 | CPython `doctest` | `Example` | `DocTest` | `DocTest.globs` | `TestResults` (2 ints + an attribute) |
 | `_pytest.doctest` | `Example` | `DocTest` = one `Item` | `DocTest.globs`, wiped per item | `MultipleDoctestFailures` → `ReprFailDoctest` |
-| `sphinx.ext.doctest` | `TestCode` | one `DocTest` **per block** (`TestGroup` is the batching unit, not the execution unit) | `ns`, assigned post-construction to every block's `DocTest` | six ints + text to a file |
+| `sphinx.ext.doctest` | `TestCode` | one `DocTest` per ordinary/paired test; setup and cleanup are each combined into one simulated `DocTest` | `ns`, assigned post-construction to every `DocTest` | six builder counters + text to a file |
 | Sybil | `Region` | `Example` = one `Item` | `Document.namespace` | truthy return or exception |
 | xdoctest | `DoctestPart` | own `DocTest` | `global_namespace` | own report objects |
 | pytest-examples | `CodeExample` | the block, exec'd once | explicit `module_globals=` | captured output, or a rewrite |
@@ -24,8 +24,8 @@ nothing for a `-k` to split. Sybil does not: it hands out one pytest item per
 span over one shared mapping, which is the failure.
 
 Three units are easy to conflate for Sphinx specifically, so keep them apart: the
-**runner call** is per block, the **shared state** is per group, and the **result**
-is six process-wide integers.
+**runner call** is per ordinary test but combined per setup or cleanup phase, the
+**shared state** is per group, and the **result** is six counters on the builder.
 
 ## Field-by-field: what a source unit carries
 
@@ -34,12 +34,14 @@ is six process-wide integers.
 | source text | `source` | `code` | via `lexemes` | `source` | `source` |
 | expected output | `want` | paired separately | — | written, not read | a separate `ParsedOutput` |
 | line | `lineno` (0-based, string-relative) | `lineno` | computed from span | `start_line` | `line` (nullable) |
-| byte offsets | — | — | `start`, `end` | `start_index`, `end_index` | — (deferred) |
+| string offsets | — | — | `start`, `end` | `start_index`, `end_index` | — (deferred) |
 | dedent scalar | `indent` | — | `Lexeme.offset` | `indent` | — (deferred) |
+| document order | list position | list position | span order | list position | `document_order`, shared with outputs |
+| identity order | example index | — | positional node id | parametrization id | `block_ordinal`, runnable blocks only |
 | kind | — | `type` | inferred from evaluator | `prefix_tags()` | `kind` |
 | group | — | via `TestGroup` | — | — | `groups` |
 | options | `options` | `options` | — | — | `options` |
-| gate | — | `skipif` on the node | — | — | `skipif` (unevaluated) |
+| gate | — | `skipif` on the node | — | — | `skipif` and `pyversion` (unevaluated) |
 | file | on the `DocTest` | `filename` | on the `Document` | `path` | `path` |
 | compile mode | — | on the *builder*, mutable | — | always exec | on `ProjectedBlock` |
 

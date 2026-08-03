@@ -945,9 +945,13 @@ against an empty mapping. Worker restarts are on by default.
 | `is_allowed_version(spec, version)` takes the specifier **first** | [`doctest.py:45`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L45) |
 | `DocTestBuilder` flips a mutable `self.type` between `"single"` and `"exec"` and reads it through a process-global `doctest.compile` patch | [`doctest.py:310`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L310), [`:549`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L549) |
 
-Sphinx v9.1.0 changes the default group an unargumented block joins. Any
-group-naming behaviour matched against "Sphinx" has to say which Sphinx, and
-{doc}`0005-line-recovery-for-nested-blocks` proposes moving this floor.
+Sphinx 9.0 changed the fallback only for a bare doctest node with no `groups`
+attribute: it now uses `doctest_test_doctest_blocks`
+([`v9.0.0:463`](https://github.com/sphinx-doc/sphinx/blob/v9.0.0/sphinx/ext/doctest.py#L463)).
+An unargumented directive still stamps `groups=["default"]`
+([`v9.0.0:94-98`](https://github.com/sphinx-doc/sphinx/blob/v9.0.0/sphinx/ext/doctest.py#L94-L98)).
+Compatibility therefore distinguishes directive-produced nodes from bare
+`doctest_block` nodes instead of claiming the author-facing default changed.
 
 ## Tensions
 
@@ -1069,7 +1073,7 @@ ceiling, and the `import-linter` contract on the leaf.
 |---|---|---|
 | [Sybil 10.0.1](https://github.com/simplistix/sybil/tree/10.0.1) | A document is a flat sequence of non-overlapping character spans; every format is a regex lexer; zero runtime dependencies | Format independence at no dependency cost, and a non-overlap invariant that raises on double collection. But one mutable namespace per document with [one independently selectable item per span](https://github.com/simplistix/sybil/blob/10.0.1/src/sybil/integration/pytest.py), so `-k` on a later example raises `NameError`. [Node ids are positional](https://github.com/simplistix/sybil/blob/10.0.1/src/sybil/sybil.py#L155-L157) (`line:4,column:1`), so adding a paragraph renames every downstream test. No group support at all — a regex cannot see directive options |
 | [xdoctest v1.3.2](https://github.com/Erotemic/xdoctest/tree/v1.3.2) | Abandon stdlib compatibility; own the parser via `ast`/`tokenize`; make directives structured objects | `ast` parsing and structured directives are real advances — [`REQUIRES`](https://github.com/Erotemic/xdoctest/blob/v1.3.2/src/xdoctest/directive.py#L58) carries *why* a block skipped, which a bool cannot. But it is now building compatibility back, and its permissive got/want defaults silently change tests users wrote for stdlib. It unregisters pytest's doctest plugin outright |
-| [pytest-examples v0.0.18](https://github.com/pydantic/pytest-examples/tree/v0.0.18) | Emit the canonical form rather than parse it; rewrite expected output in place | Check-mode and update-mode collapse into one path, and byte offsets plus an invertible dedent scalar are what a data model needs to rewrite source. Composes with pytest by contributing no collector at all — the cheapest correct integration in the survey |
+| [pytest-examples v0.0.18](https://github.com/pydantic/pytest-examples/tree/v0.0.18) | Emit the canonical form rather than parse it; rewrite expected output in place | Check-mode and update-mode collapse into one path. Its absolute Python string indices enable source rewriting, although one indent scalar does not invert dedent in general. It composes with pytest by contributing no collector at all — the cheapest correct integration in the survey |
 | [typeshed](https://github.com/python/typeshed/blob/8c7256c/stdlib/doctest.pyi) | Annotate the 2001 API faithfully | Hands back `Any` at exactly the three extensible points — `globs`, `**options`, `optionflags: int`. Declares `DocTestRunner.test: DocTest` unconditionally although runtime assigns it only inside `run()`, so the stub type-checks a crash |
 
 The collective lesson: **namespace scope is not test identity, markup parsing is

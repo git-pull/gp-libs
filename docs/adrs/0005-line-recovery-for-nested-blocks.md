@@ -18,9 +18,9 @@ reports its **last** line. A MyST fence reports its **first** line. An
 `.. include::`-ed block numbers against the *included* file.
 
 {doc}`0001-typed-vanilla-doctest-core` handles all of this honestly rather than
-approximately: `Block.line` is nullable, the per-front-end meaning is normalized
-inside the front-end that knows it, `Block.path` carries the file the text
-actually lives in, and a block with no recoverable line propagates
+approximately: `ParsedBlock.line` is nullable, the per-front-end meaning is
+normalized inside the front-end that knows it, `ParsedBlock.path` carries the
+file the text actually lives in, and a block with no recoverable line propagates
 `DocTest.lineno=None` into pytest's `EXAMPLE LOCATION UNKNOWN` branch.
 
 That is correct but not maximal. A nested block's failure says the location is
@@ -83,9 +83,10 @@ neither permits docutils 0.22.
 
 ## Consequences
 
-The nullable `Block.line` stays. It is not a workaround for this defect; it is
-the honest representation of a front-end that may legitimately not know, and
-`.. include::` attribution still needs `Block.path` regardless of version.
+The nullable `ParsedBlock.line` stays. It is not a workaround for this defect;
+it is the honest representation of a front-end that may legitimately not know,
+and `.. include::` attribution still needs `ParsedBlock.path` regardless of
+version.
 
 The line-convention normalization in `markup/` gets *simpler* at the new floor —
 both reStructuredText and MyST report the first line — but the normalization

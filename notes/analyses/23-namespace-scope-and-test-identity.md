@@ -30,8 +30,8 @@ node id" is really *no* id — every test block in a group shares one
 method to swallow the resulting `IndexError`. So the execution shape is partly
 well-trodden; the contribution is making it addressable.
 
-The bottom-right cell is where the silent failure lives, and two shipped projects
-are in it.
+The bottom-right cell is where the silent failure lives. One surveyed project
+ships it, and one open proposal implements it with guards.
 
 Sybil is there **unacknowledged**: one `Document.namespace` shared by reference,
 one pytest item per region. `pytest -k` on an example whose predecessor bound a
@@ -39,8 +39,10 @@ name raises `NameError`, and nothing in its documentation says so.
 
 PR #87's proposed `per-block` mode would sit there **acknowledged and guarded** —
 the guards being an xdist scheduler substitution, a scheduler refusal and a
-run-twice refusal. It has not shipped; {doc}`ADR 0003 <../../docs/adrs/0003-rejecting-per-block-items>` rejects the shape. Those guards are the reason `_worker_count`, `_shared_page`,
-`_is_page` and `_splitting_scheduler` exist at all.
+run-twice refusal. It has not shipped;
+{doc}`ADR 0003 <../../docs/adrs/0003-rejecting-per-block-items>` rejects the
+shape. Those guards are the reason `_worker_count`, `_shared_page`, `_is_page`
+and `_splitting_scheduler` exist at all.
 
 The bottom-left cell gives per-block reporting *and* an unsplittable sharing unit,
 and it needs no guards, because there is nothing to split.

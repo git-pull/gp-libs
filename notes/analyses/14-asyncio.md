@@ -90,9 +90,11 @@ owner should keep owning the lifecycle.
 
 The gap is the first row, and it is the concrete reason
 `DocutilsDocTestFinder` cannot be handed to `DocTestSuite(test_finder=...)` today
-despite exposing a compatible `find()`. ADR 0001's answer — declare `Protocol`s
-*and* subclass the stdlib classes nominally — is the cheap way to have both, and
-it costs nothing at runtime.
+despite exposing a differently shaped `find()`. ADR 0001's answer is to keep the
+contracts separate: structural `DocumentParser` implementations for markup, an
+exact `DocTestParser` lane for strings, and a `DocTestFinder`-shaped adapter for
+Python objects. Nominal subclassing is used only when the replacement preserves
+the nominal method signature.
 
 ## Anchors
 

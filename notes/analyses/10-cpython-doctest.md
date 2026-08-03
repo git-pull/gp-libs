@@ -80,9 +80,9 @@ post-dedent indent shifts every reported column.
 
 | Seam | Kind | Documented |
 |---|---|---|
-| `DocTestParser` subclass, injected as `parser=` | nominal | yes |
-| `DocTestFinder` subclass, injected as `test_finder=` | nominal | yes |
-| `OutputChecker.check_output` / `output_difference`, injected as `checker=` | nominal | yes |
+| `parser=` object with the `DocTestParser` methods | structural at runtime, nominal in typeshed | yes |
+| `test_finder=` object with the `DocTestFinder` methods | structural at runtime, nominal in typeshed | yes |
+| `checker=` object with `check_output` / `output_difference` | structural at runtime, nominal in typeshed | yes |
 | `report_start`, `report_success`, `report_failure`, `report_unexpected_exception` ([`:1286-1314`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1286-L1314)) | subclass hook | yes |
 | `register_optionflag` / `OPTIONFLAGS_BY_NAME` ([`:153`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L153)) | process-global registry | yes |
 | `setUp` / `tearDown` on `DocTestSuite` / `DocFileSuite` | callable param | yes |

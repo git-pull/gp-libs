@@ -48,8 +48,8 @@ claim here that does not name a version is a bug in the claim. ADR 0005
 All four are real and all four have to be normalized by the front-end that knows
 which it is. A collector that assumes one convention mis-anchors the other's
 blocks; a collector that reads `.line` as a number crashes on the nested case.
-This is why `Block.line` in ADR 0001 is nullable and `Block.path` is separate from
-the collected document.
+This is why `ParsedBlock.line` in ADR 0001 is nullable and `ParsedBlock.path` is
+separate from the collected document.
 
 ## The directive registry
 
