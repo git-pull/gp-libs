@@ -1,8 +1,13 @@
 # `sphinx.ext.doctest`
 
 Pinned at [`v8.2.3`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py),
-the version this project resolves. v9.1.0 changes the default group an
-unargumented block joins; nothing else below differs between the two.
+the version this project resolves. Sphinx 9.0 changed only the fallback for a
+bare doctest node with no `groups` attribute: it now uses
+`doctest_test_doctest_blocks`
+([`v9.0.0:463`](https://github.com/sphinx-doc/sphinx/blob/v9.0.0/sphinx/ext/doctest.py#L463)).
+An unargumented Sphinx directive still stamps `groups=["default"]`
+([`v9.0.0:94-98`](https://github.com/sphinx-doc/sphinx/blob/v9.0.0/sphinx/ext/doctest.py#L94-L98)),
+so its group did not change.
 
 ## Classification
 
@@ -66,16 +71,17 @@ DocTestBuilder.test_doc(docname, doctree)                      [:428]
    |      else groups[name].add_code(code)
    v
 per group: ns = {}
-   |  three runners: setup / test / cleanup, sharing one _fakeout
-   |  ONE doctest.DocTest PER BLOCK, each with test.globs = ns
-   |    (assigned AFTER construction, since __init__ copies)
+   |  setup codes -> ONE simulated DocTest containing N Examples
+   |  each ordinary or paired test -> ONE DocTest
+   |  cleanup codes -> ONE simulated DocTest containing N Examples
+   |  all have test.globs = ns after construction, since __init__ copies
    |  runner.run(test, out=..., clear_globs=False)
    |  self.type flipped to "exec" for setup, cleanup, testcode   [:549, :608]
    |                     to "single" for ordinary doctests       [:580]
    |
    |  if setup fails -> RETURN. Cleanup does not run.            [:554-556]
    v
-six integer counters + text streamed to outdir/output.txt
+six builder counters + text streamed to outdir/output.txt
 ```
 
 ## Extension seams
@@ -103,7 +109,7 @@ rather than trusting one's own directive classes is the only defence against
 | `:options:` is accepted only on `doctest` and `testoutput`; on a `testcode` it is an unknown-option error, not a discard | [`:111`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L111), [`:174-180`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L174-L180) |
 | Cleanup does **not** run when setup fails — the group returns early | [`:554-556`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L554-L556) |
 | A gated block is dropped during collection — no outcome, id or count | [`:449-450`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L449-L450) |
-| `*` means every group the document declares; `default` means no argument was given | [`:428`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L428) onward |
+| `*` means every group the document declares; an unargumented directive stamps `default` | [`:94-98`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L94-L98), [`:428`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L428) onward |
 | Setup runs before tests, cleanup after, whatever order the page writes them | `TestGroup` [`:200-226`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L200-L226) |
 | `is_allowed_version` takes the **specifier first** | [`:45`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L45) |
 | `doctest.compile` is rebound process-wide and never restored | [`:310`](https://github.com/sphinx-doc/sphinx/blob/v8.2.3/sphinx/ext/doctest.py#L310) |

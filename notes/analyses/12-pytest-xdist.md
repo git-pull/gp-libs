@@ -61,10 +61,15 @@ Scheduling.schedule() -> send integer index batches to workers
 
 The abort path is the constraint that matters most. It is not an exception and it
 is not loud in the usual sense: the scheduler logs a line, assigns nothing, and
-the session ends having run nothing. Any collection-time decision that is not a
-pure function of (files on disk, argv, ini) — a timestamp, a PID, a hostname, a
-dict iteration order, an evaluated `:skipif:` that depends on the environment —
-produces this.
+the session ends having run nothing. Collection is not a pure function of files,
+argv and ini: included files, directive implementations, MyST plugins and the
+discovered registry are inputs too. A timestamp, PID, hostname, unstable iteration
+order or evaluated `:skipif:` can make workers diverge when any of those values
+affects identity or order.
+
+A registry manifest can expose differing extension sets before collection. It
+cannot prove equal source closure or equal provider code, so it supplements rather
+than replaces xdist's identical-node-id check.
 
 The crash path is the second. Because only uncompleted items of a work unit are
 retried, a group whose blocks 1-2 ran before the crash has blocks 3..N re-run

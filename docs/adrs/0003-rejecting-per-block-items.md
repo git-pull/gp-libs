@@ -66,9 +66,7 @@ outcome contract, rather than papered over with an id that raises when used.
 ## Consequences
 
 Because nothing shipped, there is no migration path to write, no deprecation
-warning to add and no downstream grep to run. If PR #87 lands before this
-architecture does, this record converts into exactly those things — and that is
-the argument for settling the two in order rather than in parallel.
+warning to add and no downstream grep to run.
 
 ## Open
 
