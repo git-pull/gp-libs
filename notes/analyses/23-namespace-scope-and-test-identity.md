@@ -106,10 +106,11 @@ Two corollaries:
 ## What a node id does *not* promise
 
 Worth stating plainly, because it is the honest limit of the recommended design:
-**no surveyed implementation makes a node id a promise of independent
-runnability.** Selecting block two of a stateful page raises `NameError` under
-Sybil, under `per-block`, and under any scheme that hands out per-block ids over
-shared state.
+**a per-block node id over shared mutable state cannot truthfully promise
+independent execution.** Selecting block two of a stateful page raises
+`NameError` under Sybil, under PR #87's `per-block`, and under any scheme of that
+shape. Ids over *isolated* state — released `doctest_docutils`, or a page whose
+blocks declare no group — promise independence and keep the promise.
 
 The choice is therefore not between "selectable blocks" and "unselectable blocks".
 It is between an id that *claims* to be selectable and is not, and an id whose

@@ -55,10 +55,25 @@ surface.
 
 ## Direction
 
-Suppress narrowly, and only for the two classes a bare-docutils parse cannot
-judge: unknown roles and unknown directives. "By code" is the intent; the
-classifier that assigns a code to a docutils message is unsettled, so this
-direction is not yet implementable.
+**Treat unknown roles and unknown directives differently.** They are not the same
+risk, and the first draft's symmetric treatment was the mistake.
+
+An **unknown role** is inline markup. It cannot swallow a code block, so a
+bare-docutils parse seeing `:mod:` in a Sphinx project is noise and is suppressed
+by default.
+
+An **unknown body-owning directive** is a collection error. It swallows its body
+unparsed, so a page whose doctests live inside one collects zero tests and exits
+green — which is the failure diagnostics-as-data exists to prevent. Suppressing it
+by default trades a loud, correct error for a silent wrong answer. A project with
+legitimate foreign containers registers them as known vocabulary; that is an
+explicit act, not a default.
+
+For a Sphinx project the question does not arise: the extractor consumes an
+already-resolved doctree, in which every registered directive has run.
+
+"By code" remains the intent for everything else; the classifier that assigns a
+code to a docutils message is unsettled, which is why this record stays `Draft`.
 
 Every diagnostic raised by this project's own layers defaults to visible, and
 `level="error"` from those layers fails collection with the file and line named.
@@ -80,15 +95,11 @@ global on/off switch.
   pre-empting at the source by overriding the directive-dispatch path so the
   unknown case never becomes a reporter message at all. This is the decision
   ADR 0004 cannot ship without.
-- **What promotes an unknown-directive message back to visible.** The first
-  draft proposed "when the name is one this project registers", but that is
-  inverted for the typo case — a misspelled `.. doctset::` is precisely *not* a
-  registered name — and never fires for a foreign container whose body was
-  swallowed unparsed. The rule that covers both is **body content**: promote when
-  the swallowed body matches `DocTestParser._EXAMPLE_RE`. Near-miss-to-a-registered
-  -name is a useful additional rule for the typo case, where the body check does
-  not help.
-- The body-content rule is reST-only as stated, because myst-parser discards the
-  fence body. The Markdown equivalent is unsolved.
+- **How a project registers a legitimate foreign container**, so that an unknown
+  body-owning directive it genuinely does not care about stops erroring. This is
+  the escape hatch the default requires, and it needs a spelling.
+- Whether a near-miss to a registered name (`.. doctset::` for `.. doctest::`)
+  earns a distinct, more helpful message than the generic unknown-directive
+  error. Cheap, and the typo is the common case.
 - Whether the CLI (`python -m doctest_docutils`) and the pytest plugin share one
   formatter or two.
