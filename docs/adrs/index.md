@@ -35,4 +35,5 @@ the anchor lands on unrelated code while still resolving.
 0004-diagnostics-as-data
 0005-line-recovery-for-nested-blocks
 0006-pytest-private-api-compatibility
+0007-host-plugin-registration-lifecycle
 ```
