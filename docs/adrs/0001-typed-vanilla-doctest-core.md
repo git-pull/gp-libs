@@ -262,7 +262,8 @@ markup/             DocumentParser: _rst, _myst -> doctree
    |
 project             grouping, pairing, phase order, naming -> GroupPlan
    |
-runner              owns the per-example loop; phase sequencing
+runner              stock loop for prompt blocks; owned loop for extended
+   |                profiles only. Phase sequencing, gates, cleanup finally
    |
 pytest_doctest_docutils   collection, items, globs lifetime, reporting
 ```
@@ -316,18 +317,18 @@ ordering guarantees exist. Its *implementation* stays private. pytest hooks,
 Sphinx's `setup(app)`, direct library calls and — optionally — entry points all
 feed that one surface.
 
-Two hazards to name rather than assume away:
+Two hazards decide the lifecycle, and
+{doc}`0006-pytest-private-api-compatibility` settles both:
 
-- **Nested `conftest.py` files load during collection**, so "freeze before
-  collection" is too simple. Either the boundary moves later, or conftest-level
-  contribution is explicitly excluded. That is an open question in
-  {doc}`0006-pytest-private-api-compatibility`.
+- **Nested `conftest.py` files load during collection**, after any freeze that
+  precedes it. They therefore may not contribute block kinds, parsers, profiles or
+  checkers; attempting to is an error naming the file. Their fixtures and ordinary
+  hooks are unaffected.
 - **Entry-point discovery is not identical across workers in general.** xdist
   supports SSH and socket workers and heterogeneous environments, so "same argv,
-  same plugins" holds only for a homogeneous local run. Either state a
-  homogeneous-plugin requirement or compare a deterministic registry manifest
-  across workers. What breaks determinism is *nondeterministic contribution*, not
-  discovery as such — but heterogeneity makes that distinction load-bearing.
+  same plugins" holds only for a homogeneous local run. Workers therefore compare
+  a deterministic registry **manifest**, not node ids — two workers can collect
+  identical ids while resolving one profile name to different code.
 
 ### Item lifecycle
 
@@ -786,6 +787,32 @@ layer that never changes what is constructed.
   `tests`, and the marker file does not exist, so every consumer sees the package
   as untyped. This is a packaging defect independent of the rest of this ADR.
 
+### What "vanilla-compatible" promises
+
+The phrase is worth decomposing, because it covers several different promises of
+several different strengths.
+
+| Surface | Promise |
+|---|---|
+| `Example` / `DocTest` runtime types | **Exact.** Stock instances, never subclassed for metadata |
+| plain-text parsing | **Exact.** The stdlib lane uses `DocTestParser` unmodified |
+| option flags and checkers | **Exact.** `register_optionflag` and the stdlib checker contract, with pytest's `ALLOW_UNICODE`/`ALLOW_BYTES`/`NUMBER` reachable |
+| prompt-block execution | **Exact.** CPython's own per-example loop, unmodified |
+| `DocTestFinder`-shaped Python-object discovery | **Shaped**, as a separate adapter |
+| `DocFileSuite` / `DocTestSuite` | **Façade only**, over the stdlib lane. A group plan cannot be expressed through an API that returns one `DocTest` per parser call |
+| `{testcode}`, async, groups, phases, Sphinx gates | **Deliberate extension.** No stdlib equivalent to be compatible with |
+| pytest collection, fixtures, reporting | pytest's own contracts, composed with rather than replaced |
+| Sphinx **node** vocabulary | **Exact.** The `BlockAttributes` stamp is byte-compatible |
+| Sphinx **execution** | **Not promised.** See below |
+
+**The Sphinx promise is narrow, and this record narrows it deliberately.** What is
+offered is an *extractor over a Sphinx-resolved doctree* — a pure function from a
+doctree to blocks, callable from an extension. A full Sphinx host would need an
+execution lifecycle and a result channel that neither this record nor
+{doc}`0006-pytest-private-api-compatibility` defines, and inventing one would be
+the builder that [](#alternatives-rejected) turns down. Until someone specifies
+that adapter, the record promises doctree consumption and nothing more.
+
 ## Constraints
 
 The design is pinned by facts about three upstreams. Each was verified at the tag
@@ -920,9 +947,11 @@ which blocks will skip.
 (the-collection-contract)=
 
 Collection is **not** a pure function of (bytes, argv, ini), and claiming so
-would be wrong on four counts: `.. include::` reads transitive files, docutils
+would be wrong on five counts: `.. include::` reads transitive files, docutils
 directive implementations execute during parsing, the directive registry is
-process-global, and MyST plugins change the tree. The defensible contract is
+process-global, MyST plugins change the tree, and the frozen registry is itself
+an input — assembled from installed plugins and conftests, neither of which is
+argv or ini. The defensible contract is
 determinism over **complete source closure + normalized settings + frozen
 registry** — all three defined above. Deferring the author's gate removes the
 largest divergence risk; it does not make xdist divergence structurally
