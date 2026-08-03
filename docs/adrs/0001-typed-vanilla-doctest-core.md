@@ -350,12 +350,14 @@ an implementer cannot get it wrong by omission:
    `super().setup()` so fixtures inject into that same object. Clearing in place
    rather than rebinding is what keeps `item.globs is run.globs` true for every
    block, and what stops attempt two of a `--reruns` run from reading attempt
-   one's mutations. Every block's `DocTest.globs` is assigned this object *after*
-   construction, because `DocTest.__init__` copies.
+   one's mutations. Each `RunnableBlock` is materialized against this object —
+   its `DocTest.globs` assigned *after* construction, because `DocTest.__init__`
+   copies.
 3. **`runtest()`** is overridden. It must not delegate to
    `DoctestItem.runtest`, which runs a single `dtest` with `clear_globs`
    defaulting to `True` — that would empty the shared mapping after the first
-   block. It calls `run_group()`, which runs each `PlannedBlock` in phase order
+   block. It calls `run_group()`, which materializes and runs each
+   `RunnableBlock` in phase order
    with `clear_globs=False`, evaluates `:skipif:` against the live mapping,
    finalizes each paired `want` from its gated `ExpectedOutput`, and wraps the
    body in a `try`/`finally` so cleanup runs whether or not the body raised. When
@@ -419,7 +421,8 @@ class ParsedBlock(t.NamedTuple):
     source: str  # dedented body, verbatim author text
     path: pathlib.Path  # the file the text lives in, not the collected document
     line: int | None  # None when docutils could not recover one
-    position: int  # 0-based document pre-order index; the naming key
+    source_ordinal: int  # ordinal among runnable candidates, BEFORE gating,
+    #                      filtering and group expansion; the naming key
     groups: tuple[str, ...]  # declared verbatim; () and ("*",) unresolved here
     options: t.Mapping[int, bool]  # plain int keys, exactly as doctest produces
     skipif: str | None  # UNEVALUATED
@@ -432,7 +435,7 @@ class ParsedOutput(t.NamedTuple):
     text: str
     path: pathlib.Path
     line: int | None
-    position: int
+    source_ordinal: int
     groups: tuple[str, ...]
     options: t.Mapping[int, bool]
     skipif: str | None  # a gated output means its testcode expects nothing
@@ -455,14 +458,27 @@ class ExpectedOutput(t.NamedTuple):
     skipif: str | None  # when truthy at run time, `want` becomes ""
 
 
+class ExampleRecipe(t.NamedTuple):
+    """Everything needed to rebuild one stock `doctest.Example`."""
+
+    source: str
+    want: str
+    exc_msg: str | None
+    lineno: int  # 0-based, relative to the block's docstring
+    indent: int
+    options: t.Mapping[int, bool]
+
+
 class ProjectedBlock(t.NamedTuple):
     """A RECIPE. Holds no `DocTest`, because a `DocTest` is mutable."""
 
     phase: Phase
     name: str  # the minted test name
-    source: str  # normalized executable body
+    examples: tuple[ExampleRecipe, ...]  # a prompt block yields SEVERAL
+    docstring: str  # what pytest's failure renderer slices
     filename: str
-    lineno: int | None
+    lineno: int | None  # the block's own line; examples are relative to it
+    options: t.Mapping[int, bool]  # block-level directive :options:
     profile_name: str  # resolved against the frozen registry per attempt
     skipif: str | None  # UNEVALUATED; gated in run_group()
     expected: ExpectedOutput | None  # paired testoutput, itself gateable
@@ -470,7 +486,7 @@ class ProjectedBlock(t.NamedTuple):
 
 class GroupPlan(t.NamedTuple):
     group: str
-    blocks: tuple[ProjectedBlock, ...]  # in phase order; genuinely immutable
+    blocks: tuple[ProjectedBlock, ...]  # in phase order; STRUCTURALLY immutable
     seed: t.Mapping[str, t.Any]  # initial namespace; copied per attempt
 
 
@@ -496,18 +512,31 @@ class RunContext:
 # --- results: a discriminated union, so invalid states cannot be built -----
 
 
+class Counts(t.NamedTuple):
+    attempted: int
+    skipped: int  # a PASSING block can still carry skipped examples
+
+
+class SkipReason(t.NamedTuple):
+    kind: t.Literal["skipif", "inline-flag", "pyversion", "profile"]
+    detail: str  # the gate expression, the flag, the specifier
+
+
 class Passed(t.NamedTuple):
     block: ProjectedBlock
+    counts: Counts
 
 
 class Failed(t.NamedTuple):
     block: ProjectedBlock
-    failure: doctest.DocTestFailure | doctest.UnexpectedException
+    counts: Counts
+    # PLURAL: continue_on_failure yields several from one block
+    failures: tuple[doctest.DocTestFailure | doctest.UnexpectedException, ...]
 
 
 class Skipped(t.NamedTuple):
     block: ProjectedBlock
-    reason: str  # the gate expression
+    reason: SkipReason
 
 
 class Errored(t.NamedTuple):
@@ -541,20 +570,70 @@ plan retaining one would not be a recipe, it would be last attempt's state. Unde
 therefore carries the *ingredients*, and `RunContext` materializes fresh stock
 `Example` and `DocTest` objects for every attempt.
 
+**The ingredients are per example, not per block.** One prompt block routinely
+yields several {class}`doctest.Example` objects, each with its own `source`,
+`want`, `exc_msg`, `lineno`, `indent` and `options` — three, for a block whose
+last statement raises:
+
+```{doctest}
+>>> import doctest
+>>> src = ">>> x = 1\n>>> x + 1\n2\n>>> int('z')\nTraceback (most recent call last):\nValueError: bad\n"
+>>> test = doctest.DocTestParser().get_doctest(src, {}, "blk", "p.md", 0)
+>>> len(test.examples)
+3
+>>> [(e.lineno, e.want.strip()) for e in test.examples]
+[(0, ''), (1, '2'), (3, 'Traceback (most recent call last):...')]
+```
+
+A single `source` and one `lineno` cannot represent that, and `docstring` is
+separately required by pytest's known-location failure renderer. Hence
+`ExampleRecipe` and `ProjectedBlock.docstring`: the recipe reproduces exactly what
+{meth}`doctest.DocTestParser.get_doctest` produced, rather than approximating it.
+
 The same applies to a gated `testoutput`: when its gate is truthy the output is
 **absent**, not empty. Its text *and* its output-specific options both disappear,
 which is what Sphinx does, and which a pre-built `want=""` with retained options
 would get wrong.
+
+`GroupPlan` is **structurally** immutable, not deeply so. Its tuples cannot be
+rebound, but `seed` is a `Mapping` whose *values* are arbitrary user objects. Each
+attempt shallow-copies it into the live mapping, which is exactly what
+`DocTest.__init__` does with `globs` — matching doctest's own namespace semantics
+rather than inventing a deeper guarantee the ecosystem does not provide.
 
 **Results are a discriminated union**, not one record with nullable fields, so
 "passed with an exception attached" is unrepresentable rather than merely
 unlikely. `Errored` exists because a gate that raises, or a runtime that will not
 start, is none of pass, fail or skip.
 
-`GroupResult.primary` and `.secondary` make precedence explicit: **a control-flow
-exception outranks a body failure, which outranks a cleanup failure**, and the
-loser is recorded rather than dropped. Classifying which exceptions are
-control-flow is the pytest adapter's job, not the core's.
+Three details the first draft got wrong, each checked by execution:
+
+- **`Failed.failures` is plural.** Under `continue_on_failure` one block reports
+  several failures; a singular field silently keeps the first.
+- **`Passed` carries counts.** A block can pass *and* have skipped examples —
+  `failed=0 attempted=2 skipped=1` — and a result type without counts loses the
+  skip entirely, which is the same information ADR 0001's outcome contract
+  promises to surface.
+- **`SkipReason` is typed.** A skip originates from `:skipif:`, an inline
+  `# doctest: +SKIP`, `:pyversion:`, or a profile declining to run — and "the gate
+  expression" describes only the first.
+
+**Exception precedence is phase-aware, not a single ladder.** Grouping
+{exc}`KeyboardInterrupt`, a debugger quit, {exc}`pytest.skip` and `xfail` into one
+"control-flow" tier is unsafe: a `pytest.skip()` raised *in cleanup* must not
+erase a real body failure.
+
+| Tier | Examples | Rule |
+|---|---|---|
+| 1. process abort | {exc}`KeyboardInterrupt`, `SystemExit`, `bdb.BdbQuit` | always wins, from any phase |
+| 2. pytest outcome from the **body** | `skip`, `xfail`, `exit` | wins over doctest failures |
+| 3. doctest failure from the **body** | `DocTestFailure`, `UnexpectedException` | |
+| 4. runtime startup failure | a profile that would not start | fails the block as `Errored` |
+| 5. cleanup failure, of any kind | including a `pytest.skip()` in cleanup | never outranks 2–4; always recorded in `secondary` |
+
+Profile runtimes are entered through {class}`contextlib.ExitStack`, so a partial
+startup unwinds deterministically in reverse. Classifying which exceptions are
+pytest outcomes is the pytest adapter's job; the core knows only the phase.
 
 `Block.line` being nullable is load-bearing, not defensive. A bare `>>>` block
 nested in a `.. note::`, a list item or a block quote reports `line=None,
@@ -562,13 +641,13 @@ source=None` from docutils, and an `.. include::`-ed block numbers against the
 *included* file. Both propagate to `DocTest.lineno=None` and pytest's honest
 "location unknown", rather than to a fabricated number.
 
-`PlannedBlock` exists because `run_group()` owns phase sequencing, run-time
-`:skipif:` evaluation and a cleanup `finally` — and cannot do any of the three
-from a bare tuple of `DocTest`s. A `DocTest` carries no phase and no gate, so the
-plan has to. Tagging each entry also makes the ordering self-describing rather
-than a convention a comment asserts.
+`ProjectedBlock` carries phase and gate because `run_group()` owns phase
+sequencing, run-time `:skipif:` evaluation and a cleanup `finally` — and cannot do
+any of the three from a bare tuple of `DocTest`s. A `DocTest` carries no phase and
+no gate, so the recipe has to. Tagging each entry also makes the ordering
+self-describing rather than a convention a comment asserts.
 
-**A `PlannedBlock.test` cannot always be fully preconstructed.** Sphinx accepts
+**A paired `want` is not known until run time.** Sphinx accepts
 `:skipif:` on a `testoutput`, and when that output is gated away its `testcode`
 still runs — expecting *empty* output. So the `want` of a paired block is a
 function of a gate evaluated at run time, and the plan must carry the paired
@@ -576,10 +655,12 @@ output as data (`ExpectedOutput`, itself gated) with the `DocTest` finalized in
 `run_group()`. Freezing `want` at projection time silently runs the wrong
 assertion.
 
-**A wildcard block needs a distinct `DocTest` per group it joins.** `DocTest.globs`
-is a plain mutable attribute, so one object shared across two `GroupPlan`s would
-have the second group's assignment win and both groups would execute against one
-mapping. `*` membership therefore materializes a separate `DocTest` per group.
+**A wildcard block is materialized separately per group it joins.** Under the
+recipe model this costs nothing — the same `ProjectedBlock` appears in each
+group's plan and each `RunContext` builds its own `DocTest` from it, with its own
+minted name. What would be wrong is *sharing* a materialized `DocTest` across two
+groups: `DocTest.globs` is a plain mutable attribute, so the second group's
+assignment would win and both would execute against one mapping.
 
 **The gate's evaluation namespace is a deliberate divergence.** Sphinx evaluates
 each `:skipif:` in a fresh context seeded with `doctest_global_setup`; this design
