@@ -27,6 +27,17 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
 
+      - name: Test runtime dependencies
+        run: |
+          uv run --no-dev -p python${{ matrix.python-version }} -- python -c '
+          from gp_libs import __version__
+          from docutils_compat import findall
+          from doctest_docutils import is_allowed_version
+          from linkify_issues import LinkifyIssues
+          from pytest_doctest_docutils import pytest_addoptions
+          print("gp_libs version:", __version__)
+          '
+
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
