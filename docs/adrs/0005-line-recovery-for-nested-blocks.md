@@ -10,8 +10,8 @@ Date: 2026-08-02
 docutils does not report a usable line for every node, and what it reports
 differs by front-end and by version.
 
-At **docutils 0.21.2** — which this project does not pin but does resolve, via
-its Sphinx and myst-parser constraints — a bare `>>>` block
+At **docutils 0.21.2** — the newest line convention in this project's current
+`docutils >= 0.20.1, < 0.22` range — a bare `>>>` block
 nested in a `.. note::`, a list item, a block quote or a `{tab}` directive
 reports `line=None, source=None`. A top-level reStructuredText `doctest_block`
 reports its **last** line. A MyST fence reports its **first** line. An
@@ -79,7 +79,10 @@ Resolved versions per interpreter, with `docutils >= 0.22` requested:
 | 3.12–3.14 | 0.22.4 | 5.1.0 | 9.1.0 |
 
 Today's lock resolves Sphinx 8.1.3 on Python 3.10 and 8.2.3 elsewhere, and
-neither permits docutils 0.22.
+neither permits docutils 0.22. The package therefore caps docutils below 0.22
+until those support-policy steps can move together; silently accepting 0.22
+would apply the old last-line correction to its already-correct first-line
+nodes.
 
 ## Consequences
 
@@ -92,6 +95,12 @@ The line-convention normalization in `markup/` gets *simpler* at the new floor �
 both reStructuredText and MyST report the first line — but the normalization
 layer stays, because the conventions still differ below the floor and a front-end
 is the right place to know which it is dealing with.
+
+The standalone MyST parser recovers root-document body lines by scanning the
+root source text. It deliberately does not apply that stamp to nodes whose
+physical source is an included file: the root bytes cannot prove an included
+line. Exact standalone MyST include-line fidelity remains open unless the parser
+retains the included source text or supplies an absolute body line itself.
 
 Every line-convention claim elsewhere in these records is version-qualified.
 A statement about "docutils" that does not name a version is a bug in the
