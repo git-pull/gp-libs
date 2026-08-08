@@ -216,7 +216,7 @@ def test_pluginDocutilsDocTestFinder(
         pytest=textwrap.dedent(
             """
 [pytest]
-addopts=-p no:doctest -vv
+addopts=-vv
 
         """.strip(),
         ),
@@ -250,7 +250,7 @@ def test_conftest_py(
         pytest=textwrap.dedent(
             """
 [pytest]
-addopts=-p no:doctest -vv
+addopts=-vv
 
         """.strip(),
         ),
@@ -321,7 +321,7 @@ def test_conftest_md(
         pytest=textwrap.dedent(
             """
 [pytest]
-addopts=-p no:doctest -vv
+addopts=-vv
 
         """.strip(),
         ),
@@ -443,7 +443,7 @@ def test_ignore_build_artifacts(
         pytest=textwrap.dedent(
             """
 [pytest]
-addopts=-p no:doctest -vv
+addopts=-vv
 
         """.strip(),
         ),
@@ -492,15 +492,6 @@ def test_hide_optionflag_py_docstring(
     ``ValueError: ... invalid option: '+HIDE'``. Here it must simply run.
     """
     pytester.plugins = ["pytest_doctest_docutils"]
-    pytester.makefile(
-        ".ini",
-        pytest=textwrap.dedent(
-            """
-[pytest]
-addopts=-p no:doctest
-        """.strip(),
-        ),
-    )
     example = pytester.path / "example.py"
     example.write_text(
         textwrap.dedent(
