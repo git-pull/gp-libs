@@ -18,9 +18,9 @@ Use the same command for `.rst` files:
 $ python -m doctest_docutils README.rst
 ```
 
-## See collected examples
+## See the run summary
 
-Pass `-v` for verbose standard-library doctest output:
+Pass `-v` to list each tested group in the final summary:
 
 ```console
 $ python -m doctest_docutils README.md -v

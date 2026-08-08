@@ -16,8 +16,10 @@ $ pytest docs/
 ```
 
 {mod}`pytest_doctest_docutils` parses each matching documentation file with
-{mod}`doctest_docutils`, then reports each collected doctest as a pytest item.
-That gives documentation examples the same pass/fail surface as the rest of
-your suite.
+{mod}`doctest_docutils`, then reports each projected shared-state group as one
+pytest item. Bare prompt blocks without a group stamp are isolated by default;
+unargumented `doctest` directives join Sphinx's `default` group. Named blocks in
+the same group share fixtures and Python globals, and execute together as one
+schedulable item.
 
 [pytest]: https://docs.pytest.org/en/stable/
