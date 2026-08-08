@@ -99,7 +99,7 @@ def test_autouse_fixtures_with_doctest_files(
         pytest=textwrap.dedent(
             """
 [pytest]
-addopts=-p no:doctest -vv
+addopts=-vv
             """.strip(),
         ),
     )

@@ -8,8 +8,10 @@
 parses each page through {ref}`doctest_docutils` before pytest runs the
 examples.
 
-The plugin blocks {ref}`pytest's standard doctest plugin <pytest:doctest>` by
-default so the same examples are not collected twice.
+The plugin composes with {ref}`pytest's standard doctest plugin <pytest:doctest>`.
+gp-libs owns matching documentation paths and filters pytest's duplicate text
+collector before it parses the page; pytest continues to supply fixtures,
+checker and report options, and Python-module doctest collection.
 
 ::::{grid} 1 1 2 2
 :gutter: 2 2 3 3

@@ -53,13 +53,13 @@ parses in `.rst`, `.md`, and Python-module doctests. The standalone
 `python -m doctest_docutils` command does not register it, so use the marker
 when you run examples through pytest.
 
-## Keep pytest's built-in doctest plugin disabled
+## Keep pytest's built-in doctest plugin enabled
 
-The gp-libs plugin blocks pytest's built-in doctest plugin by default. Keep
-`-p no:doctest` in local examples when you are demonstrating explicit pytest
-configuration:
+This plugin composes with pytest's built-in doctest plugin. The built-in plugin
+supplies `doctest_namespace`, output-checker extensions, report options, and
+Python-module collection, while gp-libs owns the documentation-file collector.
 
-```ini
-[pytest]
-addopts = -p no:doctest
-```
+Do not pass `-p no:doctest` when collecting documentation through gp-libs. If
+the built-in plugin is disabled, collecting an affected documentation file or
+using `--doctest-docutils-modules` raises a usage error instead of silently
+collecting no tests.

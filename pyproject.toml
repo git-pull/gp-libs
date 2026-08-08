@@ -35,8 +35,10 @@ readme = 'README.md'
 keywords = []
 homepage = "https://gp-libs.git-pull.com"
 dependencies = [
-  "myst_parser",
-  "docutils"
+  "docutils>=0.20.1,<0.22",
+  "myst-parser>=2.0.0",
+  "packaging",
+  "pytest>=7.2",
 ]
 
 [project.urls]
@@ -55,6 +57,8 @@ dev = [
   # Testing
   "gp-libs",
   "pytest",
+  "pytest-asyncio",
+  "pytest-xdist",
   "pytest-rerunfailures",
   "pytest-mock",
   "pytest-watcher",
@@ -78,6 +82,8 @@ docs = [
 testing = [
   "gp-libs",
   "pytest",
+  "pytest-asyncio",
+  "pytest-xdist",
   "pytest-rerunfailures",
   "pytest-mock",
   "pytest-watcher",
@@ -95,7 +101,7 @@ lint = [
 ]
 
 [project.entry-points.pytest11]
-sphinx = "pytest_doctest_docutils"
+pytest_doctest_docutils = "pytest_doctest_docutils"
 
 [build-system]
 requires = ["hatchling"]
@@ -127,11 +133,17 @@ sphinx-ux-autodoc-layout = false
 sphinx-ux-badges = false
 
 [tool.hatch.build.targets.sdist]
-include = ["src/*.py"]
+include = [
+  "src/*.py",
+  "src/doctest_core/**",
+  "tests/**",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = [
+  "src/_pytest_doctest_compat.py",
   "src/docutils_compat.py",
+  "src/doctest_core",
   "src/doctest_docutils.py",
   "src/gp_libs.py",
   "src/linkify_issues.py",

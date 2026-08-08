@@ -7,15 +7,27 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
-        docutils-version: ['0.18', '0.19']
-        pytest-version: ['7', '8', '9']
+        docutils-version: ['0.20.1', '0.21.2']
+        pytest-version: ['7.2.0', '8.4.2', '9.1.1']
+        include:
+          - pytest-version: '7.2.0'
+            pytest-asyncio-version: '0.21.2'
+            pytest-rerunfailures-version: '13.0'
+          - pytest-version: '8.4.2'
+            pytest-asyncio-version: '1.4.0'
+            pytest-rerunfailures-version: '16.4'
+          - pytest-version: '9.1.1'
+            pytest-asyncio-version: '1.4.0'
+            pytest-rerunfailures-version: '16.4'
         exclude:
-          # Exclude pytest 7 from Python 3.14 to reduce matrix size
+          # Pytest 7 does not support Python 3.14.
           - python-version: '3.14'
-            pytest-version: '7'
+            pytest-version: '7.2.0'
     steps:
       - uses: actions/checkout@v7
 
@@ -30,26 +42,34 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Install specific pytest version
-        run: uv pip install "pytest~=${{ matrix.pytest-version }}.0"
+      - name: Install matrix versions
+        run: >-
+          uv pip install
+          "docutils==${{ matrix.docutils-version }}"
+          "pytest==${{ matrix.pytest-version }}"
+          "pytest-asyncio==${{ matrix.pytest-asyncio-version }}"
+          "pytest-rerunfailures==${{ matrix.pytest-rerunfailures-version }}"
+
+      - name: Check dependency consistency
+        run: uv pip check
 
       - name: Print python and pytest versions
         run: |
           python -V
-          uv run python -V
-          uv run pytest --version
+          uv run --no-sync python -V
+          uv run --no-sync pytest --version
 
       - name: Lint with ruff check
-        run: uv run ruff check .
+        run: uv run --no-sync ruff check .
 
       - name: Format with ruff format
-        run: uv run ruff format . --check
+        run: uv run --no-sync ruff format . --check
 
       - name: Lint with mypy
-        run: uv run mypy .
+        run: uv run --no-sync mypy .
 
       - name: Test with pytest
-        run: uv run py.test --cov=./ --cov-report=xml
+        run: uv run --no-sync py.test --cov=./ --cov-report=xml
 
       - uses: codecov/codecov-action@v7
         with:
