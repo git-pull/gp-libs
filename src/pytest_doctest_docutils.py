@@ -1,148 +1,192 @@
-"""pytest plugin for doctest w/ reStructuredText and markdown.
-
-.. seealso::
-
-   - http://www.sphinx-doc.org/en/stable/ext/doctest.html
-   - https://github.com/sphinx-doc/sphinx/blob/master/sphinx/ext/doctest.py
-
-   This is a derivative of my PR https://github.com/thisch/pytest-sphinx/pull/38 to
-   pytest-sphinx (BSD 3-clause), 2022-09-03.
-"""
+"""Pytest host adapter for the typed doctest core."""
 
 from __future__ import annotations
 
 import bdb
+import collections.abc
 import doctest
-import io
-import logging
-import sys
+import pathlib
+import traceback
 import typing as t
+import weakref
 
-import _pytest
 import pytest
-from _pytest import outcomes
-from _pytest.outcomes import OutcomeException
 
-from doctest_docutils import DocutilsDocTestFinder, _ensure_directives_registered
+import _pytest_doctest_compat as compat
+from doctest_core import (
+    Contributor,
+    Errored,
+    Failed,
+    GroupPlan,
+    GroupResult,
+    Phase,
+    ProjectionSettings,
+    Provider,
+    Registrar,
+    RegistrySnapshot,
+    RunSettings,
+    Skipped,
+    build_registry,
+    parse_document,
+    project,
+    reset_globs,
+    run_group,
+)
+from doctest_core.markup import ensure_directives_registered
 
 if t.TYPE_CHECKING:
-    import pathlib
-    import types
-    from collections.abc import Iterable
-    from doctest import _Out
-
+    from _pytest._code import ExceptionInfo
+    from _pytest._code.code import TerminalRepr
+    from _pytest.config import PytestPluginManager
     from _pytest.config.argparsing import Parser
-    from _pytest.doctest import DoctestItem
 
 
-logger = logging.getLogger(__name__)
+PYTEST_VERSION = tuple(int(part) for part in pytest.__version__.split(".")[:2])
+_REGISTRY_KEY: pytest.StashKey[RegistrySnapshot] = pytest.StashKey()
+_FROZEN_PLUGIN_MANAGERS: weakref.WeakSet[t.Any] = weakref.WeakSet()
 
-# Parse pytest version for version-specific features
-PYTEST_VERSION = tuple(int(x) for x in pytest.__version__.split(".")[:2])
 
-# Lazy definition of runner class
-RUNNER_CLASS = None
+class DoctestCoreHooks:
+    """Hooks published by the doctest-core pytest adapter."""
+
+    @pytest.hookspec
+    def pytest_doctest_core_contributors(
+        self,
+    ) -> Contributor | collections.abc.Iterable[Contributor] | None:
+        """Return host-neutral contributors before collection."""
+
+
+class _PytestContributor:
+    """Use pytest's checker for the core's default checker registration."""
+
+    provider = Provider(name="pytest", version=pytest.__version__)
+
+    def contribute(self, registrar: Registrar) -> None:
+        """Replace the stdlib checker with pytest's compatible extension."""
+        registrar.add_output_checker(
+            "stdlib",
+            compat.get_checker,
+            replace=True,
+        )
+
+
+class _PytestExceptionPolicy:
+    """Classify pytest outcomes and process aborts for the core runtime."""
+
+    def should_propagate(self, error: BaseException) -> bool:
+        """Return whether pytest, rather than doctest, owns ``error``."""
+        outcome_types = (
+            pytest.skip.Exception,
+            pytest.xfail.Exception,
+            pytest.fail.Exception,
+            pytest.exit.Exception,
+        )
+        return isinstance(
+            error,
+            (*outcome_types, KeyboardInterrupt, SystemExit, bdb.BdbQuit),
+        )
+
+    def is_abort(self, error: BaseException) -> bool:
+        """Return whether ``error`` must abort despite prior block outcomes.
+
+        >>> _PytestExceptionPolicy().is_abort(KeyboardInterrupt())
+        True
+        >>> _PytestExceptionPolicy().is_abort(ValueError())
+        False
+        """
+        return isinstance(
+            error,
+            (pytest.exit.Exception, KeyboardInterrupt, SystemExit, bdb.BdbQuit),
+        )
+
+
+def pytest_addhooks(pluginmanager: PytestPluginManager) -> None:
+    """Publish the contributor hook before pytest loads initial conftests."""
+    pluginmanager.add_hookspecs(DoctestCoreHooks)
+
+
+def pytest_plugin_registered(
+    plugin: object,
+    manager: PytestPluginManager,
+) -> None:
+    """Reject contributor hooks registered after the host snapshot freezes.
+
+    >>> callable(pytest_plugin_registered)
+    True
+    """
+    if manager not in _FROZEN_PLUGIN_MANAGERS:
+        return
+    contributor_hook = getattr(plugin, "pytest_doctest_core_contributors", None)
+    if callable(contributor_hook):
+        plugin_name = manager.get_name(plugin) or type(plugin).__name__
+        message = (
+            f"pytest plugin {plugin_name!r} registered a doctest-core contributor "
+            "after the contribution phase closed"
+        )
+        raise pytest.UsageError(message)
 
 
 def pytest_addoption(parser: Parser) -> None:
-    """Add options to py.test for doctest_docutils."""
+    """Add doctest-docutils host options."""
     group = parser.getgroup("collect")
     group.addoption(
         "--doctest-docutils-modules",
         action="store_true",
         default=False,
-        help="run doctest-doctests in .py modules (pass-through to pytest-doctest)",
+        help="run doctests in Python modules through pytest's doctest plugin",
         dest="doctestmodules",
     )
     group.addoption(
         "--no-doctest-docutils-modules",
         action="store_false",
-        help="disable doctest-doctests in .py modules (pass-through to pytest-doctest)",
+        help="disable doctests in Python modules",
         dest="doctestmodules",
+    )
+    parser.addini(
+        "doctest_docutils_ungrouped",
+        "sharing policy for bare documentation blocks: block or default",
+        default="block",
     )
 
 
+def _flatten_contributors(results: t.Iterable[object]) -> list[Contributor]:
+    """Flatten pluggy's per-implementation return values in hook order."""
+    contributors: list[Contributor] = []
+    for result in results:
+        if result is None:
+            continue
+        if hasattr(result, "contribute") and hasattr(result, "provider"):
+            contributors.append(t.cast(Contributor, result))
+            continue
+        if isinstance(result, collections.abc.Iterable):
+            contributors.extend(t.cast(collections.abc.Iterable[Contributor], result))
+    return contributors
+
+
+@pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
-    """Disable pytest.doctest to prevent running tests twice.
-
-    Todo: Find a way to make these plugins cooperate without collecting twice.
-    """
-    # Register HIDE eagerly, before collection parses any docstring. The .py
-    # path delegates to pytest's own DoctestModule (which never calls our
-    # _get_flag_lookup), so registering it here is what lets a docstring carry
-    # ``# doctest: +HIDE`` without raising ``invalid option`` at parse time.
-    _get_hide_flag()
-    if config.pluginmanager.has_plugin("doctest"):
-        config.pluginmanager.set_blocked("doctest")
-
-
-def _unblock_doctest(config: pytest.Config) -> bool:
-    """Unblock doctest plugin (pytest 8.1+ only).
-
-    Re-enables the built-in doctest plugin after it was blocked by
-    pytest_configure. Uses the public unblock() API introduced in pytest 8.1.0.
-
-    Parameters
-    ----------
-    config : pytest.Config
-        The pytest configuration object
-
-    Returns
-    -------
-    bool
-        True if unblocked successfully, False if API not available
-    """
-    pm = config.pluginmanager
-    if PYTEST_VERSION >= (8, 1) and hasattr(pm, "unblock"):
-        return pm.unblock("doctest")
-    return False
-
-
-def pytest_unconfigure() -> None:
-    """Unconfigure hook for pytest-doctest-docutils."""
-    global RUNNER_CLASS
-
-    RUNNER_CLASS = None
+    """Freeze host contributions without unregistering pytest's doctest plugin."""
+    doctest.register_optionflag("HIDE")
+    raw_hook = t.cast(t.Any, config.hook).pytest_doctest_core_contributors()
+    contributors = [_PytestContributor(), *_flatten_contributors(raw_hook)]
+    config.stash[_REGISTRY_KEY] = build_registry(contributors)
+    _FROZEN_PLUGIN_MANAGERS.add(config.pluginmanager)
+    value = config.getini("doctest_docutils_ungrouped")
+    if value not in {"block", "default"}:
+        message = "doctest_docutils_ungrouped must be 'block' or 'default'"
+        raise pytest.UsageError(message)
 
 
 def pytest_ignore_collect(collection_path: pathlib.Path) -> bool | None:
-    """Skip Sphinx ``_build/`` output during collection.
+    """Skip generated Sphinx ``_build`` trees.
 
-    pytest's default ``norecursedirs`` excludes ``build`` but not ``_build``,
-    so Sphinx output (which mirrors sources, broken relative includes and all)
-    would otherwise be collected and abort the session.
-
-    >>> import pathlib
-    >>> pytest_ignore_collect(pathlib.Path("docs/_build/html/history.md"))
+    >>> pytest_ignore_collect(pathlib.Path("docs/_build/html/page.md"))
     True
-    >>> pytest_ignore_collect(pathlib.Path("docs/history.md")) is None
+    >>> pytest_ignore_collect(pathlib.Path("docs/page.md")) is None
     True
     """
     if "_build" in collection_path.parts:
         return True
-    return None
-
-
-def pytest_collect_file(
-    file_path: pathlib.Path,
-    parent: pytest.Collector,
-) -> DocTestDocutilsFile | _pytest.doctest.DoctestModule | None:
-    """Test collector for pytest-doctest-docutils."""
-    config = parent.config
-    if file_path.suffix == ".py":
-        if config.option.doctestmodules and not any(
-            # if not any(
-            (
-                _pytest.doctest._is_setup_py(file_path),
-                _pytest.doctest._is_main_py(file_path),
-            ),
-        ):
-            mod: DocTestDocutilsFile | _pytest.doctest.DoctestModule = (
-                _pytest.doctest.DoctestModule.from_parent(parent, path=file_path)
-            )
-            return mod
-    elif _is_doctest(config, file_path, parent):
-        return DocTestDocutilsFile.from_parent(parent, path=file_path)
     return None
 
 
@@ -151,248 +195,253 @@ def _is_doctest(
     path: pathlib.Path,
     parent: pytest.Collector,
 ) -> bool:
-    if path.suffix in {".rst", ".md"} and parent.session.isinitpath(path):
+    """Return whether this adapter claims a documentation path."""
+    registry = config.stash.get(_REGISTRY_KEY, None)
+    supported_suffixes = (
+        {
+            suffix
+            for registration in registry.document_parsers.values()
+            for suffix in registration.value.suffixes
+        }
+        if registry is not None
+        else {".rst", ".md"}
+    )
+    if path.suffix not in supported_suffixes:
+        return False
+    if parent.session.isinitpath(path):
         return True
-    globs = config.getoption("doctestglob") or ["*.rst", "*.md"]
-    return any(path.match(path_pattern=glob) for glob in globs)
+    patterns = config.getoption("doctestglob", default=None) or ["*.rst", "*.md"]
+    return any(path.match(pattern) for pattern in patterns)
 
 
-def _init_runner_class() -> type[doctest.DocTestRunner]:
-    import doctest
-
-    class PytestDoctestRunner(doctest.DebugRunner):
-        """Runner to collect failures.
-
-        Note that the out variable in this case is a list instead of a
-        stdout-like object.
-        """
-
-        def __init__(
-            self,
-            checker: doctest.OutputChecker | None = None,
-            verbose: bool | None = None,
-            optionflags: int = 0,
-            continue_on_failure: bool = True,
-        ) -> None:
-            super().__init__(checker=checker, verbose=verbose, optionflags=optionflags)
-            self.continue_on_failure = continue_on_failure
-
-        def report_failure(
-            self,
-            out: _Out,
-            test: doctest.DocTest,
-            example: doctest.Example,
-            got: str,
-        ) -> None:
-            failure = doctest.DocTestFailure(test, example, got)
-            if self.continue_on_failure:
-                assert isinstance(out, list)
-                out.append(failure)
-            else:
-                raise failure
-
-        def report_unexpected_exception(
-            self,
-            out: _Out,
-            test: doctest.DocTest,
-            example: doctest.Example,
-            exc_info: tuple[
-                type[BaseException],
-                BaseException,
-                types.TracebackType,
-            ],
-        ) -> None:
-            if isinstance(exc_info[1], OutcomeException):
-                raise exc_info[1]
-            if isinstance(exc_info[1], bdb.BdbQuit):
-                outcomes.exit("Quitting debugger")
-            failure = doctest.UnexpectedException(test, example, exc_info)
-            if self.continue_on_failure:
-                assert isinstance(out, list)
-                out.append(failure)
-            else:
-                raise failure
-
-    return PytestDoctestRunner
+@pytest.hookimpl(hookwrapper=True, tryfirst=True, specname="pytest_collect_file")
+def pytest_collect_file_filter(
+    file_path: pathlib.Path,
+    parent: pytest.Collector,
+) -> t.Generator[None, object, None]:
+    """Remove pytest's duplicate textfile collector before it parses the file."""
+    outcome = yield
+    if not _is_doctest(parent.config, file_path, parent):
+        return
+    hook_result = t.cast(t.Any, outcome).get_result()
+    filtered = [
+        collector
+        for collector in hook_result
+        if not isinstance(collector, compat.DoctestTextfile)
+    ]
+    t.cast(t.Any, outcome).force_result(filtered)
 
 
-def _get_allow_unicode_flag() -> int:
-    """Register and return the ALLOW_UNICODE flag."""
-    import doctest
-
-    return doctest.register_optionflag("ALLOW_UNICODE")
-
-
-def _get_allow_bytes_flag() -> int:
-    """Register and return the ALLOW_BYTES flag."""
-    import doctest
-
-    return doctest.register_optionflag("ALLOW_BYTES")
-
-
-def _get_number_flag() -> int:
-    """Register and return the NUMBER flag."""
-    import doctest
-
-    return doctest.register_optionflag("NUMBER")
-
-
-def _get_hide_flag() -> int:
-    """Register and return the HIDE flag.
-
-    ``HIDE`` is a no-op for execution: the output checker never consults it.
-    It marks a doctest example that documentation tooling should drop from the
-    rendered output while still running it as a test. Registering it here means
-    ``# doctest: +HIDE`` parses instead of raising ``ValueError: invalid
-    option`` at collection time.
-    """
-    import doctest
-
-    return doctest.register_optionflag("HIDE")
-
-
-def _get_flag_lookup() -> dict[str, int]:
-    import doctest
-
-    return {
-        "DONT_ACCEPT_TRUE_FOR_1": doctest.DONT_ACCEPT_TRUE_FOR_1,
-        "DONT_ACCEPT_BLANKLINE": doctest.DONT_ACCEPT_BLANKLINE,
-        "NORMALIZE_WHITESPACE": doctest.NORMALIZE_WHITESPACE,
-        "ELLIPSIS": doctest.ELLIPSIS,
-        "IGNORE_EXCEPTION_DETAIL": doctest.IGNORE_EXCEPTION_DETAIL,
-        "COMPARISON_FLAGS": doctest.COMPARISON_FLAGS,
-        "ALLOW_UNICODE": _get_allow_unicode_flag(),
-        "ALLOW_BYTES": _get_allow_bytes_flag(),
-        "NUMBER": _get_number_flag(),
-        "HIDE": _get_hide_flag(),
-    }
+def pytest_collect_file(
+    file_path: pathlib.Path,
+    parent: pytest.Collector,
+) -> DocTestDocutilsFile | pytest.Collector | None:
+    """Collect documentation here and delegate Python modules to pytest."""
+    config = parent.config
+    if file_path.suffix == ".py":
+        if config.option.doctestmodules and not config.pluginmanager.has_plugin(
+            "doctest",
+        ):
+            message = (
+                f"{file_path}: --doctest-docutils-modules requires pytest's "
+                "built-in doctest plugin"
+            )
+            raise pytest.UsageError(message)
+        return None
+    if _is_doctest(config, file_path, parent):
+        return DocTestDocutilsFile.from_parent(parent, path=file_path)
+    return None
 
 
 def get_optionflags(config: pytest.Config) -> int:
-    """Fetch optionflags from pytest configuration.
+    """Return pytest's resolved doctest option flags."""
+    return compat.get_optionflags(config)
 
-    Extracted from pytest.doctest 8.0 (license: MIT).
-    """
-    optionflags = config.getini("doctest_optionflags")
-    # It takes this rocket surgery to satisfy mypy
-    optionflags_str = (
-        [str(i) for i in optionflags]
-        if isinstance(optionflags, list)
-        and all(
-            isinstance(
-                item,
-                str,
-            )
-            for item in optionflags
+
+class DocutilsItem(pytest.DoctestItem):
+    """One pytest item owning one shared-state doctest group."""
+
+    @classmethod
+    def from_parent(  # type: ignore[override]
+        cls,
+        parent: pytest.Collector,
+        *,
+        name: str,
+        runner: doctest.DocTestRunner,
+        dtest: doctest.DocTest,
+        plan: GroupPlan,
+        registry: RegistrySnapshot,
+        run_settings: RunSettings,
+    ) -> DocutilsItem:
+        """Construct through pytest's cooperative item factory."""
+        item = super(pytest.DoctestItem, cls).from_parent(
+            parent=parent,
+            name=name,
+            runner=runner,
+            dtest=dtest,
+            plan=plan,
+            registry=registry,
+            run_settings=run_settings,
         )
-        else []
-    )
+        return item
 
-    flag_lookup_table = _get_flag_lookup()
-    flag_acc = 0
-    for flag in optionflags_str:
-        flag_acc |= flag_lookup_table[flag]
-    return flag_acc
-
-
-def _get_runner(
-    checker: doctest.OutputChecker | None = None,
-    verbose: bool | None = None,
-    optionflags: int = 0,
-    continue_on_failure: bool = True,
-) -> doctest.DocTestRunner:
-    # We need this in order to do a lazy import on doctest
-    global RUNNER_CLASS
-    if RUNNER_CLASS is None:
-        RUNNER_CLASS = _init_runner_class()
-    # Type ignored because the continue_on_failure argument is only defined on
-    # PytestDoctestRunner, which is lazily defined so can't be used as a type.
-    return RUNNER_CLASS(  # type: ignore
-        checker=checker,
-        verbose=verbose,
-        optionflags=optionflags,
-        continue_on_failure=continue_on_failure,
-    )
-
-
-class DocutilsDocTestRunner(doctest.DocTestRunner):
-    """DocTestRunner for doctest_docutils."""
-
-    def summarize(  # type: ignore
+    def __init__(
         self,
-        out: _Out,
-        verbose: bool | None = None,
-    ) -> tuple[int, int]:
-        """Summarize the test runs."""
-        string_io = io.StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = string_io
-        try:
-            res = super().summarize(verbose)
-        finally:
-            sys.stdout = old_stdout
-        out(string_io.getvalue())
-        return res  # type:ignore[return-value,unused-ignore]
+        *,
+        plan: GroupPlan,
+        registry: RegistrySnapshot,
+        run_settings: RunSettings,
+        **kwargs: t.Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.plan = plan
+        self.registry = registry
+        self.run_settings = run_settings
+        self.group_result: GroupResult | None = None
+        self._failure_checkers: dict[int, doctest.OutputChecker] = {}
 
-    def _DocTestRunner__patched_linecache_getlines(
+    def setup(self) -> None:
+        """Reset attempt state, then let pytest inject fixtures in place."""
+        reset_globs(self.plan, self.dtest.globs)
+        super().setup()
+
+    def runtest(self) -> None:
+        """Run all block doctests in phase order against the carrier mapping."""
+        compat.disable_output_capturing_for_darwin(self)
+        result = run_group(
+            self.plan,
+            self.dtest.globs,
+            settings=self.run_settings,
+            registry=self.registry,
+            exception_policy=_PytestExceptionPolicy(),
+        )
+        self.group_result = result
+        self._failure_checkers = {
+            id(failure): block.checker
+            for block in result.blocks
+            if isinstance(block, Failed)
+            for failure in block.failures
+        }
+        if result.secondary:
+            details = "\n\n".join(
+                "".join(
+                    traceback.format_exception(
+                        type(error),
+                        error,
+                        error.__traceback__,
+                    ),
+                )
+                for error in result.secondary
+            )
+            self.add_report_section("call", "doctest cleanup", details)
+        if result.primary is not None:
+            if isinstance(result.primary, bdb.BdbQuit):
+                pytest.exit("Quitting debugger")
+            cleanup_outcome = any(
+                isinstance(block, Errored)
+                and block.block.phase is Phase.CLEANUP
+                and block.error is result.primary
+                for block in result.blocks
+            )
+            if cleanup_outcome and isinstance(
+                result.primary,
+                (pytest.skip.Exception, pytest.xfail.Exception),
+            ):
+                message = (
+                    "doctest cleanup raised "
+                    f"{type(result.primary).__name__}: {result.primary}"
+                )
+                raise RuntimeError(message) from result.primary
+            raise result.primary
+
+        failures = [
+            failure
+            for block in result.blocks
+            if isinstance(block, Failed)
+            for failure in block.failures
+        ]
+        if failures:
+            raise compat.make_multiple_failures(failures)
+
+        test_results = [
+            block
+            for block in result.blocks
+            if block.block.phase is Phase.TEST and not isinstance(block, Errored)
+        ]
+        if test_results and all(isinstance(block, Skipped) for block in test_results):
+            pytest.skip("all examples were skipped")
+
+    def repr_failure(  # type: ignore[override]
         self,
-        filename: str,
-        module_globals: t.Any = None,
-    ) -> t.Any:
-        # this is overridden from DocTestRunner adding the try-except below
-        m = self._DocTestRunner__LINECACHE_FILENAME_RE.match(filename)  # type: ignore
-        if m and m.group("name") == self.test.name:
-            try:
-                example = self.test.examples[int(m.group("examplenum"))]
-            # because we compile multiple doctest blocks with the same name
-            # (viz. the group name) this might, for outer stack frames in a
-            # traceback, get the wrong test which might not have enough examples
-            except IndexError:
-                pass
-            else:
-                return example.source.splitlines(True)
-        return self.save_linecache_getlines(filename, module_globals)  # type: ignore
+        excinfo: ExceptionInfo[BaseException],
+    ) -> str | TerminalRepr:
+        """Use comparison-time checkers for contributed output semantics."""
+        rendered = compat.repr_failure_with_checkers(
+            self,
+            excinfo,
+            self._failure_checkers,
+        )
+        if rendered is not None:
+            return rendered
+        return super().repr_failure(excinfo)
 
 
 class DocTestDocutilsFile(pytest.Module):
-    """Pytest module for doctest_docutils."""
+    """Documentation module projecting one item per doctest group."""
 
-    obj = None  # Fix pytest-asyncio issue. #46, pytest-asyncio#872
+    obj = None
 
-    def collect(self) -> Iterable[DoctestItem]:
-        """Collect tests for pytest module."""
-        _ensure_directives_registered()
-
+    def collect(self) -> collections.abc.Iterable[DocutilsItem]:
+        """Parse once, project pure plans, and build synthetic carriers."""
+        if not self.config.pluginmanager.has_plugin("doctest"):
+            message = (
+                f"{self.path}: documentation collection requires pytest's "
+                "built-in doctest plugin"
+            )
+            raise pytest.UsageError(message)
+        ensure_directives_registered()
         encoding = self.config.getini("doctest_encoding")
-        text = self.path.read_text(encoding)
+        text = self.path.read_text(encoding=encoding)
+        registry = self.config.stash[_REGISTRY_KEY]
+        parsed = parse_document(text, self.path, registry=registry)
 
-        # Uses internal doctest module parsing mechanism.
-        finder = DocutilsDocTestFinder()
-
-        # While doctests in .rst/.md files don't support fixtures directly,
-        # we still need to pick up autouse fixtures.
-        # Backported from pytest commit 9cd14b4ff (2024-02-06).
-        # https://github.com/pytest-dev/pytest/commit/9cd14b4ff
-        self.session._fixturemanager.parsefactories(self)
-
-        optionflags = get_optionflags(self.config)
-
-        runner = _get_runner(
-            verbose=False,
-            optionflags=optionflags,
-            checker=_pytest.doctest._get_checker(),
-            continue_on_failure=_pytest.doctest._get_continue_on_failure(self.config),
+        ungrouped = t.cast(
+            t.Literal["block", "default"],
+            self.config.getini("doctest_docutils_ungrouped"),
         )
-        from _pytest.doctest import DoctestItem
-
-        for test in finder.find(
-            text,
-            str(self.path),
-        ):
-            if test.examples:  # skip empty doctests
-                yield DoctestItem.from_parent(
-                    self,  # type: ignore
-                    name=test.name,
-                    runner=runner,
-                    dtest=test,
-                )
+        plans = project(
+            parsed,
+            document_name=self.path.name,
+            settings=ProjectionSettings(ungrouped=ungrouped),
+            registry=registry,
+        )
+        optionflags = get_optionflags(self.config)
+        continue_on_failure = compat.get_continue_on_failure(self.config)
+        for plan in plans:
+            globs: dict[str, t.Any] = {}
+            carrier = doctest.DocTest(
+                [],
+                globs,
+                plan.group,
+                str(self.path),
+                0,
+                "",
+            )
+            carrier.globs = globs
+            runner = doctest.DocTestRunner(
+                checker=compat.get_checker(),
+                optionflags=optionflags,
+            )
+            yield DocutilsItem.from_parent(
+                self,
+                name=plan.group,
+                runner=runner,
+                dtest=carrier,
+                plan=plan,
+                registry=registry,
+                run_settings=RunSettings(
+                    optionflags=optionflags,
+                    continue_on_failure=continue_on_failure,
+                    checker_name="stdlib",
+                ),
+            )

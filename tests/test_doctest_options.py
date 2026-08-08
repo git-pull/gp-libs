@@ -204,7 +204,7 @@ def test_doctest_options(
     pytester.plugins = ["pytest_doctest_docutils"]
 
     # Build pytest.ini content
-    ini_lines = ["[pytest]", "addopts=-p no:doctest -vv"]
+    ini_lines = ["[pytest]", "addopts=-vv"]
     if ini_options:
         ini_lines.append(ini_options)
     ini_content = "\n".join(ini_lines)
@@ -300,7 +300,7 @@ def test_continue_on_failure(
     When enabled, all doctest failures should be reported, not just the first.
     """
     pytester.plugins = ["pytest_doctest_docutils"]
-    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest -vv")
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-vv")
 
     # Create the test file
     filename = f"test_doc{file_ext}"
@@ -380,7 +380,7 @@ def test_custom_flags(
     """
     pytester.plugins = ["pytest_doctest_docutils"]
 
-    ini_lines = ["[pytest]", "addopts=-p no:doctest -vv"]
+    ini_lines = ["[pytest]", "addopts=-vv"]
     if ini_options:
         ini_lines.append(ini_options)
     ini_content = "\n".join(ini_lines)
@@ -484,7 +484,7 @@ def test_edge_cases(
     Tests empty files and files without doctests.
     """
     pytester.plugins = ["pytest_doctest_docutils"]
-    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest -vv")
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-vv")
 
     # Create the test file
     filename = f"test_doc{file_ext}"
@@ -494,8 +494,8 @@ def test_edge_cases(
     result = pytester.runpytest(str(file_path), "-v")
 
     if expected_outcome == "no_tests":
-        # Should collect 0 tests (file may be collected but no items)
+        result.assert_outcomes(errors=0)
         stdout = result.stdout.str()
-        assert "0 items" in stdout or "no tests ran" in stdout or expected_tests == 0
+        assert "0 items" in stdout or "no tests ran" in stdout
     elif expected_outcome == "passed":
         result.assert_outcomes(passed=expected_tests)
