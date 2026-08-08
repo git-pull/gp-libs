@@ -34,7 +34,8 @@ class Provider(t.NamedTuple):
     version: str | None
 
 
-class Registration(t.NamedTuple, t.Generic[T]):
+@dataclasses.dataclass(frozen=True, slots=True)
+class Registration(t.Generic[T]):
     name: str
     value: T
     provider: Provider
@@ -83,6 +84,11 @@ bound to that contributor's `Provider`; registrations cannot claim a different
 origin. A contributor retaining that registrar cannot retain a mutation path:
 every method raises `RegistryClosedError` after the snapshot is made.
 
+`Registration` is a frozen, slotted dataclass rather than a generic
+`NamedTuple`. The latter declaration fails while importing on Python 3.10, which
+is inside the package's support range; immutability is the contract, not the
+tuple representation.
+
 ### Names, collisions and order
 
 Registration names are case-sensitive ASCII identifiers matching
@@ -101,6 +107,11 @@ For document parsers, overlapping suffix claims are also collisions. They are
 accepted only when the challenger uses the incumbent parser's name and passes
 `replace=True`; two differently named parsers cannot both win `.md` by incidental
 plugin load order.
+
+Freeze also validates cross-references. Every block kind must name an existing
+execution profile; a non-`None` expected-output kind must follow the registry
+name grammar and cannot also be a runnable block kind. Errors identify the block
+kind and provider before parsing begins.
 
 ## Host adapters
 
@@ -134,9 +145,24 @@ Nested conftests load during collection and are outside this lifecycle. A
 and raises `pytest.UsageError` naming that plugin and the closed registration
 phase. Fixtures and unrelated hooks in nested conftests remain valid.
 
-### Sphinx
+### Spike boundary
 
-The Sphinx adapter exposes
+The direct and pytest paths above are implemented. The pytest snapshot is frozen
+once, custom checker contribution is exercised end to end with one
+comparison-and-rendering instance, a custom block can pair with a custom output
+stamp, and a late nested conftest contributor fails with an actionable usage
+error. Low-level parse, extract, project, and run functions retain a convenience
+`registry=None` default; registry identity across stages is guaranteed only when
+a caller passes the same snapshot, as both host adapters do.
+
+The Sphinx contributor lifecycle and xdist manifest below were not needed to
+test the core boundary and are deferred until an external contributor requires
+them. The spike proves Sphinx-resolved doctree extraction and homogeneous xdist
+execution, not these two bootstrap protocols.
+
+### Proposed Sphinx lifecycle
+
+The proposed Sphinx adapter exposes
 `add_doctest_core_contributor(app, contributor)`. Extensions call it from their
 `setup(app)` function. At `config-inited`, after extension setup and before any
 document is read, the adapter emits a `doctest-core-contributors` event, appends
@@ -152,24 +178,24 @@ extension name.
 This lifecycle makes the extractor usable on Sphinx-resolved doctrees. It does
 not add a builder or claim parity with `sphinx-build -b doctest` execution.
 
-## xdist consistency
+## Proposed xdist consistency
 
-The controller sends a JSON-safe manifest through `workerinput` from
+The controller would send a JSON-safe manifest through `workerinput` from
 `pytest_configure_node`. Each worker builds its own snapshot during
 `pytest_configure` and compares before collection. The manifest has a schema
 version and contains:
 
-- a JSON-safe projection of normalized `SessionSettings`
+- JSON-safe projections of normalized parse, projection, and run settings
 - every registry category, name, provider and provider version in declared order
 - `doctest.OPTIONFLAGS_BY_NAME`, sorted by flag name
 
-A mismatch aborts the session with the controller and worker manifests. This is
+A mismatch would abort the session with the controller and worker manifests. This is
 an extension-set consistency check, not proof that two workers are semantically
 identical. Equal provider names and versions do not prove equal source code, and
 the manifest does not hash included documents, directive implementations or MyST
 plugins.
 
-Version 1 therefore supports homogeneous worker environments. Equal source
+The initial contract therefore supports homogeneous worker environments. Equal source
 closure and equal installed provider code are preconditions, while xdist's own
 identical-collection check remains authoritative for node ids. Stronger support
 for deliberately heterogeneous SSH or socket workers would require content or
@@ -180,11 +206,13 @@ environment attestation and is deferred.
 - Core extension authors implement one `Contributor` regardless of host.
 - Settings remain serializable inputs; discovered objects remain in the registry.
 - Parse and execution code cannot mutate capabilities after collection starts.
-- pytest and Sphinx own timing and diagnostics in their native idioms without
-  leaking their lifecycle types into the core.
+- pytest owns registration timing in its native idioms without leaking lifecycle
+  types into the core. Sphinx can adopt the same contract when its lifecycle is
+  implemented.
 - Replacement is possible but visible, attributed and deterministic.
-- Supporting heterogeneous xdist workers is explicitly outside the first
-  contract rather than implied by a weak manifest.
+- Supporting heterogeneous xdist workers remains outside the first contract;
+  the proposed manifest would diagnose capability mismatches without pretending
+  to attest worker code or source closures.
 
 ## Open
 

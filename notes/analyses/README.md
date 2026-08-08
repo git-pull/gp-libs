@@ -52,7 +52,8 @@ What exactly does each of them require, and where do they contradict each other?
 - Cross-cutting: [`20-data-structures.md`](20-data-structures.md),
   [`21-data-flows.md`](21-data-flows.md),
   [`22-extension-seams.md`](22-extension-seams.md),
-  [`23-namespace-scope-and-test-identity.md`](23-namespace-scope-and-test-identity.md).
+  [`23-namespace-scope-and-test-identity.md`](23-namespace-scope-and-test-identity.md),
+  and [`24-implementation-bakeoff.md`](24-implementation-bakeoff.md).
 - [`90-bibliography.md`](90-bibliography.md) — every pinned anchor cited by the
   ADRs, in one place.
 
