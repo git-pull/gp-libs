@@ -336,3 +336,130 @@ def test_docutils_package_relative_error_message() -> None:
     exc = doctest_docutils.TestDocutilsPackageRelativeError()
 
     assert str(exc) == "Package may only be specified for module-relative paths."
+
+
+def test_finder_keeps_stock_per_block_results() -> None:
+    """The compatibility finder returns independent stock doctest objects."""
+    source = """.. testsetup:: shared
+
+   value = 40
+
+.. doctest:: shared
+
+   >>> value + 2
+   42
+
+.. testcleanup:: shared
+
+   del value
+"""
+
+    tests = doctest_docutils.DocutilsDocTestFinder().find(source, "guide.rst")
+
+    assert len(tests) == 3
+    assert all(type(test) is doctest.DocTest for test in tests)
+    assert len({id(test.globs) for test in tests}) == 3
+
+
+def test_finder_preserves_source_order_past_single_digit_ordinals() -> None:
+    """Compatibility results retain source order instead of sorting names."""
+    source = "\n".join(f">>> {ordinal}\n{ordinal}\n" for ordinal in range(12))
+
+    tests = doctest_docutils.DocutilsDocTestFinder().find(source, "guide.rst")
+
+    assert [test.name for test in tests] == [
+        f"guide.rst[{ordinal}]" for ordinal in range(12)
+    ]
+
+
+def test_finder_preserves_zero_based_line_and_include_source(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Stock finder results report the block's physical source location."""
+    included = tmp_path / "included.rst"
+    included.write_text(">>> 1 + 1\n3\n", encoding="utf-8")
+    root = tmp_path / "guide.rst"
+    root.write_text(".. include:: included.rst\n", encoding="utf-8")
+
+    tests = doctest_docutils.DocutilsDocTestFinder().find(
+        root.read_text(encoding="utf-8"),
+        str(root),
+    )
+
+    assert len(tests) == 1
+    assert tests[0].filename == str(included)
+    assert tests[0].lineno == 0
+
+
+def test_testdocutils_owns_group_lifecycle(tmp_path: pathlib.Path) -> None:
+    """The direct runner shares setup state and cleans up after failure."""
+    source_path = tmp_path / "guide.rst"
+    source_path.write_text(
+        """.. testsetup:: shared
+
+   value = 40
+
+.. doctest:: shared
+
+   >>> value + 2
+   99
+
+.. testcleanup:: shared
+
+   cleaned.append(value)
+""",
+        encoding="utf-8",
+    )
+    cleaned: list[int] = []
+
+    result = doctest_docutils.testdocutils(
+        str(source_path),
+        module_relative=False,
+        globs={"cleaned": cleaned},
+        report=False,
+    )
+
+    assert result.failed == 1
+    assert result.attempted == 1
+    assert cleaned == [40]
+
+
+def test_testdocutils_retains_report_suppressed_failure_total(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The direct summary count is independent of detailed failure reports."""
+    source_path = tmp_path / "guide.rst"
+    source_path.write_text(
+        ">>> 1 + 1\n3\n>>> 2 + 2\n5\n",
+        encoding="utf-8",
+    )
+
+    result = doctest_docutils.testdocutils(
+        str(source_path),
+        module_relative=False,
+        report=False,
+        optionflags=doctest.REPORT_ONLY_FIRST_FAILURE,
+    )
+
+    assert result.failed == 2
+    assert result.attempted == 2
+
+
+def test_testdocutils_returns_modern_skip_statistics(
+    tmp_path: pathlib.Path,
+) -> None:
+    """The direct facade retains CPython's version-shaped skip total."""
+    source_path = tmp_path / "guide.rst"
+    source_path.write_text(
+        ">>> 1 + 1  # doctest: +SKIP\n99\n>>> 2 + 2\n4\n",
+        encoding="utf-8",
+    )
+
+    result = doctest_docutils.testdocutils(
+        str(source_path),
+        module_relative=False,
+        report=False,
+    )
+
+    if hasattr(result, "skipped"):
+        assert t.cast(t.Any, result).skipped == 1
