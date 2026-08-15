@@ -407,6 +407,7 @@ dependencies = [
     { name = "docutils" },
     { name = "myst-parser", version = "4.0.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "myst-parser", version = "5.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pytest" },
 ]
 
 [package.dev-dependencies]
@@ -458,6 +459,7 @@ testing = [
 requires-dist = [
     { name = "docutils" },
     { name = "myst-parser" },
+    { name = "pytest", specifier = ">=8.3.3" },
 ]
 
 [package.metadata.requires-dev]

@@ -32,6 +32,31 @@ $ uvx --from 'gp-libs' --prerelease allow gp-libs
 _Notes on upcoming releases will be added here_
 <!-- END PLACEHOLDER - ADD NEW CHANGELOG ENTRIES BELOW THIS LINE -->
 
+### Breaking changes
+
+#### pytest 8.3.3 is now required (#94)
+
+pytest is declared as a dependency, with a floor of 8.3.3. It was previously
+undeclared, so a consumer could install gp-libs alongside any pytest and have
+the `pytest11` entry point load the plugin into it.
+
+```toml
+dependencies = [
+  "myst_parser",
+  "docutils",
+  "pytest>=8.3.3"
+]
+```
+
+8.3.3 is the oldest release the package type-checks against. pytest 7 leaves
+`get_optionflags` and `_get_continue_on_failure` unannotated and makes
+`DoctestItem.dtest` optional; pytest through 8.3.2 imports `Self` from
+`typing`, which mypy resolves as `Any` under this project's
+`python_version = "3.10"` target, so collector constructors lose their return
+type. pytest 8.3.3 moved that import to `typing_extensions`.
+
+The test matrix covers pytest 8 and 9.
+
 ### Documentation
 
 #### Extension metadata fields are described (#81)
