@@ -11,11 +11,7 @@ jobs:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
         docutils-version: ['0.18', '0.19']
-        pytest-version: ['7', '8', '9']
-        exclude:
-          # Exclude pytest 7 from Python 3.14 to reduce matrix size
-          - python-version: '3.14'
-            pytest-version: '7'
+        pytest-version: ['8', '9']
     steps:
       - uses: actions/checkout@v7
 
