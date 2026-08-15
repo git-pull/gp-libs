@@ -36,7 +36,7 @@ keywords = []
 homepage = "https://gp-libs.git-pull.com"
 dependencies = [
   "myst_parser",
-  "docutils",
+  "docutils>=0.20",
   "pytest>=8.3.3"
 ]
 
