@@ -57,6 +57,34 @@ type. pytest 8.3.3 moved that import to `typing_extensions`.
 
 The test matrix covers pytest 8 and 9.
 
+#### docutils 0.20 is now required (#95)
+
+docutils carries a floor of 0.20, matching the constraint `myst-parser`
+already imposes (`docutils>=0.20,<0.23`). The dependency was previously
+unpinned, so the declared range was wider than any resolvable install.
+
+```toml
+dependencies = [
+  "myst_parser",
+  "docutils>=0.20",
+  "pytest>=8.3.3"
+]
+```
+
+The test matrix covers docutils 0.20 and 0.22.4, the floor and the newest
+release `myst-parser` admits.
+
+### Development
+
+#### The test matrix pins take effect (#95)
+
+Test steps run `uv run --no-sync`. A plain `uv run` re-syncs the environment
+to `uv.lock` before executing, which reverted the matrix pin installed a step
+earlier, so every leg ran the locked pytest and docutils rather than its own.
+The `docutils-version` axis compounded this: it was declared in the matrix but
+never referenced by any step, so it multiplied the job count without changing
+what ran. Both axes now install their version and keep it.
+
 ### Documentation
 
 #### Extension metadata fields are described (#81)

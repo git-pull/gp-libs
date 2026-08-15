@@ -10,7 +10,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
-        docutils-version: ['0.18', '0.19']
+        docutils-version: ['0.20', '0.22.4']
         pytest-version: ['8', '9']
     steps:
       - uses: actions/checkout@v7
@@ -26,26 +26,33 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Install specific pytest version
-        run: uv pip install "pytest~=${{ matrix.pytest-version }}.0"
+      # Every step below runs --no-sync. A plain `uv run` re-syncs the
+      # environment to uv.lock first, which would undo these pins and run
+      # every matrix leg against the locked versions.
+      - name: Install matrix pytest and docutils
+        run: >-
+          uv pip install
+          "pytest~=${{ matrix.pytest-version }}.0"
+          "docutils==${{ matrix.docutils-version }}"
 
-      - name: Print python and pytest versions
+      - name: Print python, pytest and docutils versions
         run: |
           python -V
-          uv run python -V
-          uv run pytest --version
+          uv run --no-sync python -V
+          uv run --no-sync pytest --version
+          uv run --no-sync python -c 'import docutils; print(docutils.__version__)'
 
       - name: Lint with ruff check
-        run: uv run ruff check .
+        run: uv run --no-sync ruff check .
 
       - name: Format with ruff format
-        run: uv run ruff format . --check
+        run: uv run --no-sync ruff format . --check
 
       - name: Lint with mypy
-        run: uv run mypy .
+        run: uv run --no-sync mypy .
 
       - name: Test with pytest
-        run: uv run py.test --cov=./ --cov-report=xml
+        run: uv run --no-sync py.test --cov=./ --cov-report=xml
 
       - uses: codecov/codecov-action@v7
         with:

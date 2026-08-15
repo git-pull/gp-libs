@@ -457,7 +457,7 @@ testing = [
 
 [package.metadata]
 requires-dist = [
-    { name = "docutils" },
+    { name = "docutils", specifier = ">=0.20" },
     { name = "myst-parser" },
     { name = "pytest", specifier = ">=8.3.3" },
 ]
