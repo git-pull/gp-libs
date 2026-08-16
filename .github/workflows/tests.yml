@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
-        docutils-version: ['0.20.1', '0.22.4']
+        docutils-version: ['0.20.1', '0.21.2']
         pytest-version: ['8.4.2', '9.1.1']
         include:
           - pytest-version: '8.4.2'
@@ -21,13 +21,6 @@ jobs:
           - pytest-version: '9.1.1'
             pytest-asyncio-version: '1.4.0'
             pytest-rerunfailures-version: '16.4'
-        exclude:
-          # docutils 0.22 removed the bundled docutils.utils.roman. Sphinx 8.1
-          # imports it, so its latex builder fails to load. Sphinx 8.2 dropped
-          # that import but requires Python 3.11, and 8.1 is the newest release
-          # supporting 3.10, leaving no working pair on that interpreter.
-          - python-version: '3.10'
-            docutils-version: '0.22.4'
     steps:
       - uses: actions/checkout@v7
 
