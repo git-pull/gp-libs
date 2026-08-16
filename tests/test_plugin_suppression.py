@@ -1,13 +1,14 @@
-"""Test pytest plugin suppression and precedence.
+"""Test pytest doctest collector composition and precedence.
 
-Tests for pytest plugin blocking behavior in pytest_doctest_docutils.
-Ensures plugin suppression works correctly across pytest 7.x/8.x/9.x.
+Documentation paths have one owner while pytest's doctest plugin remains
+available for Python modules and fixture injection.
 
 Ref: pytest's test_pluginmanager.py patterns for plugin blocking tests.
 """
 
 from __future__ import annotations
 
+import importlib.metadata
 import re
 import textwrap
 import typing as t
@@ -17,6 +18,17 @@ import pytest
 
 # Parse pytest version for version-specific tests
 PYTEST_VERSION = tuple(int(x) for x in pytest.__version__.split(".")[:2])
+
+
+def test_pytest_entry_point_uses_adapter_name() -> None:
+    """The installed plugin can be disabled by its module-shaped name."""
+    entries = [
+        entry
+        for entry in importlib.metadata.entry_points(group="pytest11")
+        if entry.value == "pytest_doctest_docutils"
+    ]
+
+    assert [entry.name for entry in entries] == ["pytest_doctest_docutils"]
 
 
 def requires_pytest_version(
@@ -55,18 +67,11 @@ class PluginSuppressionCase(t.NamedTuple):
 
 PLUGIN_SUPPRESSION_CASES = [
     PluginSuppressionCase(
-        test_id="auto-blocks-builtin-doctest",
+        test_id="composes-with-builtin-doctest",
         cli_args=["--collect-only", "-q"],
         ini_content="",
         expected_tests_collected=1,
-        description="pytest_doctest_docutils auto-blocks built-in doctest",
-    ),
-    PluginSuppressionCase(
-        test_id="ini-addopts-no-doctest",
-        cli_args=["--collect-only", "-q"],
-        ini_content="addopts = -p no:doctest",
-        expected_tests_collected=1,
-        description="addopts=-p no:doctest in pytest.ini works",
+        description="the adapter filters only the duplicate collector",
     ),
 ]
 
@@ -76,7 +81,7 @@ PLUGIN_SUPPRESSION_CASES = [
     PLUGIN_SUPPRESSION_CASES,
     ids=[c.test_id for c in PLUGIN_SUPPRESSION_CASES],
 )
-def test_plugin_suppression(
+def test_collector_composition(
     pytester: _pytest.pytester.Pytester,
     test_id: str,
     cli_args: list[str],
@@ -84,11 +89,7 @@ def test_plugin_suppression(
     expected_tests_collected: int,
     description: str,
 ) -> None:
-    """Test plugin suppression behavior.
-
-    Verifies that pytest_doctest_docutils correctly blocks the built-in
-    doctest plugin to prevent duplicate test collection.
-    """
+    """Verify documentation paths collect exactly once."""
     pytester.plugins = ["pytest_doctest_docutils"]
 
     # Create pytest.ini if content provided
@@ -252,18 +253,12 @@ def test_plugin_precedence(
     result.assert_outcomes(passed=expected_passed)
 
 
-def test_pytest_configure_blocks_doctest(
+def test_pytest_configure_keeps_doctest(
     pytester: _pytest.pytester.Pytester,
 ) -> None:
-    """Test that pytest_configure automatically blocks the doctest plugin.
-
-    This tests the core behavior in pytest_doctest_docutils.pytest_configure:
-        if config.pluginmanager.has_plugin("doctest"):
-            config.pluginmanager.set_blocked("doctest")
-    """
+    """The adapter keeps the built-in doctest plugin registered."""
     pytester.plugins = ["pytest_doctest_docutils"]
 
-    # Create conftest that checks plugin state after configuration
     pytester.makeconftest(
         textwrap.dedent(
             """
@@ -271,31 +266,27 @@ def test_pytest_configure_blocks_doctest(
 
             @pytest.hookimpl(trylast=True)
             def pytest_configure(config):
-                # After all pytest_configure hooks run, doctest should be blocked
                 pm = config.pluginmanager
-                # is_blocked exists in pytest 7+
-                if hasattr(pm, 'is_blocked'):
-                    # Store result for test to check
-                    config._doctest_was_blocked = pm.is_blocked('doctest')
-                else:
-                    config._doctest_was_blocked = None
+                config._doctest_was_blocked = pm.is_blocked('doctest')
+                config._doctest_is_loaded = pm.has_plugin('doctest')
 
             @pytest.fixture
-            def doctest_blocked_status(request):
-                return getattr(request.config, '_doctest_was_blocked', None)
+            def doctest_plugin_status(request):
+                return (
+                    request.config._doctest_was_blocked,
+                    request.config._doctest_is_loaded,
+                )
             """,
         ),
     )
 
-    # Create test that verifies the blocking happened
     pytester.makepyfile(
         test_verify=textwrap.dedent(
             """
-            def test_doctest_was_blocked(doctest_blocked_status):
-                if doctest_blocked_status is not None:
-                    assert doctest_blocked_status is True, (
-                        "doctest plugin should be blocked by pytest_doctest_docutils"
-                    )
+            def test_doctest_is_composed(doctest_plugin_status):
+                blocked, loaded = doctest_plugin_status
+                assert blocked is False
+                assert loaded is True
             """,
         ),
     )
@@ -382,7 +373,7 @@ def test_collector_routing(
     pytester.plugins = ["pytest_doctest_docutils"]
     pytester.makefile(
         ".ini",
-        pytest="[pytest]\naddopts=-p no:doctest -vv",
+        pytest="[pytest]\naddopts=-vv",
     )
 
     # Create the test file
@@ -402,79 +393,6 @@ def test_collector_routing(
     assert expected_collector_type in stdout, (
         f"Expected collector {expected_collector_type} not found in output:\n{stdout}"
     )
-
-
-# pytest 8.1+ version-specific tests
-
-
-@requires_pytest_version((8, 1), "pluginmanager.unblock() API")
-def test_unblock_api_available(
-    pytester: _pytest.pytester.Pytester,
-) -> None:
-    """Test pluginmanager.unblock() API available in pytest 8.1+.
-
-    Verifies that the unblock() method exists and can be used to
-    re-enable a previously blocked plugin.
-
-    Ref: pytest 8.1.0 changelog - pluginmanager.unblock() public API
-    """
-    pytester.plugins = ["pytest_doctest_docutils"]
-
-    # Create conftest that tests unblock API
-    pytester.makeconftest(
-        textwrap.dedent(
-            """
-            import pytest
-
-            @pytest.hookimpl(trylast=True)
-            def pytest_configure(config):
-                pm = config.pluginmanager
-
-                # Verify unblock method exists
-                assert hasattr(pm, 'unblock'), "unblock() API not found"
-
-                # doctest should be blocked by pytest_doctest_docutils
-                assert pm.is_blocked('doctest'), "doctest should be blocked"
-
-                # Test unblock API
-                result = pm.unblock('doctest')
-
-                # Store results for test verification
-                config._unblock_api_exists = True
-                config._unblock_result = result
-                config._doctest_unblocked = not pm.is_blocked('doctest')
-
-            @pytest.fixture
-            def unblock_test_results(request):
-                return {
-                    'api_exists': getattr(request.config, '_unblock_api_exists', False),
-                    'unblock_result': getattr(request.config, '_unblock_result', None),
-                    'doctest_unblocked': getattr(
-                        request.config, '_doctest_unblocked', False
-                    ),
-                }
-            """,
-        ),
-    )
-
-    # Create test that verifies unblock worked
-    pytester.makepyfile(
-        test_verify=textwrap.dedent(
-            """
-            def test_unblock_api_works(unblock_test_results):
-                assert unblock_test_results['api_exists'], "unblock() API should exist"
-                assert unblock_test_results['unblock_result'] is True, (
-                    "unblock() should return True when successful"
-                )
-                assert unblock_test_results['doctest_unblocked'], (
-                    "doctest should be unblocked after calling unblock()"
-                )
-            """,
-        ),
-    )
-
-    result = pytester.runpytest("test_verify.py", "-v")
-    result.assert_outcomes(passed=1)
 
 
 # pytest 8.4+ version-specific tests

@@ -7,23 +7,20 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
 
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
-        docutils-version: ['0.20', '0.22.4']
-        pytest-version: ['8', '9']
-        exclude:
-          # docutils 0.22 removed the bundled docutils.utils.roman. Sphinx 8.1
-          # imports it, so its latex builder fails to load. Sphinx 8.2 dropped
-          # that import but requires Python 3.11, and 8.1 is the newest release
-          # supporting 3.10, leaving no working pair on that interpreter.
-          - python-version: '3.10'
-            docutils-version: '0.22.4'
-    # Overrides the repo's .python-version so every uv command in this job
-    # uses the matrix interpreter. `uv python install` only downloads one;
-    # without this the environment is built against .python-version instead.
-    env:
-      UV_PYTHON: ${{ matrix.python-version }}
+        docutils-version: ['0.20.1', '0.21.2']
+        pytest-version: ['8.4.2', '9.1.1']
+        include:
+          - pytest-version: '8.4.2'
+            pytest-asyncio-version: '1.4.0'
+            pytest-rerunfailures-version: '16.4'
+          - pytest-version: '9.1.1'
+            pytest-asyncio-version: '1.4.0'
+            pytest-rerunfailures-version: '16.4'
     steps:
       - uses: actions/checkout@v7
 
@@ -41,11 +38,16 @@ jobs:
       # Every step below runs --no-sync. A plain `uv run` re-syncs the
       # environment to uv.lock first, which would undo these pins and run
       # every matrix leg against the locked versions.
-      - name: Install matrix pytest and docutils
+      - name: Install matrix versions
         run: >-
           uv pip install
-          "pytest~=${{ matrix.pytest-version }}.0"
           "docutils==${{ matrix.docutils-version }}"
+          "pytest==${{ matrix.pytest-version }}"
+          "pytest-asyncio==${{ matrix.pytest-asyncio-version }}"
+          "pytest-rerunfailures==${{ matrix.pytest-rerunfailures-version }}"
+
+      - name: Check dependency consistency
+        run: uv pip check
 
       - name: Print python, pytest and docutils versions
         run: |

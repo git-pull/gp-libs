@@ -77,17 +77,35 @@ code to a docutils message is unsettled, which is why this record stays `Draft`.
 
 Every diagnostic raised by this project's own layers defaults to visible, and
 `level="error"` from those layers fails collection with the file and line named.
-A page whose only block fails to parse, and a page with a malformed `:options:`
-value, must both produce a collection error rather than collecting nothing and
-passing.
+A page whose only block fails to parse must produce a collection error rather
+than collecting nothing and passing. A malformed `:options:` value follows
+Sphinx's warning severity, but that warning must be visible rather than silently
+discarded by the host.
 
 Expose promotion and suppression by code so a project can tune the set without a
 global on/off switch.
 
+## Spike result
+
+The spike captures reporter messages as typed values, deduplicates messages seen
+through both the observer and the doctree, and suppresses both messages emitted
+for an unknown role. It provisionally classifies docutils messages by normalized
+message substrings because docutils supplies no stable code. Unknown directives
+remain visible in `ParseResult.diagnostics`.
+
+That proves capture and normalization, not host disposition. The pytest adapter
+does not yet fail collection for an unsuppressed error or surface warnings with
+source attribution. Until that policy and its reST/MyST wording matrix exist, a
+malformed body-owning directive can still collect no tests without failing the
+session, and malformed doctest options can warn only inside the retained parse
+result. The direct facade also does not render those diagnostics. This record
+therefore remains `Draft`.
+
 ## Open
 
 - Whether diagnostics surface as {class}`pytest.PytestWarning` subclasses, giving
-  `-W error::` control for free, or as a dedicated report section.
+  `-W error::` control for free, or as collection errors and dedicated report
+  sections. Errors must not be silently ignored by the host.
 - **What classifies a code-less docutils message.** The options are an owned,
   version-pinned message-text table with a test that fails on upstream rewording
   (and which must handle two dialects — reST's `Unknown directive type "x".` at

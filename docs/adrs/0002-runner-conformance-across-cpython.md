@@ -7,106 +7,141 @@ Date: 2026-08-02
 
 ## Context
 
-{doc}`0001-typed-vanilla-doctest-core` decides that the runner owns the
-per-example loop by defining `_DocTestRunner__run` in a subclass, rather than
-cloning CPython's code object or rebinding `doctest.compile` process-wide.
+{doc}`0001-typed-vanilla-doctest-core` has two execution lanes with different
+compatibility claims.
 
-Owning the loop means owning the private state it writes into, and that state has
-changed shape inside this project's supported interpreter range. Three
-divergences are known:
+Prompt-form blocks are ordinary {class}`doctest.DocTest` objects executed by
+CPython's own {class}`doctest.DocTestRunner` loop. The core subclasses only the
+reporting hooks that retain failures for an embedding host. It does not override
+`run()` or `_DocTestRunner__run`.
 
-**The outcome accumulator changed name and arity.** On 3.10 through 3.12 it is
-`__record_outcome(self, test, f, t)` writing into `self._name2ft`; on 3.13 and
-later it is `__record_outcome(self, test, failures, tries, skips)` writing into
-`self._stats`
-([`Lib/doctest.py:1485`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1485)).
-A loop that calls the wrong one leaves `summarize()` reporting zeros for a
-passing file — a silent, total failure of the reporting path.
+Extended blocks such as Sphinx `testcode` cannot use that loop unchanged. CPython
+compiles each example in `"single"` mode, while a `testcode` body may contain
+several statements and requires `"exec"`. There is no stdlib execution mode to
+select and therefore no exact-compatibility claim to make.
 
-**`TestResults` gained a third value that is not a tuple field.** It carries
-`skipped` as an extra instance attribute
-([`Lib/doctest.py:114`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L114)),
-so `TestResults(f, a, skipped=s)` works on 3.13+ and raises on earlier versions.
+The supported interpreters also expose different result semantics. Python 3.10
+increments `tries` only after an example passes its `SKIP` gate
+([`Lib/doctest.py:1326-1337`](https://github.com/python/cpython/blob/v3.10.19/Lib/doctest.py#L1326-L1337)).
+Python 3.14 increments `attempted` before the gate and records `skips` separately
+([`Lib/doctest.py:1353-1379`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1353-L1379)).
+`TestResults` gained its `skipped` attribute with that newer shape
+([`Lib/doctest.py:114-126`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L114-L126)).
+The prompt lane must expose skipped examples without silently rewriting the
+interpreter's own `attempted` value. The extended lane has no CPython count to
+inherit and defines its own stable count below.
 
-**`report_skip` does not exist at v3.14.2.** The runner has only `report_start`,
-`report_success`, `report_failure` and `report_unexpected_exception`
-([`Lib/doctest.py:1286-1314`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1286-L1314)).
-It appears in later prereleases, so a loop must probe rather than assume in
-either direction.
+## Decision
 
-A fourth risk has no current instance but would be silent: a CPython refactor
-that inlines the loop into `run()` would route execution back to stdlib. That is
-invisible for prompt-form blocks and immediately broken for `{testcode}`.
+Keep the two lanes structurally separate.
 
-## Question
+The prompt runtime delegates to CPython's untouched per-example loop with
+`clear_globs=False`. Its reporter subclass may retain
+{class}`doctest.DocTestFailure` and {class}`doctest.UnexpectedException`, and may
+propagate exceptions selected by the host's `ExceptionPolicy`; it does not own
+compilation, option merging, comparison, debugger setup, display hooks, linecache
+patching, or result accounting.
 
-How is an owned per-example loop proven equivalent to the interpreter's own,
-continuously, without a `sys.version_info` ladder?
+An extended execution profile owns an independent, deliberately smaller runtime.
+It accepts a fresh stock `DocTest` plus resolved `RuntimeSettings` and returns a
+`RuntimeOutcome`. The initial `exec` runtime owns these semantics:
 
-## Direction
+- merge runner flags with per-example options, then honor `SKIP` and fail-fast;
+- derive active future flags from the live `globs`, compile in `"exec"` mode,
+  and pass `dont_inherit=True` so the core module's future imports cannot leak;
+- capture and restore stdout around every example;
+- compare expected exceptions against the exception-only tail, including
+  `SyntaxError` normalization and `IGNORE_EXCEPTION_DETAIL`, while retaining
+  captured stdout for failure rendering;
+- use the injected checker for comparison and retain stock failure objects;
+- propagate host-owned outcomes through `ExceptionPolicy`; and
+- leave group phase ordering, cleanup, and exception precedence to
+  `run_group()`.
 
-A differential conformance harness, run in CI on every supported interpreter,
-gating the build step that lands the runner.
+It does not update a `DocTestRunner` accumulator, call `report_*`, implement
+`summarize()`, patch the debugger, or claim byte-for-byte output parity with the
+prompt lane. A direct stdlib-shaped facade may translate `GroupResult` into the
+version-specific accumulator needed by `summarize()`; that compatibility shim is
+separate from execution.
 
-**Scoped to the extended lane.** {doc}`0001-typed-vanilla-doctest-core` runs
-ordinary prompt blocks on CPython's untouched per-example loop, so those need no
-differential proof — they *are* the reference. The owned `__run` is invoked only
-for `exec` bodies, top-level await and future profiles, and that is what this
-harness guards. It is a smaller obligation than an unconditionally owned loop,
-and it is the reason owning the loop is affordable at all.
+## Conformance gate
 
-A fixed case matrix — pass, fail, unexpected exception, `SyntaxError`, all
-examples skipped, partially skipped, `FAIL_FAST`, `REPORT_ONLY_FIRST_FAILURE`,
-`IGNORE_EXCEPTION_DETAIL`, and an exec-mode body — is run through both this
-runner and a stock {class}`doctest.DocTestRunner`, asserting the captured
-`report_*` text, `summarize()` output, the accumulator contents, and the result
-as `(failed, attempted, skipped)`.
+The prompt lane is compatible by construction, but still runs on every supported
+Python to catch subclass-state collisions and changes to reporter signatures.
+Its tests assert stock object types, per-example option merging, fail-fast,
+partial skips, repeated fresh materialization, and restoration of the shared
+mapping contract.
 
-**Assert the triple, not `TestResults` equality.** `TestResults` is a two-field
-namedtuple carrying `skipped` off-tuple, so `==` compares only two of the three
-values and a skip-count regression passes silently. `attempted` is also
-incremented *before* the `SKIP` check, so a skip that wrongly executes moves
-neither counter — it is invisible to both the tuple and to `summarize()` at zero
-failures, and only the `report_*` text distinguishes it.
+The extended lane has a behavioral matrix rather than a comparison against
+CPython's `"single"` compiler mode. Before it is accepted, the matrix covers:
 
-The exec-mode case is the one the two runners are *meant* to disagree on, and it
-still compares against stock. `compile()` raises on a multi-statement body, but
-that call sits inside the loop's own `try`
-([`Lib/doctest.py:1398-1408`](https://github.com/python/cpython/blob/v3.14.2/Lib/doctest.py#L1398-L1408)),
-so a stock {class}`doctest.DocTestRunner` catches the `SyntaxError` and records
-it as an unexpected exception rather than propagating it: one
-`report_unexpected_exception` call, `TestResults(failed=1, attempted=1)`, and
-`_stats` at `(1, 1, 0)`. Only {class}`doctest.DebugRunner` — and pytest's runner
-beneath it — converts that into a raise, as
-{exc}`doctest.UnexpectedException`. So the case is asserted as a pair: stock
-records the failure, this runner records a pass. A regression that silently
-reverts to `"single"` mode shows up as the two converging.
+| Behavior | Required assertion |
+|---|---|
+| pass and mismatch | stock failure objects, counts, and checker identity |
+| future flags | no ambient inheritance; an explicitly imported feature persists through group `globs` |
+| unexpected exception and `SyntaxError` | stock exception shape and stable traceback ownership |
+| output before exception | defined capture and rendering behavior |
+| all and partial skip | examples examined, including skips, plus an explicit skipped count on every interpreter |
+| fail-fast and report-only-first | execution and reporting policies remain distinct |
+| checker options | `IGNORE_EXCEPTION_DETAIL` and contributed checker behavior |
+| process state | stdout is restored; debugger, display-hook, and linecache support is explicitly accepted or excluded |
+| repeated calls | runtime-local state cannot leak between attempts |
 
-**What else belongs in the matrix, and what does not.** Add `report_*` hook
-events — the only channel that distinguishes a skip which wrongly *executed*,
-since `attempted` increments before the `SKIP` check and neither counter moves —
-and repeated runs of one test, which exercise accumulator arithmetic across
-calls.
+Group cleanup after failure, pytest outcomes, fixture injection, reruns, and xdist
+belong to host and `run_group()` acceptance tests. They are not evidence about an
+individual execution profile.
 
-Cross-block `FAIL_FAST` and cleanup aggregation stay out. Both are properties of
-`run_group()` rather than of the per-example loop, so a stock runner offers
-nothing to compare them against; they belong to
-{doc}`0001-typed-vanilla-doctest-core`'s item-lifecycle tests. A
-{exc}`pytest.skip` raised inside an example and a debugger exit are likewise
-pytest-layer concerns, testable only through a pytest session.
+Version handling uses capability probes, not `sys.version_info`. The prompt
+runtime preserves CPython's own `attempted` value. The extended runtime counts
+each example it examines, including an example skipped before compilation; on
+interpreters whose `TestResults` cannot carry `skipped`, `run_group()` reconstructs
+that value from the materialized test and stores it in `Counts`.
 
-Version handling is by capability probe, never by version comparison, so a
-backport, a vendored interpreter or a fork behaves correctly rather than by
-coincidence. {doc}`0001-typed-vanilla-doctest-core` rejects an import-time guard
-that raises: a `pytest11` plugin that aborts at import takes down suites whose
-majority of tests never touch a doctest.
+## Alternative rejected
+
+Defining `_DocTestRunner__run` for extended profiles was rejected by the
+implementation bakeoff. It couples a small `"exec"` requirement to private
+accumulators, private outcome-recording arity, report-hook sequencing, debugger
+machinery, and `summarize()` behavior that the host-neutral runtime does not use.
+It is more code and a larger compatibility promise without making extended
+syntax vanilla.
+
+Cloning and patching CPython's code object or rebinding `doctest.compile`
+process-wide remain rejected. Both make unrelated doctest execution depend on
+global mutable state.
+
+The spike still has two smaller CPython-private parser dependencies:
+`DocTestParser._EXAMPLE_RE` recognizes prompt-form literal blocks and
+`DocTestParser._EXCEPTION_RE` extracts the expected exception tail from paired
+output. They do not couple execution to private runner state, but they are still
+compatibility debt and need explicit probes across the supported Python matrix.
+The legacy direct facade's use of `doctest._load_testfile` is outside the typed
+core but belongs in the facade's own compatibility inventory.
+
+## Consequences
+
+- Ordinary doctests inherit CPython behavior directly rather than through a
+  differential approximation.
+- Extended profiles state their semantic subset and can manage attempt-scoped
+  resources through their context manager.
+- CPython's pre-3.13 and current prompt-lane skip counters remain observable;
+  extended profiles expose their separate version-independent count through
+  `Counts`.
+- The direct compatibility facade needs a small version-shaped statistics shim
+  if it promises stdlib `summarize()` and `master.merge()` behavior.
+- The direct facade cannot reproduce the complete verbose
+  `Trying`/`Expecting`/`ok` stream from `GroupResult`, because the core retains
+  failures but not successful per-example reporter events. Failure and summary
+  rendering remain stock-shaped.
+- Each new execution profile owns its own behavioral matrix; adding async does
+  not expand the prompt lane's maintenance surface.
 
 ## Open
 
-- Whether the harness asserts on `report_*` text verbatim, or on a normalized
-  form — verbatim is stricter and will churn when CPython adjusts wording.
-- Whether a probe failure degrades to stdlib's loop with a diagnostic, or fails
-  the affected items loudly. Degrading is silent for prompt-form blocks, which is
-  the argument against it.
-- The floor: whether supporting 3.10's `_name2ft` shape is worth its shim once
-  that version reaches end of life.
+- Complete the extended matrix for report-only-first and repeated runtime calls.
+- Probe the two private parser regex contracts on every supported Python.
+- Decide whether extended runtimes should reproduce doctest's debugger,
+  display-hook, and linecache behavior or explicitly exclude interactive
+  debugging.
+- Define how a profile context-manager entry or exit failure is represented while
+  still allowing an already-open cleanup profile to run.

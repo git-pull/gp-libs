@@ -3,27 +3,30 @@
 from __future__ import annotations
 
 import doctest
-import linecache
 import logging
 import os
 import pathlib
-import pprint
 import re
 import sys
+import types
 import typing as t
 
 import docutils
-from docutils import nodes
-from docutils.parsers.rst import Directive, directives
+from docutils.parsers.rst import directives
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
 
-from docutils_compat import findall
+import doctest_core
+from doctest_core.markup import (
+    DoctestDirective as _CoreDoctestDirective,
+    MockTabDirective as _CoreMockTabDirective,
+    TestcleanupDirective as _CoreTestcleanupDirective,
+    TestsetupDirective as _CoreTestsetupDirective,
+    _TestDirective as _CoreTestDirective,
+)
 
 if t.TYPE_CHECKING:
-    import types
-
-    from docutils.nodes import Node, TextElement
+    from docutils.nodes import Node
 
 logger = logging.getLogger(__name__)
 
@@ -53,13 +56,10 @@ def is_allowed_version(version: str, spec: str) -> bool:
     return Version(version) in SpecifierSet(spec)
 
 
-class TestDirective(Directive):
-    """Base class for doctest-related directives."""
+class TestDirective(_CoreTestDirective):
+    """Compatibility base for doctest-related directives."""
 
-    has_content = True
-    required_arguments = 0
-    optional_arguments = 1
-    final_argument_whitespace = True
+    __test__ = False
 
     def get_source_info(self) -> tuple[str, int]:
         """Get source and line number."""
@@ -69,115 +69,21 @@ class TestDirective(Directive):
         """Set source and line number to the node."""
         node.source, node.line = self.get_source_info()
 
-    def run(self) -> list[Node]:
-        """Run docutils test directive."""
-        # use ordinary docutils nodes for test code: they get special attributes
-        # so that our builder recognizes them, and the other builders are happy.
-        code = "\n".join(self.content)
-        test = None
 
-        logger.debug(f"directive run: self.name {self.name}")
-        if self.name == "doctest":
-            if "<BLANKLINE>" in code:
-                # convert <BLANKLINE>s to ordinary blank lines for presentation
-                test = code
-                code = blankline_re.sub("", code)
-            if (
-                doctestopt_re.search(code)
-                and "no-trim-doctest-flags" not in self.options
-            ):
-                if not test:
-                    test = code
-                code = doctestopt_re.sub("", code)
-        nodetype: type[TextElement] = nodes.literal_block
-        if self.name in {"testsetup", "testcleanup"} or "hide" in self.options:
-            nodetype = nodes.comment
-        if self.arguments:
-            groups = [x.strip() for x in self.arguments[0].split(",")]
-        else:
-            groups = ["default"]
-        node = nodetype(code, code, testnodetype=self.name, groups=groups)
-        self.set_source_info(node)
-        if test is not None:
-            # only save if it differs from code
-            node["test"] = test
-        if self.name == "doctest":
-            node["language"] = "pycon3"
-        node["options"] = {}
-        if self.name in ("doctest") and "options" in self.options:
-            # parse doctest-like output comparison flags
-            option_strings = self.options["options"].replace(",", " ").split()
-            for option in option_strings:
-                prefix, option_name = option[0], option[1:]
-                if prefix not in "+-":
-                    self.state.document.reporter.warning(
-                        f"missing '+' or '-' in '{option}' option.",
-                        line=self.lineno,
-                    )
-                    continue
-                if option_name not in doctest.OPTIONFLAGS_BY_NAME:
-                    self.state.document.reporter.warning(
-                        f"'{option_name}' is not a valid option.",
-                        line=self.lineno,
-                    )
-                    continue
-                flag = doctest.OPTIONFLAGS_BY_NAME[option[1:]]
-                node["options"][flag] = option[0] == "+"
-        if self.name == "doctest" and "pyversion" in self.options:
-            try:
-                spec = self.options["pyversion"]
-                python_version = ".".join([str(v) for v in sys.version_info[:3]])
-                if not is_allowed_version(spec, python_version):
-                    flag = doctest.OPTIONFLAGS_BY_NAME["SKIP"]
-                    node["options"][flag] = True  # Skip the test
-            except InvalidSpecifier:
-                self.state.document.reporter.warning(
-                    f"'{spec}' is not a valid pyversion option",
-                    line=self.lineno,
-                )
-        if "skipif" in self.options:
-            node["skipif"] = self.options["skipif"]
-        if "trim-doctest-flags" in self.options:
-            node["trim_flags"] = True
-        elif "no-trim-doctest-flags" in self.options:
-            node["trim_flags"] = False
-        return [node]
+class TestsetupDirective(_CoreTestsetupDirective, TestDirective):
+    """Compatibility name for the core ``testsetup`` directive."""
 
 
-class TestsetupDirective(TestDirective):
-    """Test setup directive."""
-
-    option_spec: t.ClassVar = {"skipif": directives.unchanged_required}
+class TestcleanupDirective(_CoreTestcleanupDirective, TestDirective):
+    """Compatibility name for the core ``testcleanup`` directive."""
 
 
-class TestcleanupDirective(TestDirective):
-    """Test cleanup directive."""
-
-    option_spec: t.ClassVar = {"skipif": directives.unchanged_required}
+class DoctestDirective(_CoreDoctestDirective, TestDirective):
+    """Compatibility name for the core ``doctest`` directive."""
 
 
-class DoctestDirective(TestDirective):
-    """Doctest directive."""
-
-    option_spec: t.ClassVar = {
-        "no-trim-doctest-flags": directives.flag,
-        "options": directives.unchanged,
-        "pyversion": directives.unchanged_required,
-        "skipif": directives.unchanged_required,
-        "trim-doctest-flags": directives.flag,
-    }
-
-
-class MockTabDirective(TestDirective):
-    """Mock tab directive."""
-
-    def run(self) -> list[Node]:
-        """Parse a mock-tabs directive."""
-        self.assert_has_content()
-
-        content = nodes.container("", is_div=True, classes=["tab-content"])
-        self.state.nested_parse(self.content, self.content_offset, content)
-        return [content]
+class MockTabDirective(_CoreMockTabDirective, TestDirective):
+    """Compatibility name for the core mock tab directive."""
 
 
 def setup() -> dict[str, t.Any]:
@@ -188,32 +94,19 @@ def setup() -> dict[str, t.Any]:
 
     # Third party mock directive: sphinx-inline-tabs @ 2022.01.02.beta11
     directives.register_directive("tab", MockTabDirective)
+    doctest_core.ensure_directives_registered()
     return {"version": docutils.__version__, "parallel_read_safe": True}
 
 
-# For backward compatibility, a global instance of a DocTestRunner
-# class, updated by testmod.
-master = None
+# For backward compatibility, a global runner updated by ``testdocutils``.
+master: doctest.DocTestRunner | None = None
 
 parser = doctest.DocTestParser()
-_DIRECTIVES_READY = False
-_REQUIRED_DIRECTIVES = ("doctest", "testsetup", "testcleanup", "tab")
-
-
-def _directive_registry() -> dict[str, t.Any]:
-    """Return docutils directive registry with typing info."""
-    return t.cast(dict[str, t.Any], directives.__dict__["_directives"])
 
 
 def _ensure_directives_registered() -> None:
-    """Register doctest-related directives once per interpreter."""
-    global _DIRECTIVES_READY
-    registry = _directive_registry()
-    missing = any(name not in registry for name in _REQUIRED_DIRECTIVES)
-    if _DIRECTIVES_READY and not missing:
-        return
-    setup()
-    _DIRECTIVES_READY = True
+    """Register missing core directives without replacing another owner."""
+    doctest_core.ensure_directives_registered()
 
 
 class DocTestFinderNameDoesNotExist(ValueError):
@@ -271,12 +164,6 @@ class DocutilsDocTestFinder:
             if name is None:
                 raise DocTestFinderNameDoesNotExist(string=string)
 
-        # No access to a loader, so assume it's a normal
-        # filesystem path
-        source_lines = linecache.getlines(name) or None
-        if not source_lines:
-            source_lines = None
-
         # Initialize globals, and merge in extraglobs.
         globs = {} if globs is None else globs.copy()
         if extraglobs is not None:
@@ -288,12 +175,7 @@ class DocutilsDocTestFinder:
         source_path: pathlib.Path | None = (
             pathlib.Path(name) if name is not None else None
         )
-        self._find(tests, string, name, source_lines, globs, {}, source_path)
-        # Sort the tests by alpha order of names, for consistency in
-        # verbose-mode output.  This was a feature of doctest in Pythons
-        # <= 2.3 that got lost by accident in 2.4.  It was repaired in
-        # 2.4.4 and 2.5.
-        tests.sort()
+        self._find(tests, string, name, None, globs, {}, source_path)
         return tests
 
     def _find(
@@ -308,98 +190,60 @@ class DocutilsDocTestFinder:
     ) -> None:
         """Find tests for the given string, and add them to `tests`."""
         if self._verbose:
-            logger.info(f"Finding tests in {name}")
+            logger.info("finding tests in %s", name)
 
         # If we've already processed this string, then ignore it.
         if id(string) in seen:
             return
         seen[id(string)] = 1
-
-        # Find a test for this string, and add it to the list of tests.
-        logger.debug(
-            "_find({})".format(
-                pprint.pformat(
-                    {
-                        "tests": tests,
-                        "string": string,
-                        "name": name,
-                        "source_lines": source_lines,
-                        "globs": globs,
-                        "seen": seen,
-                    },
-                ),
-            ),
-        )
-        ext = pathlib.Path(name).suffix
-        logger.debug(f"parse, ext: {ext}")
-        if ext == ".md":
-            import myst_parser.parsers.docutils_
-            from myst_parser.config.main import MdParserConfig
-            from myst_parser.mdit_to_docutils.base import (
-                DocutilsRenderer,
-                make_document,
-            )
-            from myst_parser.parsers.mdit import create_md_parser
-
-            DocutilsParser = myst_parser.parsers.docutils_.Parser
-            config: MdParserConfig = MdParserConfig(commonmark_only=False)
-            md_parser = create_md_parser(config, DocutilsRenderer)
-
-            doc = make_document(
-                source_path=str(source_path),
-                parser_cls=DocutilsParser,
-            )
-            md_parser.options["document"] = doc
-            md_parser.render(string)
-        else:
-            import docutils.utils
-            from docutils.frontend import OptionParser
-            from docutils.parsers.rst import Parser
-
-            parser = Parser()
-            settings = OptionParser(components=(Parser,)).get_default_values()
-
-            doc = docutils.utils.new_document(
-                source_path=str(source_path),
-                settings=settings,
-            )
-            parser.parse(string, doc)
-
-        def condition(node: Node) -> bool:
-            return (
-                (
-                    isinstance(node, (nodes.literal_block, nodes.comment))
-                    and "testnodetype" in node
-                )
-                or (
-                    isinstance(node, nodes.literal_block)
-                    and re.match(
-                        doctest.DocTestParser._EXAMPLE_RE,  # type:ignore
-                        node.astext(),
-                    )
-                    is not None
-                )
-                or isinstance(node, nodes.doctest_block)
-            )
-
-        for idx, node in enumerate(findall(doc)(condition)):
-            logger.debug(f"() node: {node.astext()}")
-            assert isinstance(node, nodes.Element)
-            test_name = node.get("groups")
-            if isinstance(test_name, list):
-                test_name = test_name[0]
-            if test_name is None or test_name == "default":
-                test_name = f"{name}[{idx}]"
-            logger.debug(f"() node: {test_name}")
+        del source_lines
+        parse_path = source_path or pathlib.Path(name)
+        if parse_path.suffix not in {".md", ".rst", ".txt"}:
+            parse_path = parse_path.with_suffix(".rst")
+        parsed = doctest_core.parse_document(string, parse_path)
+        for block in parsed.blocks:
+            test_name = self._compatibility_name(block, name)
             test = self._get_test(
-                string=node.astext(),
+                string=block.source,
                 name=test_name,
-                filename=name,
+                filename=str(block.path),
                 globs=globs,
-                source_lines=[str(node.line)],
+                source_lines=[
+                    str(0 if block.line is None else max(block.line - 1, 0)),
+                ],
             )
-            if test is not None:
-                tests.append(test)
+            self._apply_block_options(test, block)
+            tests.append(test)
+
+    @staticmethod
+    def _compatibility_name(block: doctest_core.ParsedBlock, name: str) -> str:
+        """Reproduce the legacy first-group and anonymous naming scheme."""
+        group = block.groups[0] if block.groups else None
+        if group is None or group == "default":
+            return f"{name}[{block.block_ordinal}]"
+        return group
+
+    @staticmethod
+    def _apply_block_options(
+        test: doctest.DocTest,
+        block: doctest_core.ParsedBlock,
+    ) -> None:
+        """Merge directive policy into each stock example's inline options."""
+        block_options = dict(block.options)
+        if block.pyversion is not None:
+            version = ".".join(str(value) for value in sys.version_info[:3])
+            try:
+                if not is_allowed_version(version, block.pyversion):
+                    block_options[doctest.SKIP] = True
+            except InvalidSpecifier:
+                logger.warning(
+                    "invalid pyversion option",
+                    extra={"doctest_source_file": test.filename},
+                )
+        for example in test.examples:
+            options = block_options.copy()
+            options.update(example.options)
+            example.options = options
 
     def _get_test(
         self,
@@ -416,8 +260,136 @@ class DocutilsDocTestFinder:
         return self._parser.get_doctest(string, globs, name, filename, lineno)
 
 
+def _direct_plan(
+    plan: doctest_core.GroupPlan,
+    *,
+    filename: str,
+    parser: doctest.DocTestParser,
+) -> doctest_core.GroupPlan:
+    """Adapt a typed plan to the compatibility facade's names and parser."""
+    blocks: list[doctest_core.ProjectedBlock] = []
+    for block in plan.blocks:
+        block_name = (
+            plan.group
+            if plan.group != "default"
+            else f"{filename}[{block.block_ordinal}]"
+        )
+        examples = block.examples
+        if block.profile_name == "prompt":
+            parsed_test = parser.get_doctest(
+                block.docstring,
+                {},
+                block_name,
+                block.filename,
+                0,
+            )
+            examples = tuple(
+                doctest_core.ExampleRecipe(
+                    source=example.source,
+                    want=example.want,
+                    exc_msg=example.exc_msg,
+                    lineno=example.lineno,
+                    indent=example.indent,
+                    options=types.MappingProxyType(dict(example.options)),
+                )
+                for example in parsed_test.examples
+            )
+        blocks.append(block._replace(name=block_name, examples=examples))
+    return plan._replace(blocks=tuple(blocks))
+
+
+def _report_failure(
+    runner: doctest.DocTestRunner,
+    failure: doctest.DocTestFailure | doctest.UnexpectedException,
+) -> None:
+    """Render a core failure through the stock direct runner hooks."""
+    if isinstance(failure, doctest.DocTestFailure):
+        runner.report_failure(
+            sys.stdout.write,
+            failure.test,
+            failure.example,
+            failure.got,
+        )
+        return
+    runner.report_unexpected_exception(
+        sys.stdout.write,
+        failure.test,
+        failure.example,
+        failure.exc_info,
+    )
+
+
+def _record_statistics(
+    runner: doctest.DocTestRunner,
+    *,
+    name: str,
+    failures: int,
+    attempted: int,
+    skipped: int,
+) -> None:
+    """Populate CPython's version-specific summary bookkeeping."""
+    runner.failures += failures
+    runner.tries += attempted
+    stats = getattr(runner, "_stats", None)
+    if isinstance(stats, dict):
+        typed_stats = t.cast(dict[str, tuple[int, int, int]], stats)
+        old_failures, old_attempted, old_skipped = typed_stats.get(
+            name,
+            (0, 0, 0),
+        )
+        typed_stats[name] = (
+            old_failures + failures,
+            old_attempted + attempted,
+            old_skipped + skipped,
+        )
+        runner.skips += skipped  # type: ignore[attr-defined]
+        return
+    name_to_counts = t.cast(
+        dict[str, tuple[int, int]],
+        runner.__dict__["_name2ft"],
+    )
+    old_failures, old_attempted = name_to_counts.get(name, (0, 0))
+    name_to_counts[name] = (
+        old_failures + failures,
+        old_attempted + attempted,
+    )
+
+
+def _consume_result(
+    runner: doctest.DocTestRunner,
+    result: doctest_core.GroupResult,
+) -> None:
+    """Project one core group result onto the direct doctest runner."""
+    for block_result in result.blocks:
+        failures = 0
+        attempted = 0
+        skipped = 0
+        if isinstance(block_result, doctest_core.Failed):
+            failures = block_result.counts.failed
+            attempted = block_result.counts.attempted
+            skipped = block_result.counts.skipped
+            for failure in block_result.failures:
+                _report_failure(runner, failure)
+        elif block_result.block.phase is doctest_core.Phase.TEST and isinstance(
+            block_result, (doctest_core.Passed, doctest_core.Skipped)
+        ):
+            attempted = block_result.counts.attempted
+            skipped = block_result.counts.skipped
+        _record_statistics(
+            runner,
+            name=block_result.block.name,
+            failures=failures,
+            attempted=attempted,
+            skipped=skipped,
+        )
+    if result.primary is not None:
+        raise result.primary
+
+
 class TestDocutilsPackageRelativeError(Exception):
     """Raise when doctest_docutils is called for package not relative to module."""
+
+    __test__ = False
 
     def __init__(self) -> None:
         super().__init__(
@@ -451,7 +423,7 @@ def testdocutils(
     # Keep the absolute file paths. This is needed for Include directies to work.
     # The absolute path will be applied to source_path when creating the docutils doc.
     _ensure_directives_registered()
-    text, _ = doctest._load_testfile(  # type: ignore
+    text, source_filename = doctest._load_testfile(  # type: ignore
         filename,
         package,
         module_relative,
@@ -469,9 +441,6 @@ def testdocutils(
     if "__name__" not in globs:
         globs["__name__"] = "__main__"
 
-    # Find, parse, and run all tests in the given module.
-    finder = DocutilsDocTestFinder()
-
     runner: doctest.DebugRunner | doctest.DocTestRunner
 
     if raise_on_error:
@@ -479,8 +448,38 @@ def testdocutils(
     else:
         runner = doctest.DocTestRunner(verbose=verbose, optionflags=optionflags)
 
-    for test in finder.find(text, filename, globs=globs, extraglobs=extraglobs):
-        runner.run(test)
+    source_path = pathlib.Path(source_filename)
+    if source_path.suffix not in {".md", ".rst", ".txt"}:
+        source_path = source_path.with_suffix(".rst")
+    registry = doctest_core.build_registry()
+    parsed = doctest_core.parse_document(
+        text,
+        source_path,
+        registry=registry,
+    )
+    plans = doctest_core.project(
+        parsed,
+        document_name=name,
+        registry=registry,
+        seed=globs,
+    )
+    settings = doctest_core.RunSettings(
+        optionflags=optionflags,
+        continue_on_failure=(
+            not raise_on_error and not bool(optionflags & doctest.FAIL_FAST)
+        ),
+    )
+    for plan in plans:
+        direct_plan = _direct_plan(plan, filename=filename, parser=parser)
+        live_globs: dict[str, t.Any] = {}
+        doctest_core.reset_globs(direct_plan, live_globs)
+        result = doctest_core.run_group(
+            direct_plan,
+            live_globs,
+            settings=settings,
+            registry=registry,
+        )
+        _consume_result(runner, result)
 
     if report:
         runner.summarize()
@@ -490,16 +489,24 @@ def testdocutils(
     else:
         master.merge(runner)
 
+    if hasattr(runner, "skips"):
+        constructor = t.cast(t.Any, doctest.TestResults)
+        return t.cast(
+            doctest.TestResults,
+            constructor(
+                runner.failures,
+                runner.tries,
+                skipped=runner.skips,
+            ),
+        )
     return doctest.TestResults(runner.failures, runner.tries)
 
 
+testdocutils.__test__ = False  # type: ignore[attr-defined]
+
+
 def _test() -> int:
-    """Execute doctest module via CLI.
-
-    Port changes from standard library at 3.10:
-
-    - Sets up logging.basicLogging(level=logging.DEBUG) w/ args.verbose
-    """
+    """Execute doctest module via CLI."""
     import argparse
 
     p = argparse.ArgumentParser(description="doctest runner")
@@ -508,7 +515,7 @@ def _test() -> int:
         "--verbose",
         action="store_true",
         default=False,
-        help="logger.debug very verbose output for all tests",
+        help="list tested groups in the final summary",
     )
     p.add_argument(
         "--log-level",

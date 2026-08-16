@@ -23,7 +23,7 @@ Run your first documentation doctest from a Markdown page.
 :::{grid-item-card} How-to
 :link: how-to
 :link-type: doc
-Choose files, run verbose output, and map the command to stdlib doctest.
+Choose files, inspect run summaries, and map the command to stdlib doctest.
 :::
 
 :::{grid-item-card} Examples
@@ -35,7 +35,7 @@ See the supported Markdown and reStructuredText example shapes.
 :::{grid-item-card} API Reference
 :link: reference
 :link-type: doc
-Inspect finder, runner, directive, and CLI APIs.
+Inspect finder, directive, and CLI APIs.
 :::
 
 ::::
@@ -48,8 +48,7 @@ Run a Markdown page:
 $ python -m doctest_docutils README.md
 ```
 
-No output means the examples passed. Add `-v` when you want the standard
-doctest transcript.
+No output means the examples passed. Add `-v` for a final group summary.
 
 ```{toctree}
 :hidden:

@@ -12,9 +12,10 @@ git-pull projects, e.g. [cihai], [vcs-python], or [tmux-python].
 
 Two components:
 
-1. `doctest_docutils` module: Same specification as `doctest`, but can parse reStructuredText
-   and markdown
-2. `pytest_doctest_docutils`: Pytest plugin, collects test items for pytest for reStructuredText and markdown files
+1. `doctest_docutils`: a doctest-shaped direct API and CLI for reStructuredText
+   and Markdown
+2. `pytest_doctest_docutils`: a pytest plugin that collects shared-state groups
+   from reStructuredText and Markdown files
 
    This means you can do:
 
@@ -24,8 +25,8 @@ Two components:
 
 ### doctest module
 
-This extends standard library `doctest` to support anything docutils can parse.
-It can parse reStructuredText (.rst) and markdown (.md).
+This uses standard-library `doctest` prompt and comparison conventions while
+parsing reStructuredText (`.rst`) and Markdown (`.md`).
 
 See more: <https://gp-libs.git-pull.com/modules/doctest_docutils/>
 
@@ -64,7 +65,7 @@ It supports two barebones directives:
 
 #### Usage
 
-The `doctest_docutils` module preserves standard library's usage conventions:
+The `doctest_docutils` module preserves the standard library's command shape:
 
 ##### reStructuredText
 
@@ -84,10 +85,10 @@ $ python -m doctest_docutils README.md -v
 
 ### pytest plugin
 
-_This plugin disables [pytest's standard `doctest` plugin]._
-
-This plugin integrates `doctest_docutils` with pytest so documentation examples
-run with the surrounding `conftest.py` setup.
+This plugin runs documentation examples as pytest items. It composes with
+[pytest's standard `doctest` plugin]: gp-libs owns matching documentation files,
+while pytest continues to supply fixtures, checker and report options, and
+Python-module doctest collection.
 
 ```console
 $ pytest docs/
@@ -154,7 +155,7 @@ You can test the unpublished version of g before its released.
 To lift the development burden of supporting legacy APIs, as this package is
 lightly used, minimum constraints have been pinned:
 
-- docutils: 0.20.1+
+- docutils: >=0.20.1,<0.22
 - myst-parser: 2.0.0+
 
 If you have even passing interested in supporting legacy versions, file an
