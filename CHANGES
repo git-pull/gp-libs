@@ -78,12 +78,16 @@ release `myst-parser` admits.
 
 #### The test matrix pins take effect (#95)
 
+All three matrix axes now reach the code under test. None of them did.
+
 Test steps run `uv run --no-sync`. A plain `uv run` re-syncs the environment
-to `uv.lock` before executing, which reverted the matrix pin installed a step
-earlier, so every leg ran the locked pytest and docutils rather than its own.
-The `docutils-version` axis compounded this: it was declared in the matrix but
-never referenced by any step, so it multiplied the job count without changing
-what ran. Both axes now install their version and keep it.
+to `uv.lock` before executing, which reverted the pin installed a step
+earlier, so every leg ran the locked pytest rather than its own. The
+`docutils-version` axis was declared in the matrix but never referenced by
+any step, so it multiplied the job count without changing what ran. The job
+sets `UV_PYTHON`, since `uv python install` downloads an interpreter without
+selecting it, and the environment was otherwise built against
+`.python-version` — every leg ran that one interpreter.
 
 ### Documentation
 

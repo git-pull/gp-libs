@@ -12,6 +12,11 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
         docutils-version: ['0.20', '0.22.4']
         pytest-version: ['8', '9']
+    # Overrides the repo's .python-version so every uv command in this job
+    # uses the matrix interpreter. `uv python install` only downloads one;
+    # without this the environment is built against .python-version instead.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v7
 
