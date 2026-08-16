@@ -36,60 +36,25 @@ _Notes on upcoming releases will be added here_
 
 #### pytest 8.3.3 is now required (#94)
 
-pytest is declared as a dependency, with a floor of 8.3.3. It was previously
-undeclared, so a consumer could install gp-libs alongside any pytest and have
-the `pytest11` entry point load the plugin into it.
+pytest is now a declared dependency with a floor of 8.3.3. It was previously
+undeclared, so gp-libs could install beside an unsupported pytest and still
+have its plugin loaded. Environments on pytest 7, or on 8.3.2 and earlier,
+need an upgrade.
 
 ```toml
-dependencies = [
-  "myst_parser",
-  "docutils",
-  "pytest>=8.3.3"
-]
+"pytest>=8.3.3"
 ```
-
-8.3.3 is the oldest release the package type-checks against. pytest 7 leaves
-`get_optionflags` and `_get_continue_on_failure` unannotated and makes
-`DoctestItem.dtest` optional; pytest through 8.3.2 imports `Self` from
-`typing`, which mypy resolves as `Any` under this project's
-`python_version = "3.10"` target, so collector constructors lose their return
-type. pytest 8.3.3 moved that import to `typing_extensions`.
-
-The test matrix covers pytest 8 and 9.
 
 #### docutils 0.20 is now required (#95)
 
-docutils carries a floor of 0.20, matching the constraint `myst-parser`
-already imposes (`docutils>=0.20,<0.23`). The dependency was previously
-unpinned, so the declared range was wider than any resolvable install.
+docutils was unpinned while `myst-parser` already required
+`docutils>=0.20,<0.23`, so the declared range promised installs that could not
+resolve. The floor now matches. On Python 3.10, Sphinx additionally holds
+docutils below 0.22.
 
 ```toml
-dependencies = [
-  "myst_parser",
-  "docutils>=0.20",
-  "pytest>=8.3.3"
-]
+"docutils>=0.20"
 ```
-
-The test matrix covers docutils 0.20 and 0.22.4, the floor and the newest
-release `myst-parser` admits. Python 3.10 is tested against 0.20 only:
-docutils 0.22 removed the bundled `docutils.utils.roman` that Sphinx 8.1
-imports, and Sphinx 8.2, which no longer imports it, requires Python 3.11.
-
-### Development
-
-#### The test matrix pins take effect (#95)
-
-All three matrix axes now reach the code under test. None of them did.
-
-Test steps run `uv run --no-sync`. A plain `uv run` re-syncs the environment
-to `uv.lock` before executing, which reverted the pin installed a step
-earlier, so every leg ran the locked pytest rather than its own. The
-`docutils-version` axis was declared in the matrix but never referenced by
-any step, so it multiplied the job count without changing what ran. The job
-sets `UV_PYTHON`, since `uv python install` downloads an interpreter without
-selecting it, and the environment was otherwise built against
-`.python-version` — every leg ran that one interpreter.
 
 ### Documentation
 
