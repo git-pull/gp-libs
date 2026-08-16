@@ -563,6 +563,7 @@ def build_test_args(verbose: bool = False) -> dict[str, t.Any]:
     args = {"verbose": verbose}
     return args
 
+
 # Async method uses shared logic
 async def run_tests(self, verbose: bool = False) -> TestResults:
     args = build_test_args(verbose)
@@ -581,7 +582,9 @@ asyncio_default_fixture_loop_scope = "function"
 **Async fixture pattern:**
 ```python
 @pytest_asyncio.fixture(loop_scope="function")
-async def async_doc_runner(tmp_path: Path) -> t.AsyncGenerator[AsyncDocTestRunner, None]:
+async def async_doc_runner(
+    tmp_path: Path,
+) -> t.AsyncGenerator[AsyncDocTestRunner, None]:
     runner = AsyncDocTestRunner(path=tmp_path)
     yield runner
 ```
@@ -593,10 +596,12 @@ class DocTestFixture(t.NamedTuple):
     doc_content: str
     expected: list[str]
 
+
 DOC_FIXTURES = [
     DocTestFixture("basic", ">>> 1 + 1\n2", ["pass"]),
     DocTestFixture("failure", ">>> 1 + 1\n3", ["fail"]),
 ]
+
 
 @pytest.mark.parametrize(
     list(DocTestFixture._fields),
@@ -604,8 +609,7 @@ DOC_FIXTURES = [
     ids=[f.test_id for f in DOC_FIXTURES],
 )
 @pytest.mark.asyncio
-async def test_doctest(test_id: str, doc_content: str, expected: list) -> None:
-    ...
+async def test_doctest(test_id: str, doc_content: str, expected: list) -> None: ...
 ```
 
 ### Async Anti-Patterns
@@ -625,6 +629,7 @@ await proc.wait()
 # WRONG
 async def bad():
     subprocess.run(["python", "-m", "doctest", file])  # Blocks event loop!
+
 
 # RIGHT
 async def good():
