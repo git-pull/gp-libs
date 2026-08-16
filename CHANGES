@@ -72,7 +72,9 @@ dependencies = [
 ```
 
 The test matrix covers docutils 0.20 and 0.22.4, the floor and the newest
-release `myst-parser` admits.
+release `myst-parser` admits. Python 3.10 is tested against 0.20 only:
+docutils 0.22 removed the bundled `docutils.utils.roman` that Sphinx 8.1
+imports, and Sphinx 8.2, which no longer imports it, requires Python 3.11.
 
 ### Development
 
