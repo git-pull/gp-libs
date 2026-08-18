@@ -23,7 +23,8 @@ Run your first documentation doctest from a Markdown page.
 :::{grid-item-card} How-to
 :link: how-to
 :link-type: doc
-Choose files, run verbose output, and map the command to stdlib doctest.
+Choose files, share a namespace across blocks, run verbose output, and map
+the command to stdlib doctest.
 :::
 
 :::{grid-item-card} Examples

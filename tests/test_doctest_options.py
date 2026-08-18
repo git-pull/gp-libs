@@ -144,6 +144,80 @@ DOCTEST_OPTION_CASES = [
         expected_outcome="skipped",
         description="Inline +SKIP directive works in .md files",
     ),
+    DoctestOptionCase(
+        test_id="skipif-false-runs-the-block-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :skipif: False
+
+                >>> 2 + 2
+                4
+            """,
+        ),
+        expected_outcome="passed",
+        description=":skipif: False leaves the block collected",
+    ),
+    DoctestOptionCase(
+        test_id="skipif-true-reports-as-skipped-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :skipif: True
+
+                >>> 1 / 0
+            """,
+        ),
+        expected_outcome="skipped",
+        description=":skipif: True reports the same way as :options: +SKIP",
+    ),
+    DoctestOptionCase(
+        test_id="skipif-true-reports-as-skipped-md",
+        file_ext=".md",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            # Example
+
+            ```{doctest}
+            :skipif: True
+
+            >>> 1 / 0
+            ```
+            """,
+        ),
+        expected_outcome="skipped",
+        description=":skipif: True reports as skipped in a Markdown fence too",
+    ),
+    DoctestOptionCase(
+        test_id="inline-flag-cannot-reopen-a-true-skipif-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :skipif: True
+
+                >>> 2 + 2  # doctest: -SKIP
+                4
+            """,
+        ),
+        expected_outcome="skipped",
+        description="An example's own flag cannot reopen a true :skipif:",
+    ),
     # Inline ELLIPSIS directive
     DoctestOptionCase(
         test_id="inline-ellipsis-directive-rst",
@@ -177,6 +251,80 @@ DOCTEST_OPTION_CASES = [
         ),
         expected_outcome="passed",
         description="Inline +ELLIPSIS directive works in .md files",
+    ),
+    DoctestOptionCase(
+        test_id="directive-options-normalize-whitespace-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :options: +NORMALIZE_WHITESPACE
+
+                >>> print("a  b")
+                a b
+            """,
+        ),
+        expected_outcome="passed",
+        description=":options: applies to the block's examples",
+    ),
+    DoctestOptionCase(
+        test_id="directive-options-skip-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :options: +SKIP
+
+                >>> 1 / 0
+            """,
+        ),
+        expected_outcome="skipped",
+        description=":options: +SKIP skips the block's examples",
+    ),
+    DoctestOptionCase(
+        test_id="inline-flag-beats-directive-options-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+                :options: +SKIP
+
+                >>> 2 + 2  # doctest: -SKIP
+                4
+            """,
+        ),
+        expected_outcome="passed",
+        description="An example's own flag overrides the directive's options",
+    ),
+    DoctestOptionCase(
+        test_id="inline-flag-inside-directive-rst",
+        file_ext=".rst",
+        ini_options="",
+        doctest_content=textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest::
+
+                >>> print("a  b")  # doctest: +NORMALIZE_WHITESPACE
+                a b
+            """,
+        ),
+        expected_outcome="passed",
+        description="An inline flag applies although the directive trims it",
     ),
 ]
 
@@ -499,3 +647,278 @@ def test_edge_cases(
         assert "0 items" in stdout or "no tests ran" in stdout or expected_tests == 0
     elif expected_outcome == "passed":
         result.assert_outcomes(passed=expected_tests)
+
+
+THREE_BLOCK_REST = textwrap.dedent(
+    """
+    Example
+    =======
+
+    .. doctest::
+        :skipif: True
+
+        >>> 1 / 0
+
+    .. doctest::
+        :options: +SKIP
+
+        >>> 1 / 0
+
+    .. doctest::
+
+        >>> 2 + 2
+        4
+    """,
+)
+
+
+def test_skipif_true_reports_like_the_skip_flag(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A ``:skipif:`` block collects, counts, and reports as ``+SKIP`` does.
+
+    A page holding all three spellings — a true ``:skipif:``, an
+    ``:options: +SKIP``, and an ordinary block — collects three items. The two
+    skipped ones report under ``-rs`` with the same reason, so a reader who
+    knows either spelling can predict the other.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
+    page = pytester.path / "test_doc.rst"
+    page.write_text(THREE_BLOCK_REST, encoding="utf-8")
+
+    collected = pytester.runpytest(str(page), "--collect-only", "-q")
+
+    collected.stdout.fnmatch_lines(
+        [
+            "test_doc.rst::test_doc.rst[[]0[]]",
+            "test_doc.rst::test_doc.rst[[]1[]]",
+            "test_doc.rst::test_doc.rst[[]2[]]",
+        ],
+        consecutive=True,
+    )
+
+    result = pytester.runpytest(str(page), "-rs")
+
+    result.assert_outcomes(passed=1, skipped=2)
+    result.stdout.fnmatch_lines(
+        [
+            "SKIPPED [[]1[]] *: test_doc.rst:6: every example skipped",
+            "SKIPPED [[]1[]] *: test_doc.rst:11: every example skipped",
+        ],
+    )
+
+
+def test_skipif_block_is_selectable_by_node_id(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """The skipped block keeps a node id a reader can run on its own.
+
+    Dropping it left nothing to select; marking it ``SKIP`` leaves the item
+    addressable, which is what makes ``-rs`` and IDE test discovery agree.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
+    page = pytester.path / "test_doc.rst"
+    page.write_text(THREE_BLOCK_REST, encoding="utf-8")
+
+    result = pytester.runpytest(f"{page}::test_doc.rst[0]")
+
+    result.assert_outcomes(skipped=1)
+
+
+GATED_GROUP_REST = textwrap.dedent(
+    """
+    Example
+    =======
+
+    .. doctest:: intro
+
+        >>> greeting = "hello"
+
+    .. doctest:: intro
+        :skipif: True
+
+        >>> raise AssertionError("the skipped block ran")
+
+    .. doctest:: intro
+
+        >>> greeting.upper()
+        'HELLO'
+    """,
+)
+
+
+def test_skipif_leaves_the_rest_of_its_group_running(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """Skipping one block of a group is not skipping the group's item.
+
+    The group's item passes on the strength of the blocks that did run, and
+    the gated block is an item of its own that reports skipped with a node id
+    and a reason. The skipped block would raise if it ran, and the last block
+    needs a name the first one bound, which pins both halves of that claim.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
+    page = pytester.path / "test_doc.rst"
+    page.write_text(GATED_GROUP_REST, encoding="utf-8")
+
+    result = pytester.runpytest(str(page), "-rs", "-v")
+
+    result.assert_outcomes(passed=1, skipped=1)
+    result.stdout.fnmatch_lines(
+        [
+            "test_doc.rst::intro PASSED*",
+            "test_doc.rst::intro[[]1[]] SKIPPED*",
+        ],
+        consecutive=True,
+    )
+    result.stdout.fnmatch_lines(
+        ["SKIPPED [[]1[]] *: test_doc.rst:*: every example skipped"],
+    )
+
+
+def test_a_gated_block_of_a_group_is_selectable(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """The item a gated block collects as answers to its own node id.
+
+    A reader who sees the skip in ``-rs`` can paste the id back to pytest and
+    get the same one line, which is what makes the report actionable.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
+    page = pytester.path / "test_doc.rst"
+    page.write_text(GATED_GROUP_REST, encoding="utf-8")
+
+    result = pytester.runpytest(f"{page}::intro[1]", "-rs")
+
+    result.assert_outcomes(skipped=1)
+
+
+def test_a_group_skipped_end_to_end_reports_skipped(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A group whose every block is skipped reports as one skipped item.
+
+    The two spellings mix inside a single namespace, and pytest reports the
+    item skipped exactly when no example in it is left to run.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
+    page = pytester.path / "test_doc.rst"
+    page.write_text(
+        textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. doctest:: solo
+                :skipif: True
+
+                >>> 1 / 0
+
+            .. doctest:: solo
+                :options: +SKIP
+
+                >>> 1 / 0
+            """,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(str(page), "-rs")
+
+    result.assert_outcomes(skipped=1)
+
+
+def test_skipif_reaches_setup_and_cleanup_under_pytest(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """A skipped ``testsetup`` or ``testcleanup`` does not run its examples.
+
+    Both directives declare ``skipif``, and both would fail the group's item
+    if their examples ran. Each reports as its own skipped item, so a group
+    running without the setup it was written with is visible in the report.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
+    page = pytester.path / "test_doc.rst"
+    page.write_text(
+        textwrap.dedent(
+            """
+            Example
+            =======
+
+            .. testsetup:: fixture
+                :skipif: True
+
+                >>> raise AssertionError("the skipped testsetup ran")
+
+            .. doctest:: fixture
+
+                >>> 2 + 2
+                4
+
+            .. testcleanup:: fixture
+                :skipif: True
+
+                >>> raise AssertionError("the skipped testcleanup ran")
+            """,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(str(page), "-v")
+
+    result.assert_outcomes(passed=1, skipped=2)
+    result.stdout.fnmatch_lines(
+        [
+            "test_doc.rst::fixture[[]0[]] SKIPPED*",
+            "test_doc.rst::fixture PASSED*",
+            "test_doc.rst::fixture[[]2[]] SKIPPED*",
+        ],
+        consecutive=True,
+    )
+
+
+def test_collect_only_evaluates_the_skipif_expression(
+    pytester: _pytest.pytester.Pytester,
+) -> None:
+    """Listing a page's items runs its ``:skipif:`` expressions.
+
+    The option's contract is a Python expression evaluated while the page is
+    read, and ``--collect-only`` reads the page. Marking the block ``SKIP``
+    instead of dropping it changes what the reader sees, not when the
+    expression is answered — so a page whose expression touches the world
+    still touches it during discovery.
+    """
+    pytester.plugins = ["pytest_doctest_docutils"]
+    pytester.makefile(".ini", pytest="[pytest]\naddopts=-p no:doctest")
+    witness = pytester.path / "collect-only-ran.txt"
+    # Writes the witness file, then evaluates false, so the block still runs.
+    expression = (
+        f'__import__("pathlib").Path({str(witness)!r}).write_text("ran") and False'
+    )
+    page = pytester.path / "test_doc.rst"
+    page.write_text(
+        textwrap.dedent(
+            f"""
+            Example
+            =======
+
+            .. doctest::
+                :skipif: {expression}
+
+                >>> 2 + 2
+                4
+            """,
+        ),
+        encoding="utf-8",
+    )
+
+    result = pytester.runpytest(str(page), "--collect-only", "-q")
+
+    result.stdout.fnmatch_lines(["test_doc.rst::test_doc.rst[[]0[]]"])
+    assert witness.read_text(encoding="utf-8") == "ran"

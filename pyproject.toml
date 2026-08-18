@@ -59,6 +59,7 @@ dev = [
   "pytest-rerunfailures",
   "pytest-mock",
   "pytest-watcher",
+  "pytest-xdist",
   # Coverage
   "codecov",
   "coverage",
@@ -82,6 +83,7 @@ testing = [
   "pytest-rerunfailures",
   "pytest-mock",
   "pytest-watcher",
+  "pytest-xdist",
 ]
 coverage =[
   "codecov",
