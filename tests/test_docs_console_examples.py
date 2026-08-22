@@ -76,8 +76,6 @@ def iter_documentation_markdown_files(
         relative = path.relative_to(repo_root)
         if "_build" in relative.parts:
             continue
-        if path.name in {"AGENTS.md", "CLAUDE.md"}:
-            continue
         yield path
 
 
