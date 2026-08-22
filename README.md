@@ -1,7 +1,8 @@
 # gp-libs &middot; [![Python Package](https://img.shields.io/pypi/v/gp-libs.svg)](https://pypi.org/project/gp-libs/) [![License](https://img.shields.io/github/license/git-pull/gp-libs.svg)](https://github.com/git-pull/gp-libs/blob/master/LICENSE) [![Code Coverage](https://codecov.io/gh/git-pull/gp-libs/branch/master/graph/badge.svg)](https://codecov.io/gh/git-pull/gp-libs)
 
-Incubating / [dogfooding] some sphinx extensions and pytest plugins on
-git-pull projects, e.g. [cihai], [vcs-python], or [tmux-python].
+Sphinx extensions and pytest plugins shared across git-pull's projects,
+developed by [dogfooding] them on [cihai], [vcs-python], and
+[tmux-python].
 
 [dogfooding]: https://en.wikipedia.org/wiki/Eating_your_own_dog_food
 [cihai]: https://github.com/cihai
@@ -84,7 +85,7 @@ $ python -m doctest_docutils README.md -v
 
 ### pytest plugin
 
-_This plugin disables [pytest's standard `doctest` plugin]._
+_This plugin blocks [pytest's standard `doctest` plugin]._
 
 This plugin integrates `doctest_docutils` with pytest so documentation examples
 run with the surrounding `conftest.py` setup.
@@ -104,9 +105,10 @@ See more: <https://gp-libs.git-pull.com/modules/pytest_doctest_docutils/>
 
 ### Plain-text issue linker (`linkify-issues`)
 
-We need to parse plain text, e.g. #99999, to point to the project tracker at
-https://github.com/git-pull/gp-libs/issues/99999. This way the markdown looks
-good anywhere you render it, including GitHub and GitLab.
+`linkify_issues` turns a plain-text issue reference, e.g. #99999, into a link
+to the project tracker at https://github.com/git-pull/gp-libs/issues/99999.
+The source text stays plain, so it still reads correctly wherever it is
+rendered unprocessed, including GitHub and GitLab.
 
 #### Configuration
 
@@ -141,7 +143,7 @@ $ pip install --user gp-libs
 
 ### Developmental releases
 
-You can test the unpublished version of g before its released.
+You can test the unpublished version of gp-libs before it's released.
 
 - [pip](https://pip.pypa.io/en/stable/):
 
@@ -152,17 +154,16 @@ You can test the unpublished version of g before its released.
 # Minimum requirements
 
 To lift the development burden of supporting legacy APIs, as this package is
-lightly used, minimum constraints have been pinned:
+lightly used, a minimum constraint is pinned in `pyproject.toml`:
 
-- docutils: 0.20.1+
-- myst-parser: 2.0.0+
+- docutils: 0.20+
 
-If you have even passing interested in supporting legacy versions, file an
-issue on the tracker.
+`myst-parser` has no minimum version pinned. If you have a passing interest in
+supporting legacy versions, file an issue on the tracker.
 
 # More information
 
-- Python support: >= 3.10, pypy
+- Python support: >= 3.10
 - Source: <https://github.com/git-pull/gp-libs>
 - Docs: <https://gp-libs.git-pull.com>
 - Changelog: <https://gp-libs.git-pull.com/history.html>
