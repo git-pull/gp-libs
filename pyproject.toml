@@ -64,7 +64,7 @@ dev = [
   "coverage",
   "pytest-cov",
   # Lint
-  "ruff>=0.16.1",
+  "ruff>=0.17.1",
   "mypy",
   "typing-extensions",
   "types-docutils",
@@ -89,7 +89,7 @@ coverage =[
   "pytest-cov",
 ]
 lint = [
-  "ruff>=0.16.1",
+  "ruff>=0.17.1",
   "mypy",
   "typing-extensions",
   "types-docutils",
