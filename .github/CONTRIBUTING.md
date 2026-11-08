@@ -79,7 +79,7 @@ never been red is an assumption.
 
 CI (`.github/workflows/tests.yml`) runs the equivalent of the four commands
 above (`ruff check .`, `ruff format . --check`, `mypy .`,
-`py.test --cov=./ --cov-report=xml`) across a matrix of Python 3.10-3.14,
+`py.test --cov=./ --cov-report=xml`) across a matrix of Python 3.10-3.15,
 docutils 0.20 and 0.22.4, and pytest 8 and 9 — gp-libs supports a wider
 version span than most consumers of it, because everything downstream
 depends on this collector staying compatible.
