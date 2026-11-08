@@ -163,7 +163,7 @@ supporting legacy versions, file an issue on the tracker.
 
 # More information
 
-- Python support: >= 3.10
+- Python support: >= 3.11
 - Source: <https://github.com/git-pull/gp-libs>
 - Docs: <https://gp-libs.git-pull.com>
 - Changelog: <https://gp-libs.git-pull.com/history.html>

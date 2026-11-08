@@ -34,6 +34,15 @@ _Notes on upcoming releases will be added here_
 
 ### Breaking changes
 
+#### Python 3.11 is now required (#100)
+
+Python 3.10 reached end-of-life in October 2026. gp-libs now requires
+Python 3.11 or newer.
+
+```toml
+requires-python = ">=3.11"
+```
+
 #### pytest 8.3.3 is now required (#94)
 
 pytest is now a declared dependency with a floor of 8.3.3. It was previously
