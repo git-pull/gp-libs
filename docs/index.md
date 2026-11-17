@@ -74,6 +74,7 @@ modules/doctest_docutils/index
 modules/pytest_doctest_docutils/index
 modules/linkify_issues/index
 project/index
+adrs/index
 history
 GitHub <https://github.com/git-pull/gp-libs>
 ```
